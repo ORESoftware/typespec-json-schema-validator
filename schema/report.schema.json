@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oresoftware.github.io/typespec-json-schema-validator/schema/report.schema.json",
+  "title": "TypeSpec JSON Schema parity report",
+  "type": "object",
+  "required": [
+    "schema",
+    "runId",
+    "status",
+    "zeroUnexplainedFindings",
+    "findings"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.report/v1"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "status": {
+      "enum": ["passed", "stopped_for_evaluation", "failed"]
+    },
+    "zeroUnexplainedFindings": {
+      "type": "boolean"
+    },
+    "authorities": {
+      "type": "object"
+    },
+    "configuration": {
+      "type": "object"
+    },
+    "inputs": {
+      "type": "object"
+    },
+    "toolchain": {
+      "type": "object"
+    },
+    "coverage": {
+      "type": "object"
+    },
+    "counts": {
+      "type": "object"
+    },
+    "declarationMap": {
+      "type": "array"
+    },
+    "error": {
+      "type": "object",
+      "required": ["name", "message"],
+      "properties": {
+        "name": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "ruleId",
+          "severity",
+          "resolutionState",
+          "comparison",
+          "message",
+          "fingerprint"
+        ],
+        "properties": {
+          "ruleId": { "type": "string" },
+          "severity": { "const": "error" },
+          "resolutionState": { "const": "unexplained" },
+          "comparison": { "type": "string" },
+          "declaration": { "type": "string" },
+          "pointer": { "type": "string" },
+          "message": { "type": "string" },
+          "left": true,
+          "right": true,
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

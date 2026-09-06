@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "typespec.generated.schema.json",
+  "$defs": {
+    "User": {
+      "$id": "User",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "unevaluatedProperties": { "not": {} },
+      "required": ["active", "role", "id"],
+      "properties": {
+        "displayName": { "type": "string" },
+        "active": { "type": "boolean" },
+        "role": { "$ref": "Role" },
+        "id": { "type": "string" }
+      },
+      "type": "object"
+    },
+    "Role": {
+      "$id": "Role",
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "enum": ["member", "admin"],
+      "type": "string"
+    }
+  }
+}

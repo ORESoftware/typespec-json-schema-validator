@@ -1,0 +1,185 @@
+import { spawn } from 'node:child_process';
+import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const MODULE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const MAX_CAPTURE_BYTES = 256 * 1024;
+
+async function exists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function appendBounded(current, chunk, maxBytes) {
+  const combined = `${current}${chunk}`;
+  if (Buffer.byteLength(combined) <= maxBytes) {
+    return combined;
+  }
+  const buffer = Buffer.from(combined);
+  return buffer.subarray(buffer.length - maxBytes).toString('utf8');
+}
+
+export function runCommand(command, args, options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const maxOutputBytes = options.maxOutputBytes ?? MAX_CAPTURE_BYTES;
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: options.env ?? process.env,
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout = appendBounded(stdout, chunk, maxOutputBytes);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr = appendBounded(stderr, chunk, maxOutputBytes);
+    });
+    child.once('error', (error) => {
+      reject(new Error(`could not execute ${command}: ${error.message}`, { cause: error }));
+    });
+    child.once('close', (code, signal) => {
+      resolvePromise({
+        command,
+        args: [...args],
+        cwd,
+        code: code ?? -1,
+        signal: signal ?? null,
+        stdout,
+        stderr,
+      });
+    });
+  });
+}
+
+async function executableCandidate(paths) {
+  for (const path of paths) {
+    if (!path) {
+      continue;
+    }
+    if (await exists(path)) {
+      return path;
+    }
+  }
+  return undefined;
+}
+
+export async function resolveTspBinary(explicit) {
+  if (explicit) {
+    return explicit;
+  }
+  const executable = process.platform === 'win32' ? 'tsp.cmd' : 'tsp';
+  const local = await executableCandidate([
+    join(process.cwd(), 'node_modules', '.bin', executable),
+    join(MODULE_ROOT, 'node_modules', '.bin', executable),
+  ]);
+  return local ?? executable;
+}
+
+export async function toolVersion(command, args = ['--version'], options = {}) {
+  try {
+    const result = await runCommand(command, args, options);
+    if (result.code !== 0) {
+      return { command, available: false, version: null, stderr: result.stderr.trim() };
+    }
+    return {
+      command,
+      available: true,
+      version: (result.stdout || result.stderr).trim().split(/\r?\n/u)[0] || 'unknown',
+    };
+  } catch (error) {
+    return { command, available: false, version: null, stderr: error.message };
+  }
+}
+
+async function findNamedFile(root, name, matches = []) {
+  const entries = await readdir(root, { withFileTypes: true });
+  for (const entry of entries) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      await findNamedFile(path, name, matches);
+    } else if (entry.isFile() && entry.name === name) {
+      matches.push(path);
+    }
+  }
+  return matches;
+}
+
+export async function emitTypeSpecJsonSchema(options) {
+  const entry = resolve(options.entry);
+  const outputDir = resolve(options.outputDir);
+  const bundleId = options.bundleId ?? 'typespec.generated.schema.json';
+  if (basename(bundleId) !== bundleId || !bundleId.toLowerCase().endsWith('.json')) {
+    throw new Error('bundleId must be a plain .json filename without path separators');
+  }
+  const entryStat = await stat(entry);
+  const cwd = options.cwd
+    ? resolve(options.cwd)
+    : entryStat.isDirectory()
+      ? entry
+      : dirname(entry);
+  const tspBin = await resolveTspBinary(options.tspBin);
+  await mkdir(outputDir, { recursive: true });
+  const expected = join(outputDir, bundleId);
+  if (await exists(expected)) {
+    await rm(expected, { force: true });
+  }
+
+  const emitterOptions = {
+    'emitter-output-dir': outputDir,
+    'file-type': 'json',
+    bundleId,
+    emitAllModels: 'true',
+    emitAllRefs: 'true',
+    'int64-strategy': options.int64Strategy ?? 'string',
+    'seal-object-schemas': String(options.sealObjectSchemas ?? true),
+    'polymorphic-models-strategy': options.polymorphicModelsStrategy ?? 'oneOf',
+  };
+
+  const args = ['compile', entry, '--emit', '@typespec/json-schema', '--warn-as-error'];
+  for (const [key, value] of Object.entries(emitterOptions)) {
+    args.push('--option', `@typespec/json-schema.${key}=${value}`);
+  }
+
+  const result = await runCommand(tspBin, args, { cwd, env: options.env });
+  if (result.code !== 0) {
+    const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.code}`;
+    throw new Error(`TypeSpec JSON Schema generation failed: ${detail}`);
+  }
+
+  let generatedPath = expected;
+  if (!(await exists(generatedPath))) {
+    const matches = await findNamedFile(outputDir, bundleId);
+    if (matches.length !== 1) {
+      throw new Error(
+        `TypeSpec emitter succeeded but expected exactly one ${bundleId} below ${outputDir}; found ${matches.length}`,
+      );
+    }
+    [generatedPath] = matches;
+  }
+
+  return {
+    entry,
+    cwd,
+    outputDir,
+    generatedPath,
+    bundleId,
+    tspBin: isAbsolute(tspBin) ? tspBin : tspBin,
+    emitter: '@typespec/json-schema',
+    emitterOptions,
+    command: {
+      executable: tspBin,
+      args,
+      exitCode: result.code,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    },
+  };
+}

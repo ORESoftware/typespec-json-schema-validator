@@ -1,0 +1,190 @@
+[help]
+url = "https://github.com/ORESoftware/typespec-json-schema-validator#usage"
+columns = ["options", "env", "type", "default", "description"]
+
+[env]
+files = []
+
+[parse]
+command_env = "TSJSV_COMMAND"
+positionals_env = "TSJSV_POSITIONALS"
+unknown_options_env = "TSJSV_UNKNOWN_OPTIONS"
+errors_env = "TSJSV_PARSE_ERRORS"
+allow_unknown = false
+
+[flags.report]
+env = "TSJSV_REPORT"
+aliases = ["report"]
+short = "r"
+type = "string"
+default = ".typespec-json-schema-validator/report.json"
+help = "Machine-readable parity report path."
+
+[flags.mapping]
+env = "TSJSV_MAPPING"
+aliases = ["mapping"]
+short = "m"
+type = "string"
+help = "Optional declaration mapping JSON file."
+
+[flags.max-findings]
+env = "TSJSV_MAX_FINDINGS"
+aliases = ["max-findings"]
+type = "integer"
+default = 250
+help = "Maximum number of findings emitted into the report."
+
+[flags.tsp-bin]
+env = "TSJSV_TSP_BIN"
+aliases = ["tsp-bin"]
+type = "string"
+help = "Explicit TypeSpec compiler executable."
+
+[flags.quiet]
+env = "TSJSV_QUIET"
+aliases = ["quiet"]
+short = "q"
+type = "bool"
+default = "false"
+help = "Suppress the human-readable summary; the JSON report is still written."
+
+[commands.check]
+help = "Compile TypeSpec to comparison-only JSON Schema, then compare it with the independently authored JSON Schema."
+env = "TSJSV_COMMAND_CHECK"
+
+[commands.check.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "TypeSpec entry file or project directory."
+
+[commands.check.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Independently authored JSON Schema file or directory."
+
+[commands.check.flags.output-dir]
+env = "TSJSV_OUTPUT_DIR"
+aliases = ["output-dir"]
+short = "o"
+type = "string"
+default = ".typespec-json-schema-validator/generated"
+help = "Dedicated directory for TypeSpec-generated comparison evidence."
+
+[commands.check.flags.bundle-id]
+env = "TSJSV_BUNDLE_ID"
+aliases = ["bundle-id"]
+type = "string"
+default = "typespec.generated.schema.json"
+help = "Filename and $id used by the official TypeSpec JSON Schema bundle emitter."
+
+[commands.check.flags.int64-strategy]
+env = "TSJSV_INT64_STRATEGY"
+aliases = ["int64-strategy"]
+type = "string"
+default = "string"
+help = "Official TypeSpec JSON Schema emitter int64 strategy: string or number."
+
+[commands.check.flags.seal-object-schemas]
+env = "TSJSV_SEAL_OBJECT_SCHEMAS"
+aliases = ["seal-object-schemas"]
+type = "bool"
+default = "true"
+help = "Seal emitted object schemas with the official emitter."
+
+[commands.check.flags.polymorphic-models-strategy]
+env = "TSJSV_POLYMORPHIC_MODELS_STRATEGY"
+aliases = ["polymorphic-models-strategy"]
+type = "string"
+default = "oneOf"
+help = "Official emitter discriminator strategy: ignore, oneOf, or anyOf."
+
+[commands.compare]
+help = "Compare a pre-generated TypeSpec JSON Schema witness with the authored JSON Schema and source inventory."
+env = "TSJSV_COMMAND_COMPARE"
+
+[commands.compare.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "TypeSpec entry file or project directory."
+
+[commands.compare.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Independently authored JSON Schema file or directory."
+
+[commands.compare.flags.generated-schema]
+env = "TSJSV_GENERATED_SCHEMA"
+aliases = ["generated-schema"]
+short = "g"
+type = "string"
+help = "JSON Schema previously generated from TypeSpec."
+
+[commands.inventory]
+help = "Print the independently scanned TypeSpec declaration inventory."
+env = "TSJSV_COMMAND_INVENTORY"
+
+[commands.inventory.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "TypeSpec entry file or project directory."
+
+[commands.generate]
+help = "Generate a comparison-only JSON Schema witness from TypeSpec without comparing it."
+env = "TSJSV_COMMAND_GENERATE"
+
+[commands.generate.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "TypeSpec entry file or project directory."
+
+[commands.generate.flags.output-dir]
+env = "TSJSV_OUTPUT_DIR"
+aliases = ["output-dir"]
+short = "o"
+type = "string"
+default = ".typespec-json-schema-validator/generated"
+help = "Dedicated directory for generated comparison evidence."
+
+[commands.generate.flags.bundle-id]
+env = "TSJSV_BUNDLE_ID"
+aliases = ["bundle-id"]
+type = "string"
+default = "typespec.generated.schema.json"
+help = "Filename and $id used by the official TypeSpec JSON Schema bundle emitter."
+
+[commands.generate.flags.int64-strategy]
+env = "TSJSV_INT64_STRATEGY"
+aliases = ["int64-strategy"]
+type = "string"
+default = "string"
+help = "Official TypeSpec JSON Schema emitter int64 strategy: string or number."
+
+[commands.generate.flags.seal-object-schemas]
+env = "TSJSV_SEAL_OBJECT_SCHEMAS"
+aliases = ["seal-object-schemas"]
+type = "bool"
+default = "true"
+help = "Seal emitted object schemas with the official emitter."
+
+[commands.generate.flags.polymorphic-models-strategy]
+env = "TSJSV_POLYMORPHIC_MODELS_STRATEGY"
+aliases = ["polymorphic-models-strategy"]
+type = "string"
+default = "oneOf"
+help = "Official emitter discriminator strategy: ignore, oneOf, or anyOf."
+
+[commands.doctor]
+help = "Check the flags-2-env and TypeSpec toolchain required by the validator."
+env = "TSJSV_COMMAND_DOCTOR"
