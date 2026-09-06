@@ -14,7 +14,20 @@ export {
   loadSchemaCollection,
   validateJsonSchemaDocument,
 } from './json-schema.mjs';
-export { compareParity, loadMapping, MAPPING_SCHEMA } from './parity.mjs';
+export {
+  buildLaneResolver,
+  crossValidate,
+  loadInstanceCorpus,
+  runDifferential,
+} from './differential.mjs';
+export {
+  jsonEquals,
+  SchemaResolutionError,
+  SchemaResolver,
+  UnsupportedKeywordError,
+  validateInstance,
+} from './instance-validator.mjs';
+export { compareParity, loadMapping, MAPPING_SCHEMA, sortFindings } from './parity.mjs';
 export {
   EXIT_CODES,
   REPORT_SCHEMA,
@@ -22,8 +35,17 @@ export {
   renderHumanSummary,
   runCheck,
   runCompare,
+  runValidate,
   writeReport,
 } from './run.mjs';
+export {
+  buildProbes,
+  collectValueDomains,
+  mutateInstance,
+  synthesizeInstance,
+  OUT_OF_DOMAIN_STRING,
+  UNEXPECTED_PROPERTY,
+} from './witness.mjs';
 export {
   declarationKindFamily,
   inventoryTypeSpec,

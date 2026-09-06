@@ -7,6 +7,7 @@ import {
   renderHumanSummary,
   runCheck,
   runCompare,
+  runValidate,
   writeReport,
 } from './run.mjs';
 import { inventoryTypeSpec } from './typespec-inventory.mjs';
@@ -89,9 +90,12 @@ export async function main(argv = process.argv) {
       return EXIT_CODES.passed;
     }
 
-    const report = configuration.command === 'check'
-      ? await runCheck(configuration)
-      : await runCompare(configuration);
+    const runners = {
+      check: runCheck,
+      compare: runCompare,
+      validate: runValidate,
+    };
+    const report = await runners[configuration.command](configuration);
     const reportPath = await writeReport(configuration.report, report);
     if (!configuration.quiet) {
       process.stdout.write(renderHumanSummary(report));

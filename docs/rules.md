@@ -26,8 +26,33 @@ Rules are grouped by gate. Every emitted rule is an error in v0.1; suppressions 
 - `json-schema-impossible-range`: a lower bound exceeds its upper bound.
 - `json-schema-invalid-*`: a keyword has a value of the wrong shape.
 
+## Differential instance validation
+
+- `instance-verdict-divergence`: the two authorities return different verdicts for one instance.
+  The finding carries `witness.instance` — the value that proves the disagreement — plus both
+  lanes' verdicts and their first few validation errors.
+- `differential-validation-refused`: a keyword the validator refuses to approximate
+  (`$dynamicRef`, `$dynamicAnchor`, `$recursiveRef`, `$vocabulary`) or an unresolvable `$ref`
+  made the comparison unsound. This is reported rather than counted as agreement.
+- `declared-example-rejected`: a declaration carries an `examples` entry or `default` value that
+  neither authority accepts. The two lanes agree, and they agree the schema's own sample is wrong.
+- `corpus-instance-rejected` / `corpus-instance-accepted`: an instance under
+  `<Declaration>/valid/` was rejected, or one under `<Declaration>/invalid/` was accepted, by
+  both authorities. The corpus is a third statement of intent and is held to it.
+- `corpus-declaration-unknown`: the corpus targets a declaration absent from one or both
+  authorities, so its instances could never have been checked.
+
 ## Semantic parity
 
 - `generated-authored-semantic-mismatch`: normalized declaration bodies differ at the reported JSON Pointer.
 
 The report includes both values. The tool never selects one as the winner.
+
+## Reading structural and differential findings together
+
+`differential.declarations[].behaviorallyIndistinguishable` says whether a declaration survived
+the whole probe corpus with matching verdicts. A `generated-authored-semantic-mismatch` on a
+declaration that is behaviourally indistinguishable is a spelling difference between two
+equivalent encodings; the same rule on a declaration that also carries an
+`instance-verdict-divergence` is a real contract difference with a witness attached. Both stop
+evaluation. The flag tells a reviewer which conversation to have, not which authority to change.

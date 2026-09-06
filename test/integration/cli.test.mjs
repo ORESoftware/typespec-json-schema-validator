@@ -84,3 +84,99 @@ test('unknown CLI flags are rejected by flags-2-env and produce a failed receipt
   assert.equal(report.status, 'failed');
   assert.equal(report.context.usageError, true);
 });
+
+test('check receipts carry differential instance evidence alongside structural parity', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-cli-differential-'));
+  const reportPath = join(temp, 'report.json');
+  const result = await run([
+    'check',
+    `--typespec=${resolve(fixtures, 'pass/main.tsp')}`,
+    `--schema=${resolve(fixtures, 'pass/authored.schema.json')}`,
+    `--output-dir=${join(temp, 'generated')}`,
+    `--report=${reportPath}`,
+    '--quiet',
+  ]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const report = JSON.parse(await readFile(reportPath, 'utf8'));
+  assert.equal(report.coverage.differentialInstanceValidation, true);
+  assert.equal(report.configuration.differential.enabled, true);
+  assert.ok(report.differential.summary.probesEvaluated > 0, 'the differential lane must actually run');
+  assert.equal(report.differential.summary.divergences, 0);
+  assert.equal(report.counts.differentialFindings, 0);
+  assert.ok(report.differential.declarations.every((declaration) => declaration.behaviorallyIndistinguishable));
+});
+
+test('validate runs the differential lane alone without invoking the TypeSpec compiler', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-cli-validate-'));
+  const reportPath = join(temp, 'report.json');
+  const result = await run([
+    'validate',
+    `--schema=${resolve(fixtures, 'equivalent/authored.schema.json')}`,
+    `--generated-schema=${resolve(fixtures, 'equivalent/generated.schema.json')}`,
+    `--report=${reportPath}`,
+    '--quiet',
+  ]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const report = JSON.parse(await readFile(reportPath, 'utf8'));
+  assert.equal(report.status, 'passed');
+  assert.equal(report.configuration.mode, 'validate');
+  assert.equal(report.inputs.typespec, null);
+  assert.equal(report.differential.summary.divergences, 0);
+  assert.equal(
+    report.differential.summary.behaviorallyIndistinguishableDeclarations,
+    report.differential.summary.comparedDeclarations,
+  );
+});
+
+test('validate fails closed with a witness instance when the authorities diverge', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-cli-validate-drift-'));
+  const reportPath = join(temp, 'report.json');
+  const result = await run([
+    'validate',
+    `--schema=${resolve(fixtures, 'drift/authored.schema.json')}`,
+    `--generated-schema=${resolve(fixtures, 'drift/generated.schema.json')}`,
+    `--report=${reportPath}`,
+    '--quiet',
+  ]);
+  assert.equal(result.code, 2, result.stderr || result.stdout);
+  const report = JSON.parse(await readFile(reportPath, 'utf8'));
+  assert.equal(report.status, 'stopped_for_evaluation');
+  const divergence = report.findings.find((finding) => finding.ruleId === 'instance-verdict-divergence');
+  assert.ok(divergence, 'expected at least one instance-level divergence');
+  assert.ok('instance' in divergence.witness);
+  assert.notEqual(divergence.left.valid, divergence.right.valid);
+});
+
+test('validate honours an explicit instance corpus', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-cli-corpus-'));
+  const reportPath = join(temp, 'report.json');
+  const result = await run([
+    'validate',
+    `--schema=${resolve(fixtures, 'corpus/authored.schema.json')}`,
+    `--generated-schema=${resolve(fixtures, 'corpus/generated.schema.json')}`,
+    `--instances=${resolve(fixtures, 'corpus/instances')}`,
+    `--report=${reportPath}`,
+    '--quiet',
+  ]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const report = JSON.parse(await readFile(reportPath, 'utf8'));
+  assert.equal(report.differential.summary.corpusInstances, 5);
+  assert.equal(report.differential.summary.divergences, 0);
+});
+
+test('disabling the differential lane is recorded rather than silently assumed', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-cli-noprobes-'));
+  const reportPath = join(temp, 'report.json');
+  const result = await run([
+    'validate',
+    `--schema=${resolve(fixtures, 'equivalent/authored.schema.json')}`,
+    `--generated-schema=${resolve(fixtures, 'equivalent/generated.schema.json')}`,
+    '--probes=false',
+    `--report=${reportPath}`,
+    '--quiet',
+  ]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const report = JSON.parse(await readFile(reportPath, 'utf8'));
+  assert.equal(report.coverage.differentialInstanceValidation, false);
+  assert.equal(report.differential.disabled, true);
+});
