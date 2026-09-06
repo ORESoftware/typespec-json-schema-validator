@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.example.schema.json",
+  "$defs": {
+    "Role": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "Role",
+      "type": "string",
+      "enum": ["admin", "member"]
+    },
+    "User": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "User",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "role": { "$ref": "Role" },
+        "active": { "type": "boolean" },
+        "displayName": { "type": "string" }
+      },
+      "required": ["id", "role", "active"],
+      "unevaluatedProperties": false
+    }
+  }
+}
