@@ -78,6 +78,7 @@ async function buildPassedOrStoppedReport({
     bundleId: emitter?.bundleId ?? null,
     emitter: emitter?.emitter ?? null,
     emitterOptions: emitter?.emitterOptions ?? null,
+    executionMode: emitter?.executionMode ?? null,
     mappingSchema: mapping.schema,
   };
   const inputs = {
