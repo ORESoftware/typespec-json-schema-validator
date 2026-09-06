@@ -1,0 +1,17 @@
+.DS_Store
+.idea/
+.vscode/
+.ores/
+.env
+.env.*
+env/dec/
+node_modules/
+coverage/
+dist/
+out/
+target/
+temp/
+tmp/
+.typespec-json-schema-validator/
+*.log
+*.tgz
