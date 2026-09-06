@@ -9,6 +9,23 @@ const SET_LIKE_ARRAY_KEYS = new Set([
   'type',
 ]);
 
+// These keywords do not assert whether an instance is valid. The validator
+// checks both documents as Draft 2020-12 before comparison, then removes this
+// presentation/documentation metadata so generated and authored authorities
+// are compared on validation semantics rather than emitter file layout.
+const NON_ASSERTION_METADATA_KEYS = new Set([
+  '$comment',
+  '$id',
+  '$schema',
+  'default',
+  'deprecated',
+  'description',
+  'examples',
+  'readOnly',
+  'title',
+  'writeOnly',
+]);
+
 export function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -55,12 +72,29 @@ export function unescapeJsonPointerSegment(value) {
   return String(value).replaceAll('~1', '/').replaceAll('~0', '~');
 }
 
+function declarationRef(name) {
+  return `urn:tsjsv:declaration:${name}`;
+}
+
 export function normalizeRef(reference) {
   if (typeof reference !== 'string') {
     return reference;
   }
   if (reference.startsWith('#/definitions/')) {
-    return `#/$defs/${reference.slice('#/definitions/'.length)}`;
+    return declarationRef(reference.slice('#/definitions/'.length));
+  }
+  if (reference.startsWith('#/$defs/')) {
+    return declarationRef(reference.slice('#/$defs/'.length));
+  }
+
+  // The official TypeSpec bundle emitter uses declaration-local files such as
+  // `User.json`, while independently authored bundles commonly use
+  // `#/$defs/User`. At declaration-comparison time both spellings identify the
+  // same mapped top-level declaration. Paths, URLs, query strings, and nested
+  // fragments remain untouched because their resolution semantics may differ.
+  const localFile = /^(?:\.\/)?([^/#?]+)\.json$/.exec(reference);
+  if (localFile) {
+    return declarationRef(localFile[1]);
   }
   return reference;
 }
@@ -128,6 +162,9 @@ export function normalizeSchemaNode(value, parentKey = '') {
 
   const result = {};
   for (const key of Object.keys(value).sort()) {
+    if (NON_ASSERTION_METADATA_KEYS.has(key)) {
+      continue;
+    }
     let targetKey = key;
     if (key === 'definitions') {
       targetKey = '$defs';
