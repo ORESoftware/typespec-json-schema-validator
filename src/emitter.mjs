@@ -1,10 +1,98 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
 const MODULE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_CAPTURE_BYTES = 256 * 1024;
+
+function resolveJsonSchemaEmitter() {
+  try {
+    return fileURLToPath(import.meta.resolve('@typespec/json-schema'));
+  } catch (error) {
+    throw new Error(`the installed @typespec/json-schema emitter could not be resolved: ${error.message}`, {
+      cause: error,
+    });
+  }
+}
+
+async function overlayNodeModulePath(path) {
+  if (await exists(path)) {
+    return path;
+  }
+  const marker = `${sep}node_modules${sep}`;
+  const markerIndex = path.indexOf(marker);
+  if (markerIndex < 0) {
+    return path;
+  }
+  const candidate = join(MODULE_ROOT, 'node_modules', path.slice(markerIndex + marker.length));
+  return (await exists(candidate)) ? candidate : path;
+}
+
+function createPinnedCompilerHost() {
+  return {
+    ...NodeHost,
+    // The subprocess compiler is intentionally quiet here. The outer CLI owns the receipt and
+    // human-readable summary; diagnostics are collected from the returned Program below.
+    logSink: { log() {} },
+    async stat(path) {
+      return NodeHost.stat(await overlayNodeModulePath(path));
+    },
+    async realpath(path) {
+      return NodeHost.realpath(await overlayNodeModulePath(path));
+    },
+    async readFile(path) {
+      return NodeHost.readFile(await overlayNodeModulePath(path));
+    },
+    async readDir(path) {
+      return NodeHost.readDir(await overlayNodeModulePath(path));
+    },
+    async getJsImport(path) {
+      return NodeHost.getJsImport(await overlayNodeModulePath(path));
+    },
+  };
+}
+
+function formatCompilerDiagnostics(diagnostics, pathRelativeTo) {
+  return diagnostics
+    .map((diagnostic) => formatDiagnostic(diagnostic, { pretty: false, pathRelativeTo }))
+    .join('\n');
+}
+
+async function emitWithPinnedCompiler({ entry, cwd, outputDir, emitterPath, emitterOptions }) {
+  const host = createPinnedCompilerHost();
+  const [resolvedOptions, configDiagnostics] = await resolveCompilerOptions(host, {
+    entrypoint: entry,
+    cwd,
+  });
+  if (configDiagnostics.length > 0) {
+    throw new Error(formatCompilerDiagnostics(configDiagnostics, cwd));
+  }
+
+  const options = {
+    ...resolvedOptions,
+    outputDir,
+    emit: [emitterPath],
+    warningAsError: true,
+    options: {
+      ...(resolvedOptions.options ?? {}),
+      '@typespec/json-schema': {
+        ...(resolvedOptions.options?.['@typespec/json-schema'] ?? {}),
+        ...emitterOptions,
+      },
+    },
+  };
+  const program = await compile(host, entry, options);
+  if (program.hasError()) {
+    throw new Error(formatCompilerDiagnostics(program.diagnostics, cwd));
+  }
+  return program;
+}
+
+function commandFailureDetail(result) {
+  return [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n');
+}
 
 async function exists(path) {
   try {
@@ -143,15 +231,33 @@ export async function emitTypeSpecJsonSchema(options) {
     'polymorphic-models-strategy': options.polymorphicModelsStrategy ?? 'oneOf',
   };
 
-  const args = ['compile', entry, '--emit', '@typespec/json-schema', '--warn-as-error'];
+  const emitterPath = resolveJsonSchemaEmitter();
+  const args = ['compile', entry, '--emit', emitterPath, '--warn-as-error'];
   for (const [key, value] of Object.entries(emitterOptions)) {
     args.push('--option', `@typespec/json-schema.${key}=${value}`);
   }
 
-  const result = await runCommand(tspBin, args, { cwd, env: options.env });
+  let result = await runCommand(tspBin, args, { cwd, env: options.env });
+  let executionMode = 'subprocess';
   if (result.code !== 0) {
-    const detail = result.stderr.trim() || result.stdout.trim() || `exit code ${result.code}`;
-    throw new Error(`TypeSpec JSON Schema generation failed: ${detail}`);
+    const subprocessDetail = commandFailureDetail(result) || `exit code ${result.code}`;
+    try {
+      await emitWithPinnedCompiler({ entry, cwd, outputDir, emitterPath, emitterOptions });
+      executionMode = 'pinned-compiler-fallback';
+    } catch (error) {
+      const fallbackDetail = error.message || String(error);
+      throw new Error(
+        `TypeSpec JSON Schema generation failed: ${fallbackDetail}\nsubprocess: ${subprocessDetail}`,
+        { cause: error },
+      );
+    }
+    result = {
+      ...result,
+      code: 0,
+      signal: null,
+      stdout: '',
+      stderr: '',
+    };
   }
 
   let generatedPath = expected;
@@ -174,6 +280,7 @@ export async function emitTypeSpecJsonSchema(options) {
     tspBin: isAbsolute(tspBin) ? tspBin : tspBin,
     emitter: '@typespec/json-schema',
     emitterOptions,
+    executionMode,
     command: {
       executable: tspBin,
       args,

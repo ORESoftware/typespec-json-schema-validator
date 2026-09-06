@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -55,6 +55,28 @@ test('check compiles TypeSpec with the official emitter and passes equivalent au
   assert.equal(report.status, 'passed');
   assert.equal(report.zeroUnexplainedFindings, true);
   assert.equal(report.coverage.sourceMutationCheck, true);
+});
+
+test('check can compile a valid project without a local TypeSpec node_modules directory', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-cli-pinned-fallback-'));
+  const typespecPath = join(temp, 'main.tsp');
+  const authoredPath = join(temp, 'authored.schema.json');
+  const reportPath = join(temp, 'report.json');
+  await copyFile(resolve(fixtures, 'pass/main.tsp'), typespecPath);
+  await copyFile(resolve(fixtures, 'pass/authored.schema.json'), authoredPath);
+
+  const result = await run([
+    'check',
+    `--typespec=${typespecPath}`,
+    `--schema=${authoredPath}`,
+    `--output-dir=${join(temp, 'generated')}`,
+    `--report=${reportPath}`,
+    '--quiet',
+  ]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const report = JSON.parse(await readFile(reportPath, 'utf8'));
+  assert.equal(report.status, 'passed');
+  assert.equal(report.configuration.executionMode, 'pinned-compiler-fallback');
 });
 
 test('check fails closed with exit 2 for independently authored schema drift', async () => {

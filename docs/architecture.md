@@ -37,6 +37,12 @@ The generator invokes `tsp compile` and the official `@typespec/json-schema` emi
 - sealed object schemas by default; and
 - `oneOf` for polymorphic models by default.
 
+The CLI resolves the emitter from the validator's pinned dependency rather than requiring the
+contract repository to install a second copy. If the external `tsp` subprocess cannot resolve the
+contract's TypeSpec packages, the validator retries with its pinned compiler and a read-only
+`node_modules` overlay. Missing domain-specific TypeSpec libraries and compiler diagnostics remain
+hard failures; the fallback does not turn an invalid contract into a pass.
+
 The emitter runs in a dedicated output directory. The validator hashes both authored inputs before and after emission and fails if either changes.
 
 ## JSON Schema structural gate
