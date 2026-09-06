@@ -106,7 +106,7 @@ export async function main(argv = process.argv) {
     });
     const reportPath =
       configuration?.report ??
-      (error instanceof CliUsageError ? error.details?.reportPath : undefined) ??
+      (error instanceof CliUsageError ? error.details?.report : undefined) ??
       process.env.TSJSV_REPORT ??
       '.typespec-json-schema-validator/report.json';
     try {

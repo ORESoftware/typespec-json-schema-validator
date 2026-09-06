@@ -76,6 +76,7 @@ export function loadCliConfiguration(argv = process.argv) {
       command: parsed.command,
     };
   }
+  const env = mergedEnvironment(parsed);
   if (parsed.unknownOptions.length > 0 || parsed.errors.length > 0) {
     throw new CliUsageError('flags-2-env rejected the command line', {
       unknownOptions: parsed.unknownOptions,
@@ -83,10 +84,9 @@ export function loadCliConfiguration(argv = process.argv) {
       // Keep the report destination available even when the command is rejected
       // before a normal command configuration can be built. This is an error
       // receipt destination, not a second option parser.
-      reportPath: parsed.flags?.TSJSV_REPORT,
+      report: env.TSJSV_REPORT || undefined,
     });
   }
-  const env = mergedEnvironment(parsed);
   const command = parsed.command || env.TSJSV_COMMAND || '';
   const common = {
     command,
