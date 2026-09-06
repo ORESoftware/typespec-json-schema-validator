@@ -28,6 +28,19 @@ test("fleet action isolates generated evidence and emits JSON and SARIF artifact
   assert.doesNotMatch(action, /cp .*TSJSV_(?:TYPESPEC|SCHEMA)_INPUT/);
 });
 
+test("fleet action exposes reviewed official-emitter strategies", () => {
+  assert.match(action, /\n  int64_strategy:[\s\S]*?default: string/);
+  assert.match(action, /\n  seal_object_schemas:[\s\S]*?default: "true"/);
+  assert.match(action, /\n  polymorphic_models_strategy:[\s\S]*?default: oneOf/);
+  assert.match(action, /--int64-strategy=\$\{TSJSV_INT64_STRATEGY_INPUT\}/);
+  assert.match(action, /--seal-object-schemas=\$\{TSJSV_SEAL_OBJECT_SCHEMAS_INPUT\}/);
+  assert.match(
+    action,
+    /--polymorphic-models-strategy=\$\{TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT\}/,
+  );
+  assert.doesNotMatch(action, /TSJSV_INT64_STRATEGY_INPUT:-/);
+});
+
 test("fleet action invokes the reviewed validator without eval", () => {
   assert.match(action, /bin\/typespec-json-schema-validator\.mjs/);
   assert.match(action, /"\$\{args\[@\]\}"/);
