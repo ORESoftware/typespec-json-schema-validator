@@ -81,6 +81,9 @@ export function loadCliConfiguration(argv = process.argv) {
     throw new CliUsageError('flags-2-env rejected the command line', {
       unknownOptions: parsed.unknownOptions,
       errors: parsed.errors,
+      // Keep the report destination available even when the command is rejected
+      // before a normal command configuration can be built. This is an error
+      // receipt destination, not a second option parser.
       report: env.TSJSV_REPORT || undefined,
     });
   }

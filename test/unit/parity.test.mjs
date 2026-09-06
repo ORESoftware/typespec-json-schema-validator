@@ -47,6 +47,35 @@ test('repeated parity comparisons emit byte-stable finding fingerprints and orde
   assert.equal(canonicalStringify(first), canonicalStringify(second));
 });
 
+test('explicit mappings pair differently named generated and authored declarations', () => {
+  const schema = {
+    type: 'object',
+    properties: { id: { type: 'string' } },
+    required: ['id'],
+    unevaluatedProperties: false,
+  };
+  const result = compareParity({
+    typespecInventory: {
+      declarations: [{ kind: 'model', name: 'User', qualifiedName: 'Example.User' }],
+      errors: [],
+      ambiguities: [],
+    },
+    generatedCollection: {
+      findings: [],
+      declarations: [{ name: 'User', kind: 'model', schema, pointer: '#/$defs/User' }],
+    },
+    authoredCollection: {
+      findings: [],
+      declarations: [{ name: 'AccountUser', kind: 'model', schema, pointer: '#/$defs/AccountUser' }],
+    },
+    mapping: {
+      declarations: [{ typespec: 'Example.User', generated: 'User', authored: 'AccountUser' }],
+      ignore: { typespec: [], generated: [], authored: [] },
+    },
+  });
+  assert.equal(result.findingCount, 0);
+});
+
 test('runCompare emits a passed deterministic receipt with peer-authority policy', async () => {
   const fixture = resolve(root, 'pass');
   const options = {

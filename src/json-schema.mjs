@@ -309,9 +309,6 @@ export function inferSchemaKind(schema) {
   if (Array.isArray(schema.enum) || 'const' in schema) {
     return 'enum';
   }
-  if (Array.isArray(schema.oneOf) || Array.isArray(schema.anyOf)) {
-    return 'union';
-  }
   const typeValues = Array.isArray(schema.type) ? schema.type : [schema.type];
   if (
     typeValues.includes('object') ||
@@ -320,6 +317,9 @@ export function inferSchemaKind(schema) {
     isPlainObject(schema.patternProperties)
   ) {
     return 'model';
+  }
+  if (Array.isArray(schema.oneOf) || Array.isArray(schema.anyOf)) {
+    return 'union';
   }
   return 'scalar-like';
 }
