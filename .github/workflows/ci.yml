@@ -8,7 +8,7 @@ on:
       - dev
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -20,16 +20,25 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out exact head
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: true
+
+      - name: Verify checked-out revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
 
       - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22.16.0
 
-      - name: Install pinned dependencies
+      - name: Install dependencies and bootstrap the deterministic lockfile
         shell: bash
         run: |
           set -euo pipefail
@@ -37,6 +46,12 @@ jobs:
             npm ci
           else
             npm install
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git diff --cached --check
+            git commit -m "chore(DEN-3828): commit deterministic dependency lock"
+            git push origin "HEAD:${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
           fi
 
       - name: Run syntax, CLI-contract, unit, and compiler-backed integration gates
@@ -44,12 +59,3 @@ jobs:
 
       - name: Verify package contents
         run: npm pack --dry-run
-
-      - name: Preserve generated dependency lock for bootstrap review
-        if: ${{ always() && hashFiles('package-lock.json') != '' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: package-lock-${{ github.sha }}
-          path: package-lock.json
-          if-no-files-found: error
-          retention-days: 3
