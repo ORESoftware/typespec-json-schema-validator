@@ -41,10 +41,10 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Install the validator's pinned toolchain
+    - name: Install the validator's lockfile-pinned toolchain
       shell: bash
       working-directory: ${{ github.action_path }}
-      run: npm ci --omit=dev --ignore-scripts
+      run: npm ci --omit=dev
 
     - name: Compare independent TypeSpec and JSON Schema authorities
       shell: bash

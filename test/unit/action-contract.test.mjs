@@ -7,8 +7,9 @@ const action = await readFile(actionUrl, "utf8");
 
 test("fleet action remains composite and lockfile-pinned", () => {
   assert.match(action, /runs:\n  using: composite/);
-  assert.match(action, /npm ci --omit=dev --ignore-scripts/);
+  assert.match(action, /npm ci --omit=dev/);
   assert.doesNotMatch(action, /npm install\b/);
+  assert.doesNotMatch(action, /npm ci[^\n]*--ignore-scripts/);
 });
 
 test("fleet action requires both authored authorities", () => {
