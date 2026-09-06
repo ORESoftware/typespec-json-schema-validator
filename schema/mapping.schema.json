@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oresoftware.github.io/typespec-json-schema-validator/schema/mapping.schema.json",
+  "title": "TypeSpec JSON Schema declaration mapping",
+  "type": "object",
+  "required": ["schema", "declarations"],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.mapping/v1"
+    },
+    "declarations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["typespec"],
+        "properties": {
+          "typespec": { "type": "string", "minLength": 1 },
+          "generated": { "type": "string", "minLength": 1 },
+          "authored": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "ignore": {
+      "type": "object",
+      "properties": {
+        "typespec": { "$ref": "#/$defs/stringArray" },
+        "generated": { "$ref": "#/$defs/stringArray" },
+        "authored": { "$ref": "#/$defs/stringArray" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "stringArray": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

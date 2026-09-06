@@ -1,0 +1,59 @@
+{
+  "name": "@oresoftware/typespec-json-schema-validator",
+  "version": "0.1.0",
+  "description": "Fail-closed parity linter for independently authored TypeSpec and JSON Schema authorities.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./src/index.mjs",
+      "types": "./src/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./src/index.d.ts",
+  "bin": {
+    "typespec-json-schema-validator": "./bin/typespec-json-schema-validator.mjs",
+    "tsjsv": "./bin/typespec-json-schema-validator.mjs"
+  },
+  "files": [
+    ".cli-flags.toml",
+    "AGENTS.md",
+    "LICENSE",
+    "README.md",
+    "bin",
+    "docs",
+    "schema",
+    "src"
+  ],
+  "scripts": {
+    "check": "node ./scripts/check.mjs",
+    "flags:audit": "f2e audit ./.cli-flags.toml",
+    "test": "node --test ./test/unit/*.test.mjs",
+    "test:integration": "node --test ./test/integration/*.test.mjs",
+    "test:all": "npm run check && npm run flags:audit && npm test && npm run test:integration"
+  },
+  "dependencies": {
+    "@oresoftware/f2e": "github:flags-2-env/flags-2-env#2310d349cb87dfe7eac88ac67677e029c3e13167",
+    "@typespec/compiler": "1.15.0",
+    "@typespec/json-schema": "1.15.0"
+  },
+  "engines": {
+    "node": ">=22.9"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ORESoftware/typespec-json-schema-validator.git"
+  },
+  "keywords": [
+    "typespec",
+    "json-schema",
+    "static-analysis",
+    "schema-parity",
+    "linter"
+  ]
+}
