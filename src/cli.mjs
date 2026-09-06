@@ -10,6 +10,7 @@ import {
   runValidate,
   writeReport,
 } from './run.mjs';
+import { writeSarif } from './sarif.mjs';
 import { inventoryTypeSpec } from './typespec-inventory.mjs';
 
 function writeJson(value) {
@@ -35,6 +36,12 @@ async function doctor(configuration) {
   };
   writeJson(result);
   return result.status === 'passed' ? EXIT_CODES.passed : EXIT_CODES.failed;
+}
+
+async function writeRunArtifacts(configuration, report) {
+  const reportPath = await writeReport(configuration.report, report);
+  const sarifPath = configuration.sarif ? await writeSarif(configuration.sarif, report) : null;
+  return { reportPath, sarifPath };
 }
 
 export async function main(argv = process.argv) {
@@ -96,10 +103,11 @@ export async function main(argv = process.argv) {
       validate: runValidate,
     };
     const report = await runners[configuration.command](configuration);
-    const reportPath = await writeReport(configuration.report, report);
+    const { reportPath, sarifPath } = await writeRunArtifacts(configuration, report);
     if (!configuration.quiet) {
       process.stdout.write(renderHumanSummary(report));
       process.stdout.write(`report: ${reportPath}\n`);
+      if (sarifPath) process.stdout.write(`sarif: ${sarifPath}\n`);
     }
     return EXIT_CODES[report.status];
   } catch (error) {
@@ -113,10 +121,22 @@ export async function main(argv = process.argv) {
       (error instanceof CliUsageError ? error.details?.report : undefined) ??
       process.env.TSJSV_REPORT ??
       '.typespec-json-schema-validator/report.json';
+    const sarifPath =
+      configuration?.sarif ??
+      (error instanceof CliUsageError ? error.details?.sarif : undefined) ??
+      process.env.TSJSV_SARIF ??
+      undefined;
     try {
       await writeReport(reportPath, report);
     } catch (writeError) {
       process.stderr.write(`could not write failure report: ${writeError.message}\n`);
+    }
+    if (sarifPath) {
+      try {
+        await writeSarif(sarifPath, report);
+      } catch (writeError) {
+        process.stderr.write(`could not write failure SARIF: ${writeError.message}\n`);
+      }
     }
     process.stderr.write(renderHumanSummary(report));
     if (error instanceof CliUsageError && error.details) {

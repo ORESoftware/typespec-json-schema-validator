@@ -19,10 +19,12 @@ test("fleet action requires both authored authorities", () => {
   assert.match(action, /--schema=\$\{TSJSV_SCHEMA_INPUT\}/);
 });
 
-test("fleet action isolates generated evidence and emits a receipt", () => {
+test("fleet action isolates generated evidence and emits JSON and SARIF artifacts", () => {
   assert.match(action, /--report=\$\{TSJSV_REPORT_INPUT\}/);
+  assert.match(action, /--sarif=\$\{TSJSV_SARIF_INPUT\}/);
   assert.match(action, /--output-dir=\$\{TSJSV_OUTPUT_DIR_INPUT\}/);
   assert.match(action, /\.typespec-json-schema-validator\/generated/);
+  assert.match(action, /\.typespec-json-schema-validator\/report\.sarif/);
   assert.doesNotMatch(action, /cp .*TSJSV_(?:TYPESPEC|SCHEMA)_INPUT/);
 });
 

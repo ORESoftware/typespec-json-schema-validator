@@ -20,6 +20,12 @@ type = "string"
 default = ".typespec-json-schema-validator/report.json"
 help = "Machine-readable parity report path."
 
+[flags.sarif]
+env = "TSJSV_SARIF"
+aliases = ["sarif"]
+type = "string"
+help = "Optional deterministic SARIF 2.1.0 presentation artifact path."
+
 [flags.mapping]
 env = "TSJSV_MAPPING"
 aliases = ["mapping"]

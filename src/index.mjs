@@ -39,6 +39,15 @@ export {
   writeReport,
 } from './run.mjs';
 export {
+  SARIF_SCHEMA,
+  SARIF_TOOL_NAME,
+  SARIF_VERSION,
+  serializeSarif,
+  toSarif,
+  writeSarif,
+} from './sarif.mjs';
+export { UnsafeSarifDestinationError, writeSarifFile } from './sarif-file.mjs';
+export {
   buildProbes,
   collectValueDomains,
   mutateInstance,
