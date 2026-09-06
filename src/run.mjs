@@ -1,10 +1,11 @@
 import { readFile, mkdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { canonicalStringify, sha256 } from './canonical.mjs';
+import { canonicalStringify, sha256, stableFindingFingerprint } from './canonical.mjs';
 import { emitTypeSpecJsonSchema, resolveTspBinary, toolVersion } from './emitter.mjs';
+import { crossValidate, loadInstanceCorpus } from './differential.mjs';
 import { loadSchemaCollection } from './json-schema.mjs';
-import { compareParity, loadMapping } from './parity.mjs';
+import { compareParity, loadMapping, sortFindings } from './parity.mjs';
 import { inventoryTypeSpec } from './typespec-inventory.mjs';
 
 export const REPORT_SCHEMA = 'ores.typespec-json-schema-validator.report/v1';
@@ -43,16 +44,67 @@ async function assertOutputSeparation(authoredInput, outputDir) {
   }
 }
 
-function summaryCounts(typespecInventory, generatedCollection, authoredCollection, parity) {
+function summaryCounts(typespecInventory, generatedCollection, authoredCollection, parity, differential, emitted) {
+  const differentialFindingCount = differential ? differential.findings.length : 0;
   return {
-    typespecDeclarations: typespecInventory.declarations.length,
-    typespecOutOfScopeDeclarations: typespecInventory.outOfScopeDeclarations.length,
+    typespecDeclarations: typespecInventory ? typespecInventory.declarations.length : null,
+    typespecOutOfScopeDeclarations: typespecInventory ? typespecInventory.outOfScopeDeclarations.length : null,
     generatedDeclarations: generatedCollection.declarations.length,
     authoredDeclarations: authoredCollection.declarations.length,
-    findings: parity.findingCount,
-    emittedFindings: parity.findings.length,
-    findingsTruncated: parity.truncated,
+    structuralFindings: parity.findingCount,
+    differentialFindings: differentialFindingCount,
+    findings: parity.findingCount + differentialFindingCount,
+    emittedFindings: emitted.length,
+    findingsTruncated: parity.truncated || parity.findingCount + differentialFindingCount > emitted.length,
   };
+}
+
+/**
+ * Derive the differential lane's declaration pairs when no TypeSpec inventory is available
+ * (the standalone `validate` command). Only names present in both authorities can be compared.
+ */
+function intersectDeclarations(generatedCollection, authoredCollection, mapping) {
+  const ignoredGenerated = new Set(mapping.ignore.generated);
+  const ignoredAuthored = new Set(mapping.ignore.authored);
+  const explicit = new Map();
+  for (const entry of mapping.declarations) {
+    explicit.set(entry.generated ?? entry.typespec, entry);
+  }
+  const authoredNames = new Set(authoredCollection.declarations.map((item) => item.name));
+  const pairs = [];
+  for (const declaration of generatedCollection.declarations) {
+    if (ignoredGenerated.has(declaration.name)) {
+      continue;
+    }
+    const entry = explicit.get(declaration.name);
+    const authoredName = entry?.authored ?? declaration.name;
+    if (ignoredAuthored.has(authoredName) || !authoredNames.has(authoredName)) {
+      continue;
+    }
+    pairs.push({ typespec: entry?.typespec ?? declaration.name, generated: declaration.name, authored: authoredName });
+  }
+  return pairs.sort((left, right) => left.generated.localeCompare(right.generated));
+}
+
+/**
+ * Run the differential lane unless it has been explicitly disabled.
+ *
+ * @returns {Promise<object|null>} `null` when the lane is switched off.
+ */
+async function runDifferentialLane(options, generatedCollection, authoredCollection, declarationMap) {
+  if (options.probes === false) {
+    return null;
+  }
+  const corpus = await loadInstanceCorpus(options.instances);
+  return crossValidate({
+    generatedCollection,
+    authoredCollection,
+    declarationMap,
+    corpus,
+    maxProbes: options.maxProbes ?? 64,
+    maxFindings: options.maxFindings,
+    formatAssertion: options.formatAssertion === true,
+  });
 }
 
 function buildRunId(material) {
@@ -67,11 +119,17 @@ async function buildPassedOrStoppedReport({
   authoredCollection,
   mapping,
   parity,
+  differential,
   emitter,
   tspVersion,
 }) {
   const version = await packageVersion();
-  const status = parity.findingCount === 0 ? 'passed' : 'stopped_for_evaluation';
+  const emittedFindings = sortFindings([...parity.findings, ...(differential?.findings ?? [])]).slice(
+    0,
+    options.maxFindings,
+  );
+  const totalFindings = parity.findingCount + (differential?.findings.length ?? 0);
+  const status = totalFindings === 0 ? 'passed' : 'stopped_for_evaluation';
   const configuration = {
     mode,
     maxFindings: options.maxFindings,
@@ -79,13 +137,21 @@ async function buildPassedOrStoppedReport({
     emitter: emitter?.emitter ?? null,
     emitterOptions: emitter?.emitterOptions ?? null,
     mappingSchema: mapping.schema,
+    differential: {
+      enabled: differential !== null && differential !== undefined,
+      maxProbesPerDeclarationPerLane: options.maxProbes ?? 64,
+      formatAssertion: options.formatAssertion === true,
+      instanceCorpus: options.instances ? relativeDisplay(options.instances) : null,
+    },
   };
   const inputs = {
-    typespec: {
-      input: relativeDisplay(typespecInventory.input),
-      digest: typespecInventory.digest,
-      files: typespecInventory.files,
-    },
+    typespec: typespecInventory
+      ? {
+        input: relativeDisplay(typespecInventory.input),
+        digest: typespecInventory.digest,
+        files: typespecInventory.files,
+      }
+      : null,
     authoredJsonSchema: {
       input: relativeDisplay(authoredCollection.input),
       digest: authoredCollection.digest,
@@ -108,12 +174,12 @@ async function buildPassedOrStoppedReport({
     status,
     configuration,
     inputDigests: {
-      typespec: typespecInventory.digest,
+      typespec: typespecInventory?.digest ?? null,
       authored: authoredCollection.digest,
       generated: generatedCollection.digest,
     },
     toolchain,
-    findings: parity.findings.map((finding) => finding.fingerprint),
+    findings: emittedFindings.map((finding) => finding.fingerprint),
   });
 
   return {
@@ -136,8 +202,9 @@ async function buildPassedOrStoppedReport({
     inputs,
     toolchain,
     coverage: {
-      directDeclarationInventory: true,
+      directDeclarationInventory: typespecInventory !== null && typespecInventory !== undefined,
       typespecGeneratedJsonSchemaComparison: true,
+      differentialInstanceValidation: differential !== null && differential !== undefined,
       sourceMutationCheck: mode === 'check',
       comparedDimensions: [
         'top-level declaration names',
@@ -151,17 +218,21 @@ async function buildPassedOrStoppedReport({
         'references',
         'defaults and annotations',
         'additional and unevaluated property policy',
+        'instance-level verdict agreement over a synthesized probe corpus',
       ],
-      outOfScopeTypeSpecDeclarations: typespecInventory.outOfScopeDeclarations.map((declaration) => ({
+      outOfScopeTypeSpecDeclarations: (typespecInventory?.outOfScopeDeclarations ?? []).map((declaration) => ({
         qualifiedName: declaration.qualifiedName,
         kind: declaration.kind,
         reason: declaration.reason,
       })),
     },
-    counts: summaryCounts(typespecInventory, generatedCollection, authoredCollection, parity),
+    counts: summaryCounts(typespecInventory, generatedCollection, authoredCollection, parity, differential, emittedFindings),
     declarationMap: parity.expectedDeclarations,
-    zeroUnexplainedFindings: parity.findingCount === 0,
-    findings: parity.findings,
+    differential: differential
+      ? { summary: differential.summary, declarations: differential.declarations }
+      : { summary: null, declarations: [], disabled: true },
+    zeroUnexplainedFindings: totalFindings === 0,
+    findings: emittedFindings,
   };
 }
 
@@ -179,8 +250,16 @@ export function renderHumanSummary(report) {
   ];
   if (report.counts) {
     lines.push(
-      `declarations: TypeSpec=${report.counts.typespecDeclarations}, generated=${report.counts.generatedDeclarations}, authored=${report.counts.authoredDeclarations}`,
-      `findings: ${report.counts.findings}${report.counts.findingsTruncated ? ' (report truncated)' : ''}`,
+      `declarations: TypeSpec=${report.counts.typespecDeclarations ?? 'n/a'}, generated=${report.counts.generatedDeclarations}, authored=${report.counts.authoredDeclarations}`,
+      `findings: ${report.counts.findings} (structural ${report.counts.structuralFindings ?? 0}, differential ${
+        report.counts.differentialFindings ?? 0
+      })${report.counts.findingsTruncated ? ' — report truncated' : ''}`,
+    );
+  }
+  if (report.differential?.summary) {
+    const { probesEvaluated, agreements, divergences, refusals, comparedDeclarations } = report.differential.summary;
+    lines.push(
+      `differential: ${comparedDeclarations} declarations, ${probesEvaluated} probes, ${agreements} agreements, ${divergences} divergences, ${refusals} refusals`,
     );
   }
   for (const finding of report.findings?.slice(0, 20) ?? []) {
@@ -257,6 +336,7 @@ export async function runCheck(options) {
     mapping,
     maxFindings: options.maxFindings,
   });
+  const differential = await runDifferentialLane(options, generated, authoredBefore, parity.expectedDeclarations);
   const tspVersion = await toolVersion(emitter.tspBin);
   return buildPassedOrStoppedReport({
     mode: 'check',
@@ -266,6 +346,7 @@ export async function runCheck(options) {
     authoredCollection: authoredBefore,
     mapping,
     parity,
+    differential,
     emitter,
     tspVersion,
   });
@@ -283,6 +364,7 @@ export async function runCompare(options) {
     mapping,
     maxFindings: options.maxFindings,
   });
+  const differential = await runDifferentialLane(options, generated, authored, parity.expectedDeclarations);
   const tspBin = await resolveTspBinary(options.tspBin);
   const tspVersion = await toolVersion(tspBin);
   return buildPassedOrStoppedReport({
@@ -293,7 +375,48 @@ export async function runCompare(options) {
     authoredCollection: authored,
     mapping,
     parity,
+    differential,
     emitter: null,
     tspVersion,
+  });
+}
+
+/**
+ * Execute only the differential lane.
+ *
+ * `validate` is the direct expression of "schema A validates B": the independently authored
+ * JSON Schema is run as a validator over instances drawn from the TypeSpec-generated schema
+ * (and vice versa), with no TypeSpec compiler required. It is the lane to reach for when the
+ * generated witness already exists — in CI, downstream of a `generate` step, or when checking a
+ * recorded payload corpus against both authorities.
+ */
+export async function runValidate(options) {
+  const mapping = await loadMapping(options.mapping);
+  const generated = await loadSchemaCollection(options.generatedSchema, { requireDialect: true });
+  const authored = await loadSchemaCollection(options.authoredSchema, { requireDialect: true });
+  const declarationMap = intersectDeclarations(generated, authored, mapping);
+  const structuralFindings = sortFindings([...generated.findings, ...authored.findings].map((item) => ({
+    ...item,
+    resolutionState: 'unexplained',
+    fingerprint: stableFindingFingerprint(item),
+  })));
+  const parity = {
+    findings: structuralFindings,
+    findingCount: structuralFindings.length,
+    truncated: false,
+    expectedDeclarations: declarationMap,
+  };
+  const differential = await runDifferentialLane(options, generated, authored, declarationMap);
+  return buildPassedOrStoppedReport({
+    mode: 'validate',
+    options,
+    typespecInventory: null,
+    generatedCollection: generated,
+    authoredCollection: authored,
+    mapping,
+    parity,
+    differential,
+    emitter: null,
+    tspVersion: { command: null, available: null, version: null },
   });
 }

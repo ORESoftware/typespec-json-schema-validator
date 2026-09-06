@@ -438,7 +438,14 @@ export async function loadSchemaCollection(input, options = {}) {
   return {
     input: resolve(input),
     digest: sha256(digestMaterial),
-    documents: documents.map(({ path, relativePath, sha256: digest }) => ({ path, relativePath, sha256: digest })),
+    // The parsed document is retained so the differential lane can execute each authority as
+    // a validator. Consumers that only need provenance keep using path/relativePath/sha256.
+    documents: documents.map(({ path, relativePath, sha256: digest, document }) => ({
+      path,
+      relativePath,
+      sha256: digest,
+      document,
+    })),
     declarations: declarations.sort((left, right) => left.name.localeCompare(right.name)),
     findings,
   };

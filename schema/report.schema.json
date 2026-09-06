@@ -19,7 +19,11 @@
       "pattern": "^[a-f0-9]{64}$"
     },
     "status": {
-      "enum": ["passed", "stopped_for_evaluation", "failed"]
+      "enum": [
+        "passed",
+        "stopped_for_evaluation",
+        "failed"
+      ]
     },
     "zeroUnexplainedFindings": {
       "type": "boolean"
@@ -47,10 +51,17 @@
     },
     "error": {
       "type": "object",
-      "required": ["name", "message"],
+      "required": [
+        "name",
+        "message"
+      ],
       "properties": {
-        "name": { "type": "string" },
-        "message": { "type": "string" }
+        "name": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
       },
       "additionalProperties": false
     },
@@ -67,22 +78,184 @@
           "fingerprint"
         ],
         "properties": {
-          "ruleId": { "type": "string" },
-          "severity": { "const": "error" },
-          "resolutionState": { "const": "unexplained" },
-          "comparison": { "type": "string" },
-          "declaration": { "type": "string" },
-          "pointer": { "type": "string" },
-          "message": { "type": "string" },
+          "ruleId": {
+            "type": "string"
+          },
+          "severity": {
+            "const": "error"
+          },
+          "resolutionState": {
+            "const": "unexplained"
+          },
+          "comparison": {
+            "type": "string"
+          },
+          "declaration": {
+            "type": "string"
+          },
+          "pointer": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
           "left": true,
           "right": true,
           "fingerprint": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
-          }
+          },
+          "witness": {
+            "type": "object",
+            "description": "The instance proving that the two authorities disagree.",
+            "required": [
+              "probeId",
+              "origin",
+              "instance"
+            ],
+            "properties": {
+              "probeId": {
+                "type": "string"
+              },
+              "origin": {
+                "type": "string"
+              },
+              "lane": {
+                "enum": [
+                  "authored",
+                  "generated",
+                  "corpus"
+                ]
+              },
+              "mutation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "pointer": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "synthesisComplete": {
+                "type": "boolean"
+              },
+              "instance": true
+            },
+            "additionalProperties": true
+          },
+          "instance": true
         },
         "additionalProperties": true
       }
+    },
+    "differential": {
+      "type": "object",
+      "description": "Instance-level differential validation evidence. Present whenever the lane ran.",
+      "properties": {
+        "disabled": {
+          "const": true
+        },
+        "summary": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "required": [
+                "comparedDeclarations",
+                "probesEvaluated",
+                "agreements",
+                "divergences",
+                "refusals"
+              ],
+              "properties": {
+                "comparedDeclarations": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "probesEvaluated": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "agreements": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "divergences": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "refusals": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "corpusInstances": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "maxProbesPerDeclarationPerLane": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "formatAssertion": {
+                  "type": "boolean"
+                },
+                "behaviorallyIndistinguishableDeclarations": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": true
+            }
+          ]
+        },
+        "declarations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "typespec",
+              "generated",
+              "authored",
+              "probes",
+              "divergences",
+              "behaviorallyIndistinguishable"
+            ],
+            "properties": {
+              "typespec": {
+                "type": "string"
+              },
+              "generated": {
+                "type": "string"
+              },
+              "authored": {
+                "type": "string"
+              },
+              "probes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "divergences": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "refusals": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "behaviorallyIndistinguishable": {
+                "type": "boolean"
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true
