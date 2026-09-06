@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## Unreleased
+
+### Added
+
+- Deterministic SARIF 2.1.0 presentation output through `--sarif`, the composite action, and the public JavaScript API.
+- Stable `TSJSV.<source-rule-id>` descriptors, existing SHA-256 finding fingerprints, bounded source/JSON Pointer locations, and failed-run results.
+- Safe SARIF persistence that replaces only validator-owned output and refuses unrelated files, symbolic links, and multiply linked targets.
+- GitHub code-scanning guidance and redaction tests that keep schema values, witnesses, remote URIs, hostnames, and timestamps out of SARIF.
+
 ## 0.1.0 — 2026-09-05
 
 ### Added

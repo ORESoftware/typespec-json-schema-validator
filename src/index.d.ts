@@ -7,6 +7,7 @@ export interface ValidatorFinding {
   comparison: string;
   declaration?: string;
   pointer?: string;
+  source?: string;
   message: string;
   left?: unknown;
   right?: unknown;
@@ -74,6 +75,12 @@ export interface ValidatorReport {
   [key: string]: unknown;
 }
 
+export interface SarifLog {
+  $schema: 'https://json.schemastore.org/sarif-2.1.0.json';
+  version: '2.1.0';
+  runs: Array<Record<string, unknown>>;
+}
+
 export interface CheckOptions extends DifferentialOptions {
   typespec: string;
   authoredSchema: string;
@@ -130,6 +137,8 @@ export declare class SchemaResolutionError extends Error {
   source: string;
 }
 
+export declare class UnsafeSarifDestinationError extends Error {}
+
 export function runCheck(options: CheckOptions): Promise<ValidatorReport>;
 export function runCompare(options: CompareOptions): Promise<ValidatorReport>;
 export function runValidate(options: ValidateOptions): Promise<ValidatorReport>;
@@ -154,6 +163,10 @@ export function jsonEquals(left: unknown, right: unknown): boolean;
 export function sortFindings(findings: ValidatorFinding[]): ValidatorFinding[];
 export function writeReport(path: string, report: ValidatorReport): Promise<string>;
 export function renderHumanSummary(report: ValidatorReport): string;
+export function toSarif(report: ValidatorReport): SarifLog;
+export function serializeSarif(report: ValidatorReport): string;
+export function writeSarif(path: string, report: ValidatorReport): Promise<string>;
+export function writeSarifFile(path: string, serializedSarif: string): Promise<string>;
 export function inventoryTypeSpec(inputPath: string): Promise<Record<string, unknown>>;
 export function inventoryTypeSpecSource(source: string, file?: string): Record<string, unknown>;
 export function loadSchemaCollection(input: string, options?: Record<string, unknown>): Promise<Record<string, unknown>>;
@@ -164,4 +177,7 @@ export function normalizeSchemaDocument(value: unknown): unknown;
 export function canonicalStringify(value: unknown, space?: number): string;
 export function sha256(value: string | Buffer): string;
 export const REPORT_SCHEMA: 'ores.typespec-json-schema-validator.report/v1';
+export const SARIF_SCHEMA: 'https://json.schemastore.org/sarif-2.1.0.json';
+export const SARIF_TOOL_NAME: '@oresoftware/typespec-json-schema-validator';
+export const SARIF_VERSION: '2.1.0';
 export const EXIT_CODES: Readonly<Record<ValidatorStatus, number>>;

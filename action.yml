@@ -17,6 +17,10 @@ inputs:
     description: Path for the deterministic machine-readable parity receipt.
     required: false
     default: .typespec-json-schema-validator/report.json
+  sarif:
+    description: Optional path for deterministic SARIF 2.1.0 presentation output. Leave empty to disable.
+    required: false
+    default: .typespec-json-schema-validator/report.sarif
   output_dir:
     description: Dedicated directory for generated comparison evidence. This directory must not contain either authored authority.
     required: false
@@ -53,6 +57,7 @@ runs:
         TSJSV_TYPESPEC_INPUT: ${{ inputs.typespec }}
         TSJSV_SCHEMA_INPUT: ${{ inputs.schema }}
         TSJSV_REPORT_INPUT: ${{ inputs.report }}
+        TSJSV_SARIF_INPUT: ${{ inputs.sarif }}
         TSJSV_OUTPUT_DIR_INPUT: ${{ inputs.output_dir }}
         TSJSV_MAPPING_INPUT: ${{ inputs.mapping }}
         TSJSV_INSTANCES_INPUT: ${{ inputs.instances }}
@@ -69,6 +74,10 @@ runs:
           "--output-dir=${TSJSV_OUTPUT_DIR_INPUT}"
           "--max-probes=${TSJSV_MAX_PROBES_INPUT}"
         )
+
+        if [[ -n "${TSJSV_SARIF_INPUT}" ]]; then
+          args+=("--sarif=${TSJSV_SARIF_INPUT}")
+        fi
 
         if [[ -n "${TSJSV_MAPPING_INPUT}" ]]; then
           args+=("--mapping=${TSJSV_MAPPING_INPUT}")
