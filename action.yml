@@ -1,0 +1,90 @@
+name: TypeSpec and JSON Schema peer-authority parity
+description: Generate comparison-only JSON Schema B from TypeSpec and fail closed unless it converges with independently authored JSON Schema A.
+author: ORESoftware
+
+branding:
+  icon: check-circle
+  color: purple
+
+inputs:
+  typespec:
+    description: Path to the independently authored TypeSpec entry file or project directory in the caller workspace.
+    required: true
+  schema:
+    description: Path to the independently authored JSON Schema Draft 2020-12 file or directory in the caller workspace.
+    required: true
+  report:
+    description: Path for the deterministic machine-readable parity receipt.
+    required: false
+    default: .typespec-json-schema-validator/report.json
+  output_dir:
+    description: Dedicated directory for generated comparison evidence. This directory must not contain either authored authority.
+    required: false
+    default: .typespec-json-schema-validator/generated
+  mapping:
+    description: Optional declaration-mapping JSON file.
+    required: false
+    default: ""
+  instances:
+    description: Optional independently maintained instance corpus directory.
+    required: false
+    default: ""
+  max_probes:
+    description: Maximum synthesized probes per declaration per authority lane.
+    required: false
+    default: "64"
+  quiet:
+    description: Suppress the human-readable summary while retaining the JSON receipt.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Install the validator's pinned toolchain
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --omit=dev --ignore-scripts
+
+    - name: Compare independent TypeSpec and JSON Schema authorities
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        TSJSV_TYPESPEC_INPUT: ${{ inputs.typespec }}
+        TSJSV_SCHEMA_INPUT: ${{ inputs.schema }}
+        TSJSV_REPORT_INPUT: ${{ inputs.report }}
+        TSJSV_OUTPUT_DIR_INPUT: ${{ inputs.output_dir }}
+        TSJSV_MAPPING_INPUT: ${{ inputs.mapping }}
+        TSJSV_INSTANCES_INPUT: ${{ inputs.instances }}
+        TSJSV_MAX_PROBES_INPUT: ${{ inputs.max_probes }}
+        TSJSV_QUIET_INPUT: ${{ inputs.quiet }}
+      run: |
+        set -euo pipefail
+
+        args=(
+          check
+          "--typespec=${TSJSV_TYPESPEC_INPUT}"
+          "--schema=${TSJSV_SCHEMA_INPUT}"
+          "--report=${TSJSV_REPORT_INPUT}"
+          "--output-dir=${TSJSV_OUTPUT_DIR_INPUT}"
+          "--max-probes=${TSJSV_MAX_PROBES_INPUT}"
+        )
+
+        if [[ -n "${TSJSV_MAPPING_INPUT}" ]]; then
+          args+=("--mapping=${TSJSV_MAPPING_INPUT}")
+        fi
+
+        if [[ -n "${TSJSV_INSTANCES_INPUT}" ]]; then
+          args+=("--instances=${TSJSV_INSTANCES_INPUT}")
+        fi
+
+        case "${TSJSV_QUIET_INPUT}" in
+          true) args+=("--quiet") ;;
+          false) ;;
+          *)
+            printf 'quiet must be true or false, got: %s\n' "${TSJSV_QUIET_INPUT}" >&2
+            exit 3
+            ;;
+        esac
+
+        node "${GITHUB_ACTION_PATH}/bin/typespec-json-schema-validator.mjs" "${args[@]}"
