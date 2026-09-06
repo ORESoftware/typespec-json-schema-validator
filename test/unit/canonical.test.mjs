@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   canonicalStringify,
   deepDiff,
+  normalizeRef,
   normalizeSchemaDocument,
   normalizeSchemaNode,
   resolveJsonPointer,
@@ -24,15 +25,65 @@ test('schema normalization is deterministic and respects semantic set ordering',
   assert.equal(canonicalStringify(left), canonicalStringify(right));
 });
 
-test('legacy definitions and refs normalize to Draft 2020-12 spellings', () => {
+test('legacy definitions and refs normalize to Draft 2020-12 declaration identities', () => {
   const normalized = normalizeSchemaDocument({
     definitions: { User: { type: 'object' } },
     $ref: '#/definitions/User',
   });
   assert.deepEqual(normalized, {
     $defs: { User: { type: 'object' } },
-    $ref: '#/$defs/User',
+    $ref: 'urn:tsjsv:declaration:User',
   });
+});
+
+test('generated file refs and bundled defs refs normalize to the same declaration', () => {
+  assert.equal(normalizeRef('User.json'), 'urn:tsjsv:declaration:User');
+  assert.equal(normalizeRef('./User.json'), 'urn:tsjsv:declaration:User');
+  assert.equal(normalizeRef('#/$defs/User'), 'urn:tsjsv:declaration:User');
+  assert.equal(normalizeRef('schemas/User.json'), 'schemas/User.json');
+  assert.equal(normalizeRef('User.json#/properties/id'), 'User.json#/properties/id');
+});
+
+test('non-assertion schema metadata does not create false parity failures', () => {
+  const generated = normalizeSchemaNode({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'User.json',
+    title: 'Generated user',
+    description: 'Generated wording',
+    type: 'object',
+    properties: { id: { type: 'string', description: 'Generated id wording' } },
+  });
+  const authored = normalizeSchemaNode({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'urn:example:user',
+    $comment: 'Independent source note',
+    title: 'Authored user',
+    description: 'Independent wording',
+    type: 'object',
+    properties: { id: { type: 'string', examples: ['u-1'] } },
+  });
+  assert.equal(canonicalStringify(generated), canonicalStringify(authored));
+});
+
+test('assertion differences remain visible after metadata normalization', () => {
+  const generated = normalizeSchemaNode({
+    description: 'generated',
+    type: 'integer',
+    minimum: 0,
+  });
+  const authored = normalizeSchemaNode({
+    description: 'authored',
+    type: 'integer',
+    minimum: 1,
+  });
+  assert.deepEqual(deepDiff(generated, authored).differences, [
+    {
+      pointer: '#/minimum',
+      kind: 'value-mismatch',
+      left: 0,
+      right: 1,
+    },
+  ]);
 });
 
 test('simple nullable anyOf union normalizes to a type set', () => {
