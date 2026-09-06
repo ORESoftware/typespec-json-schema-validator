@@ -54,6 +54,25 @@ test('OpenAPI nullable keyword is rejected in the Draft 2020-12 authority lane',
   assert.ok(findings.some((item) => item.ruleId === 'json-schema-openapi-nullable-keyword'));
 });
 
+test('top-level declaration extraction does not mistake nested property names for declarations', () => {
+  const schema = {
+    $schema: dialect,
+    $defs: {
+      Envelope: {
+        type: 'object',
+        properties: {
+          User: {
+            type: 'object',
+            properties: { id: { type: 'string' } },
+            $defs: { User: { type: 'string' } },
+          },
+        },
+      },
+    },
+  };
+  assert.deepEqual(extractSchemaDeclarations(schema, 'schema.json').map((item) => item.name), ['Envelope']);
+});
+
 test('kind inference distinguishes models, enums, unions, and scalar-like schemas', () => {
   assert.equal(inferSchemaKind({ type: 'object', properties: {} }), 'model');
   assert.equal(
