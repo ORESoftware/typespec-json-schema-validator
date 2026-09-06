@@ -189,23 +189,30 @@ function compareExpectedToSchema(expectedDeclarations, schemaMap, lane, findings
   }
 }
 
-function compareSchemaInventories(generatedMap, authoredMap, findings) {
-  const names = [...new Set([...generatedMap.keys(), ...authoredMap.keys()])].sort();
-  for (const name of names) {
-    const generated = generatedMap.get(name);
-    const authored = authoredMap.get(name);
+function compareSchemaInventories(generatedMap, authoredMap, expectedDeclarations, findings) {
+  for (const expected of [...expectedDeclarations.values()].sort((left, right) =>
+    left.declaration.qualifiedName.localeCompare(right.declaration.qualifiedName),
+  )) {
+    const generated = generatedMap.get(expected.generatedName);
+    const authored = authoredMap.get(expected.authoredName);
     if (!generated || !authored) {
-      findings.push(
-        makeFinding({
-          ruleId: 'generated-authored-declaration-set-mismatch',
-          comparison: 'generated-vs-authored-inventory',
-          declaration: name,
-          pointer: generated?.pointer ?? authored?.pointer ?? '#',
-          message: `declaration ${name} is present in only one JSON Schema lane`,
-          left: generated ? { authority: 'typespec-generated-json-schema', kind: generated.kind } : undefined,
-          right: authored ? { authority: 'authored-json-schema', kind: authored.kind } : undefined,
-        }),
-      );
+      if (generated || authored) {
+        findings.push(
+          makeFinding({
+            ruleId: 'generated-authored-declaration-set-mismatch',
+            comparison: 'generated-vs-authored-inventory',
+            declaration: expected.declaration.qualifiedName,
+            pointer: generated?.pointer ?? authored?.pointer ?? '#',
+            message: `generated and authored JSON Schema lanes do not both contain ${expected.declaration.qualifiedName}`,
+            left: generated
+              ? { authority: 'typespec-generated-json-schema', name: expected.generatedName, kind: generated.kind }
+              : undefined,
+            right: authored
+              ? { authority: 'authored-json-schema', name: expected.authoredName, kind: authored.kind }
+              : undefined,
+          }),
+        );
+      }
       continue;
     }
     if (schemaKindFamily(generated.kind) !== schemaKindFamily(authored.kind)) {
@@ -213,9 +220,9 @@ function compareSchemaInventories(generatedMap, authoredMap, findings) {
         makeFinding({
           ruleId: 'generated-authored-kind-mismatch',
           comparison: 'generated-vs-authored-inventory',
-          declaration: name,
+          declaration: expected.declaration.qualifiedName,
           pointer: authored.pointer,
-          message: `generated and authored JSON Schema declarations disagree on kind for ${name}`,
+          message: `generated and authored JSON Schema declarations disagree on kind for ${expected.declaration.qualifiedName}`,
           left: generated.kind,
           right: authored.kind,
         }),
@@ -224,14 +231,19 @@ function compareSchemaInventories(generatedMap, authoredMap, findings) {
   }
 }
 
-function compareSemanticSchemas(generatedMap, authoredMap, maxFindings, findings) {
-  const commonNames = [...generatedMap.keys()].filter((name) => authoredMap.has(name)).sort();
-  for (const name of commonNames) {
+function compareSemanticSchemas(generatedMap, authoredMap, expectedDeclarations, maxFindings, findings) {
+  const expected = [...expectedDeclarations.values()].sort((left, right) =>
+    left.declaration.qualifiedName.localeCompare(right.declaration.qualifiedName),
+  );
+  for (const pair of expected) {
     if (findings.length >= maxFindings) {
       break;
     }
-    const generated = generatedMap.get(name);
-    const authored = authoredMap.get(name);
+    const generated = generatedMap.get(pair.generatedName);
+    const authored = authoredMap.get(pair.authoredName);
+    if (!generated || !authored) {
+      continue;
+    }
     const left = normalizeSchemaNode(generated.schema);
     const right = normalizeSchemaNode(authored.schema);
     const remaining = Math.max(1, maxFindings - findings.length);
@@ -241,9 +253,9 @@ function compareSemanticSchemas(generatedMap, authoredMap, maxFindings, findings
         makeFinding({
           ruleId: 'generated-authored-semantic-mismatch',
           comparison: 'typespec-generated-vs-authored-json-schema',
-          declaration: name,
+          declaration: pair.declaration.qualifiedName,
           pointer: `${authored.pointer}${difference.pointer === '#' ? '' : difference.pointer.slice(1)}`,
-          message: `TypeSpec-generated JSON Schema and independently authored JSON Schema differ for ${name} at ${difference.pointer}`,
+          message: `TypeSpec-generated JSON Schema and independently authored JSON Schema differ for ${pair.declaration.qualifiedName} at ${difference.pointer}`,
           left: difference.left,
           right: difference.right,
         }),
@@ -313,8 +325,8 @@ export function compareParity({
 
   compareExpectedToSchema(expected, generatedMap, 'generated', findings);
   compareExpectedToSchema(expected, authoredMap, 'authored', findings);
-  compareSchemaInventories(generatedMap, authoredMap, findings);
-  compareSemanticSchemas(generatedMap, authoredMap, maxFindings, findings);
+  compareSchemaInventories(generatedMap, authoredMap, expected, findings);
+  compareSemanticSchemas(generatedMap, authoredMap, expected, maxFindings, findings);
 
   const sorted = sortFindings(findings.slice(0, maxFindings));
 
