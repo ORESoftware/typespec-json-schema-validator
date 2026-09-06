@@ -35,7 +35,7 @@
     "test:all": "npm run check && npm run flags:audit && npm test && npm run test:integration"
   },
   "dependencies": {
-    "@oresoftware/f2e": "0.3.0",
+    "@oresoftware/f2e": "github:flags-2-env/flags-2-env#2310d349cb87dfe7eac88ac67677e029c3e13167",
     "@typespec/compiler": "1.15.0",
     "@typespec/json-schema": "1.15.0"
   },
