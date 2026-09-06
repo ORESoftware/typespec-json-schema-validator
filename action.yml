@@ -37,6 +37,18 @@ inputs:
     description: Maximum synthesized probes per declaration per authority lane.
     required: false
     default: "64"
+  int64_strategy:
+    description: TypeSpec JSON Schema emitter strategy for int64/uint64 wire values. Use string for lossless interoperability or number only when the authored wire contract intentionally uses JSON numbers.
+    required: false
+    default: string
+  seal_object_schemas:
+    description: Whether generated comparison schemas reject undeclared object properties through the official emitter's seal-object-schemas option.
+    required: false
+    default: "true"
+  polymorphic_models_strategy:
+    description: Official emitter strategy for polymorphic models; one of ignore, oneOf, or anyOf.
+    required: false
+    default: oneOf
   quiet:
     description: Suppress the human-readable summary while retaining the JSON receipt.
     required: false
@@ -62,6 +74,9 @@ runs:
         TSJSV_MAPPING_INPUT: ${{ inputs.mapping }}
         TSJSV_INSTANCES_INPUT: ${{ inputs.instances }}
         TSJSV_MAX_PROBES_INPUT: ${{ inputs.max_probes }}
+        TSJSV_INT64_STRATEGY_INPUT: ${{ inputs.int64_strategy }}
+        TSJSV_SEAL_OBJECT_SCHEMAS_INPUT: ${{ inputs.seal_object_schemas }}
+        TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT: ${{ inputs.polymorphic_models_strategy }}
         TSJSV_QUIET_INPUT: ${{ inputs.quiet }}
       run: |
         set -euo pipefail
@@ -73,6 +88,9 @@ runs:
           "--report=${TSJSV_REPORT_INPUT}"
           "--output-dir=${TSJSV_OUTPUT_DIR_INPUT}"
           "--max-probes=${TSJSV_MAX_PROBES_INPUT}"
+          "--int64-strategy=${TSJSV_INT64_STRATEGY_INPUT}"
+          "--seal-object-schemas=${TSJSV_SEAL_OBJECT_SCHEMAS_INPUT}"
+          "--polymorphic-models-strategy=${TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT}"
         )
 
         if [[ -n "${TSJSV_SARIF_INPUT}" ]]; then
