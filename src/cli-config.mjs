@@ -95,9 +95,16 @@ export function loadCliConfiguration(argv = process.argv) {
     maxFindings: integerValue(env.TSJSV_MAX_FINDINGS, 250),
     tspBin: env.TSJSV_TSP_BIN || undefined,
     quiet: booleanValue(env.TSJSV_QUIET, false),
+    instances: env.TSJSV_INSTANCES || undefined,
+    probes: booleanValue(env.TSJSV_PROBES, true),
+    maxProbes: integerValue(env.TSJSV_MAX_PROBES, 64),
+    formatAssertion: booleanValue(env.TSJSV_FORMAT_ASSERTION, false),
   };
   if (common.maxFindings < 1 || common.maxFindings > 10_000) {
     throw new CliUsageError('--max-findings must be between 1 and 10000');
+  }
+  if (common.maxProbes < 1 || common.maxProbes > 10_000) {
+    throw new CliUsageError('--max-probes must be between 1 and 10000');
   }
 
   switch (command) {
@@ -116,6 +123,12 @@ export function loadCliConfiguration(argv = process.argv) {
       return {
         ...common,
         typespec: required(env, 'TSJSV_TYPESPEC', '--typespec'),
+        authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
+        generatedSchema: required(env, 'TSJSV_GENERATED_SCHEMA', '--generated-schema'),
+      };
+    case 'validate':
+      return {
+        ...common,
         authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
         generatedSchema: required(env, 'TSJSV_GENERATED_SCHEMA', '--generated-schema'),
       };

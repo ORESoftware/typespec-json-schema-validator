@@ -34,6 +34,34 @@ type = "integer"
 default = 250
 help = "Maximum number of findings emitted into the report."
 
+[flags.instances]
+env = "TSJSV_INSTANCES"
+aliases = ["instances"]
+short = "i"
+type = "string"
+help = "Directory of JSON instances validated against both authorities (<Declaration>/{valid,invalid}/*.json)."
+
+[flags.probes]
+env = "TSJSV_PROBES"
+aliases = ["probes"]
+type = "bool"
+default = "true"
+help = "Run the differential instance-validation lane; disabling it removes behavioral evidence."
+
+[flags.max-probes]
+env = "TSJSV_MAX_PROBES"
+aliases = ["max-probes"]
+type = "integer"
+default = 64
+help = "Synthesized probes per declaration per lane in the differential lane."
+
+[flags.format-assertion]
+env = "TSJSV_FORMAT_ASSERTION"
+aliases = ["format-assertion"]
+type = "bool"
+default = "false"
+help = "Treat known JSON Schema format values as assertions in both lanes rather than annotations."
+
 [flags.tsp-bin]
 env = "TSJSV_TSP_BIN"
 aliases = ["tsp-bin"]
@@ -121,6 +149,24 @@ type = "string"
 help = "Independently authored JSON Schema file or directory."
 
 [commands.compare.flags.generated-schema]
+env = "TSJSV_GENERATED_SCHEMA"
+aliases = ["generated-schema"]
+short = "g"
+type = "string"
+help = "JSON Schema previously generated from TypeSpec."
+
+[commands.validate]
+help = "Run only the differential lane: execute both authorities as validators over one instance corpus."
+env = "TSJSV_COMMAND_VALIDATE"
+
+[commands.validate.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Independently authored JSON Schema file or directory."
+
+[commands.validate.flags.generated-schema]
 env = "TSJSV_GENERATED_SCHEMA"
 aliases = ["generated-schema"]
 short = "g"

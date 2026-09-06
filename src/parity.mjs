@@ -267,6 +267,21 @@ function compareSemanticSchemas(generatedMap, authoredMap, expectedDeclarations,
   }
 }
 
+/**
+ * Deterministic finding order. Receipts must be byte-identical across runs with identical
+ * inputs, so findings are ordered by their content rather than by discovery order.
+ *
+ * @param {Array<object>} findings
+ * @returns {Array<object>} A new, sorted array.
+ */
+export function sortFindings(findings) {
+  return [...findings].sort((left, right) =>
+    canonicalStringify([left.ruleId, left.declaration ?? '', left.pointer ?? '', left.fingerprint]).localeCompare(
+      canonicalStringify([right.ruleId, right.declaration ?? '', right.pointer ?? '', right.fingerprint]),
+    ),
+  );
+}
+
 export function compareParity({
   typespecInventory,
   generatedCollection,
@@ -313,23 +328,7 @@ export function compareParity({
   compareSchemaInventories(generatedMap, authoredMap, expected, findings);
   compareSemanticSchemas(generatedMap, authoredMap, expected, maxFindings, findings);
 
-  const sorted = findings
-    .slice(0, maxFindings)
-    .sort((left, right) =>
-      canonicalStringify([
-        left.ruleId,
-        left.declaration ?? '',
-        left.pointer ?? '',
-        left.fingerprint,
-      ]).localeCompare(
-        canonicalStringify([
-          right.ruleId,
-          right.declaration ?? '',
-          right.pointer ?? '',
-          right.fingerprint,
-        ]),
-      ),
-    );
+  const sorted = sortFindings(findings.slice(0, maxFindings));
 
   return {
     findings: sorted,

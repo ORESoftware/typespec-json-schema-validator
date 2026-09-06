@@ -12,6 +12,9 @@ independently authored JSON Schema ── Draft 2020-12 validation
 
 source inventory + generated witness + authored schema
                          │
+                         ├── structural parity comparison
+                         ├── differential instance validation (each lane validates the other's instances)
+                         │
                          └── deterministic parity report
 ```
 
@@ -46,7 +49,65 @@ The emitter runs in a dedicated output directory. The validator hashes both auth
 
 Both JSON Schema documents must explicitly declare Draft 2020-12. The structural pass checks schema-node types, local references, required-property membership, enum/type uniqueness, child-schema containers, numeric/cardinality bounds, and unsupported `nullable` usage.
 
-This is intentionally not a replacement for a full instance validator. It verifies the declaration substrate needed for parity and fails closed on malformed comparison inputs.
+This gate verifies the declaration substrate needed for parity and fails closed on malformed comparison inputs. Instance-level semantics are covered separately by the differential gate below.
+
+## Differential instance gate
+
+Structural comparison answers *do the two documents say the same thing?* That question is
+strictly harsher than the one a contract actually needs answered, because two spellings can be
+byte-different and behaviourally identical (`additionalProperties: false` versus
+`unevaluatedProperties: false` on a composition-free model, `minimum: 0` versus
+`exclusiveMinimum: -1` on an integer). The differential gate answers the decidable question
+instead: *is there a JSON value the two authorities disagree about?*
+
+```text
+authored JSON Schema (A) ──┐                  ┌── verdict A
+                           ├── probe corpus ──┤
+generated witness    (B) ──┘                  └── verdict B
+
+verdict A ≠ verdict B  ⇒  finding + the witness instance that proves it
+```
+
+The probe corpus for each declaration is assembled deterministically from both lanes:
+
+- `examples` and `default` values declared in either authority;
+- a synthesized `full` instance (every declared property) and `minimal` instance (required
+  properties only), built from each lane's own schema;
+- every member of every closed value domain (`enum`, `const`) reachable from the declaration,
+  including through `$ref` — a one-member enum difference is invisible to a single
+  representative instance and is exactly the drift this catches; and
+- a bounded, ordering-stable family of mutants: property deletion, unexpected-property
+  injection, and typed scalar substitution at every instance pointer.
+
+A probe does not have to be *valid* to be informative. Disagreement is the signal, and
+disagreement is meaningful whether the probe is accepted or rejected, so synthesis quality
+affects coverage but never soundness.
+
+Both directions run: A validates instances derived from B, and B validates instances derived
+from A. Neither lane is the winner — a divergence reports both verdicts and stops evaluation.
+
+The validator backing this gate (`src/instance-validator.mjs`) is dependency-free and covers
+the Draft 2020-12 core, applicator, and validation vocabularies including annotation-driven
+`unevaluatedProperties` / `unevaluatedItems`. It is fail-closed by construction: the dynamic
+reference family (`$dynamicRef`, `$dynamicAnchor`, `$recursiveRef`, `$vocabulary`) and
+unresolvable references raise rather than evaluate, because silently skipping a keyword would
+make two genuinely different schemas look identical. Refusals are reported as
+`differential-validation-refused`, never as agreement.
+
+An explicit instance corpus can be supplied with `--instances`, using directory layout as the
+contract:
+
+```text
+instances/<Declaration>/valid/*.json     both authorities must accept
+instances/<Declaration>/invalid/*.json   both authorities must reject
+instances/<Declaration>/*.json           no stated expectation; only disagreement is reported
+```
+
+Per-declaration results carry `behaviorallyIndistinguishable`. That flag is the triage signal
+for the structural gate: a structural finding on a declaration that is behaviourally
+indistinguishable over the probe corpus is a spelling difference to reconcile, while one that
+also carries witnesses is a contract difference. Both still stop evaluation; only the reviewer's
+next step differs.
 
 ## Normalization
 
