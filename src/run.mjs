@@ -1,4 +1,4 @@
-import { readFile, mkdir, stat, writeFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { canonicalStringify, sha256, stableFindingFingerprint } from './canonical.mjs';
@@ -7,6 +7,7 @@ import { crossValidate, loadInstanceCorpus } from './differential.mjs';
 import { loadSchemaCollection } from './json-schema.mjs';
 import { compareParity, loadMapping, sortFindings } from './parity.mjs';
 import { inventoryTypeSpec } from './typespec-inventory.mjs';
+import { writeReportFile } from './report-file.mjs';
 
 export const REPORT_SCHEMA = 'ores.typespec-json-schema-validator.report/v1';
 export const EXIT_CODES = Object.freeze({
@@ -238,10 +239,7 @@ async function buildPassedOrStoppedReport({
 }
 
 export async function writeReport(path, report) {
-  const absolute = resolve(path);
-  await mkdir(dirname(absolute), { recursive: true });
-  await writeFile(absolute, `${canonicalStringify(report, 2)}\n`, 'utf8');
-  return absolute;
+  return writeReportFile(path, `${canonicalStringify(report, 2)}\n`, REPORT_SCHEMA);
 }
 
 export function renderHumanSummary(report) {
