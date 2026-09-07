@@ -17,4 +17,13 @@ test('Zed retains and binds the package-owned flags contract', async () => {
   assert.ok(manifest.includes('config = ".cli-flags.toml"'));
   assert.ok(manifest.includes('bins = ["tjsv", "tsjsv", "typespec-json-schema-validator"]'));
   assert.ok(manifest.includes('".cli-flags.toml"'));
+
+  const smokeTestLine = manifest
+    .split('\n')
+    .find((line) => line.startsWith('smoke_test = '));
+  assert.equal(
+    smokeTestLine,
+    'smoke_test = \'node "$ZED_PKG_TEST_TARGET/bin/typespec-json-schema-validator.mjs" doctor --quiet\'',
+    'the Zed smoke command must remain a valid TOML literal string',
+  );
 });
