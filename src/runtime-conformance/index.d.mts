@@ -92,6 +92,22 @@ export interface RuntimeEvidenceLimits {
   maxResultsPerAdapter?: number;
 }
 
+export interface CurrentInputRuntimeAdmissionOptions extends RuntimeEvidenceLimits {
+  evidence: unknown;
+  contractIr: unknown;
+  parityReport: { runId?: string; [key: string]: unknown } | null | undefined;
+  /** Current TypeSpec entry path; defaults to the path retained in parityReport. */
+  typespec?: string;
+  /** Current TypeSpec-emitted JSON Schema B path; defaults to parityReport. */
+  generatedSchema?: string;
+  /** Current independently authored JSON Schema A path; defaults to parityReport. */
+  authoredSchema?: string;
+  expectedCorpusDigest: string;
+  expectedCases: ExpectedRuntimeCase[];
+  requiredAdapters?: Array<string | RequiredRuntimeAdapter>;
+  maxFindings?: number;
+}
+
 export const RUNTIME_EVIDENCE_SCHEMA: 'ores.typespec-json-schema-validator.runtime-evidence/v1';
 
 export function validateRuntimeEvidence(
@@ -109,6 +125,14 @@ export function compareRuntimeEvidence(input: RuntimeEvidenceLimits & {
   requiredAdapters?: Array<string | RequiredRuntimeAdapter>;
   maxFindings?: number;
 }): RuntimeConformanceReport;
+
+/**
+ * Preferred admission API. Recomputes Contract IR verification from the
+ * current checked-out source lanes immediately before comparing receipts.
+ */
+export function verifyRuntimeEvidenceAgainstCurrentInputs(
+  input: CurrentInputRuntimeAdmissionOptions,
+): Promise<RuntimeConformanceReport>;
 
 export function loadRuntimeEvidence(
   path: string,
