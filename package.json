@@ -10,6 +10,11 @@
       "import": "./src/index.mjs",
       "types": "./src/index.d.ts"
     },
+    "./runtime-conformance": {
+      "import": "./src/runtime-conformance/index.mjs",
+      "types": "./src/runtime-conformance/index.d.mts"
+    },
+    "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./src/index.d.ts",
