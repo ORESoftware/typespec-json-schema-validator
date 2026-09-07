@@ -84,6 +84,7 @@ export function loadCliConfiguration(argv = process.argv) {
       // Preserve requested artifact destinations even when normal command construction fails.
       report: env.TSJSV_REPORT || undefined,
       sarif: env.TSJSV_SARIF || undefined,
+      contractIr: env.TSJSV_CONTRACT_IR || undefined,
     });
   }
   const command = parsed.command || env.TSJSV_COMMAND || '';
@@ -91,6 +92,7 @@ export function loadCliConfiguration(argv = process.argv) {
     command,
     report: env.TSJSV_REPORT || '.typespec-json-schema-validator/report.json',
     sarif: env.TSJSV_SARIF || undefined,
+    contractIr: env.TSJSV_CONTRACT_IR || undefined,
     mapping: env.TSJSV_MAPPING || undefined,
     maxFindings: integerValue(env.TSJSV_MAX_FINDINGS, 250),
     tspBin: env.TSJSV_TSP_BIN || undefined,

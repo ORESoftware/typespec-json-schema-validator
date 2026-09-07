@@ -28,6 +28,13 @@ test("fleet action isolates generated evidence and emits JSON and SARIF artifact
   assert.doesNotMatch(action, /cp .*TSJSV_(?:TYPESPEC|SCHEMA)_INPUT/);
 });
 
+test("fleet action exposes opt-in parity-approved Contract IR", () => {
+  assert.match(action, /\n  contract_ir:[\s\S]*?default: ""/);
+  assert.match(action, /TSJSV_CONTRACT_IR_INPUT: \$\{\{ inputs\.contract_ir \}\}/);
+  assert.match(action, /--contract-ir=\$\{TSJSV_CONTRACT_IR_INPUT\}/);
+  assert.match(action, /if \[\[ -n "\$\{TSJSV_CONTRACT_IR_INPUT\}" \]\]/);
+});
+
 test("fleet action exposes reviewed official-emitter strategies", () => {
   assert.match(action, /\n  int64_strategy:[\s\S]*?default: string/);
   assert.match(action, /\n  seal_object_schemas:[\s\S]*?default: "true"/);
