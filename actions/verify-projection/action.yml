@@ -1,0 +1,87 @@
+name: Verify downstream projection admission
+description: Reverify current peer-authority inputs, trusted projection policy, exact manifest inputs, and generated output bytes.
+author: ORESoftware
+
+inputs:
+  projection_manifest:
+    description: Existing self-digesting downstream projection manifest.
+    required: true
+  contract_ir:
+    description: Existing parity-approved Contract IR.
+    required: true
+  parity_receipt:
+    description: Passed parity receipt consumed by the Contract IR and manifest.
+    required: true
+  typespec:
+    description: Current independently authored TypeSpec entry file or project directory.
+    required: true
+  generated_schema:
+    description: Current TypeSpec-generated comparison-only JSON Schema B.
+    required: true
+  authored_schema:
+    description: Current independently authored JSON Schema A file or directory.
+    required: true
+  policy:
+    description: Trusted projection verification policy.
+    required: true
+  input_root:
+    description: Root for operation inventory, projection metadata/field locks, and emitter configuration.
+    required: false
+    default: .
+  output_root:
+    description: Root for independently rehashed generated outputs.
+    required: false
+    default: .
+  verification:
+    description: Path for the deterministic self-digesting projection verification receipt.
+    required: false
+    default: .typespec-json-schema-validator/projection-verification.json
+  quiet:
+    description: Suppress the human-readable receipt while retaining the machine-readable artifact.
+    required: false
+    default: "true"
+
+outputs:
+  verification:
+    description: Path to the projection verification receipt.
+    value: ${{ steps.verify.outputs.verification }}
+  status:
+    description: Projection verification receipt status.
+    value: ${{ steps.verify.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install the validator's lockfile-pinned toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${GITHUB_ACTION_PATH}/../.."
+        npm ci --omit=dev
+
+    - name: Verify current source closure and projection evidence
+      id: verify
+      shell: bash
+      env:
+        TSJSV_COMMAND: verify-projection
+        TSJSV_PROJECTION_MANIFEST: ${{ inputs.projection_manifest }}
+        TSJSV_PROJECTION_CONTRACT_IR: ${{ inputs.contract_ir }}
+        TSJSV_PROJECTION_PARITY_RECEIPT: ${{ inputs.parity_receipt }}
+        TSJSV_PROJECTION_TYPESPEC: ${{ inputs.typespec }}
+        TSJSV_PROJECTION_GENERATED_SCHEMA: ${{ inputs.generated_schema }}
+        TSJSV_PROJECTION_AUTHORED_SCHEMA: ${{ inputs.authored_schema }}
+        TSJSV_PROJECTION_POLICY: ${{ inputs.policy }}
+        TSJSV_PROJECTION_INPUT_ROOT: ${{ inputs.input_root }}
+        TSJSV_PROJECTION_OUTPUT_ROOT: ${{ inputs.output_root }}
+        TSJSV_PROJECTION_VERIFICATION: ${{ inputs.verification }}
+        TSJSV_QUIET: ${{ inputs.quiet }}
+      run: |
+        set -euo pipefail
+        node "${GITHUB_ACTION_PATH}/../../bin/typespec-json-schema-validator.mjs"
+        status="$(node -e '
+          const fs = require("node:fs");
+          const receipt = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          process.stdout.write(receipt.status);
+        ' "${TSJSV_PROJECTION_VERIFICATION}")"
+        printf 'verification=%s\n' "${TSJSV_PROJECTION_VERIFICATION}" >> "${GITHUB_OUTPUT}"
+        printf 'status=%s\n' "${status}" >> "${GITHUB_OUTPUT}"
