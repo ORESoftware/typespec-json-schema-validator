@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- First-class downstream `verify-ir` CLI admission that recomputes Contract IR from the exact parity receipt and current TypeSpec, generated-witness, and authored-JSON-Schema closure.
+- A reusable `verify-contract-ir` composite action for pinned consumer CI, plus deterministic self-digesting verification evidence and a closed Draft 2020-12 artifact schema.
+- Safe verification-evidence persistence that replaces only validator-owned output and refuses unrelated files, symbolic links, non-regular files, multiply linked targets, and destination races.
 - Exact-input, deterministic cross-runtime validator evidence admission for Zod, Serde-backed Rust validators, Dart/Freezed, and future adapters, with a strict Draft 2020-12 receipt schema, bounded non-symbolic-link loading, fail-closed adapter/corpus/digest checks, and cross-adapter divergence findings.
 - Deterministic SARIF 2.1.0 presentation output through `--sarif`, the composite action, and the public JavaScript API.
 - Stable `TSJSV.<source-rule-id>` descriptors, existing SHA-256 finding fingerprints, bounded source/JSON Pointer locations, and failed-run results.
@@ -18,11 +21,13 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Verification treats Contract IR and parity receipts as immutable inputs; usage, parse, or evidence failures can no longer reinterpret `--contract-ir` as a tombstone output.
 - A requested Contract IR now requires direct declaration inventory, generated-witness comparison, differential validation, zero findings, and unchanged input digests.
 - Stopped and failed runs replace prior validator-owned IR with a non-admissible tombstone so stale green artifacts cannot survive beside red receipts.
 
 ### Security
 
+- Consumer verification normalizes untrusted identifiers, emits no source contents, and fails closed on malformed, stale, tampered, unsupported, or incomplete admission evidence.
 - Contract IR publication is atomic, self-digest checked, and refuses unrelated files, symbolic links, non-regular files, and multiply linked destinations.
 
 ## 0.1.0 — 2026-09-05
