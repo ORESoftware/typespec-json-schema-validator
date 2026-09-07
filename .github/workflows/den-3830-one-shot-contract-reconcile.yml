@@ -1,0 +1,363 @@
+name: DEN-3830 one-shot projection contract reconciliation
+
+on:
+  push:
+    branches:
+      - feat/DEN-3830-projection-verification-receipt
+    paths:
+      - .github/workflows/den-3830-one-shot-contract-reconcile.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-3830-one-shot-contract-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.repository == 'ORESoftware/typespec-json-schema-validator'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/DEN-3830-projection-verification-receipt
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install lockfile-pinned dependencies
+        run: npm ci
+
+      - name: Reconcile runtime, published schemas, CLI, action contract, and SDK exports
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          def write_json(path: Path, value: object) -> None:
+              path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              contents = path.read_text(encoding='utf-8')
+              if contents.count(old) != 1:
+                  raise SystemExit(f'{path}: expected exactly one replacement anchor, found {contents.count(old)}')
+              path.write_text(contents.replace(old, new, 1), encoding='utf-8')
+
+          identifier_pattern = r'^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$'
+          media_type_pattern = r'^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$'
+          relative_path_pattern = r'^(?!/)(?!.*(?:^|/)\.\.?($|/))(?!.*//)(?!.*\\)[\s\S]*[^/]$'
+
+          policy_path = Path('schema/projection-verification-policy.schema.json')
+          policy = json.loads(policy_path.read_text(encoding='utf-8'))
+          policy['properties']['requiredProjections']['maxItems'] = 256
+          policy['properties']['outputs']['maxItems'] = 100_000
+          policy['$defs']['identifier']['pattern'] = identifier_pattern
+          policy['$defs']['relativePath']['pattern'] = relative_path_pattern
+          policy['$defs']['toolchain']['properties']['version']['maxLength'] = 256
+          policy['$defs']['output']['properties']['mediaType']['maxLength'] = 255
+          policy['$defs']['output']['properties']['mediaType']['pattern'] = media_type_pattern
+          write_json(policy_path, policy)
+
+          receipt_path = Path('schema/projection-verification-receipt.schema.json')
+          receipt = json.loads(receipt_path.read_text(encoding='utf-8'))
+          receipt['$defs']['identifier']['pattern'] = identifier_pattern
+          write_json(receipt_path, receipt)
+
+          flags_block = '''[commands.verify-projection]
+          help = "Reverify current peer-authority inputs, a parity-approved Contract IR, a projection manifest, and generated output bytes."
+          env = "TSJSV_COMMAND_VERIFY_PROJECTION"
+
+          [commands.verify-projection.flags.projection-manifest]
+          env = "TSJSV_PROJECTION_MANIFEST"
+          aliases = ["projection-manifest"]
+          type = "string"
+          help = "Existing self-digesting downstream projection manifest."
+
+          [commands.verify-projection.flags.contract-ir]
+          env = "TSJSV_PROJECTION_CONTRACT_IR"
+          aliases = ["contract-ir"]
+          type = "string"
+          help = "Existing parity-approved Contract IR."
+
+          [commands.verify-projection.flags.parity-receipt]
+          env = "TSJSV_PROJECTION_PARITY_RECEIPT"
+          aliases = ["parity-receipt", "receipt"]
+          type = "string"
+          help = "Passed parity receipt consumed by the Contract IR and projection manifest."
+
+          [commands.verify-projection.flags.typespec]
+          env = "TSJSV_PROJECTION_TYPESPEC"
+          aliases = ["typespec"]
+          short = "t"
+          type = "string"
+          help = "Current independently authored TypeSpec entry file or project directory."
+
+          [commands.verify-projection.flags.generated-schema]
+          env = "TSJSV_PROJECTION_GENERATED_SCHEMA"
+          aliases = ["generated-schema"]
+          short = "g"
+          type = "string"
+          help = "Current TypeSpec-generated comparison-only JSON Schema B."
+
+          [commands.verify-projection.flags.schema]
+          env = "TSJSV_PROJECTION_AUTHORED_SCHEMA"
+          aliases = ["schema", "authored-schema"]
+          short = "s"
+          type = "string"
+          help = "Current independently authored JSON Schema A file or directory."
+
+          [commands.verify-projection.flags.policy]
+          env = "TSJSV_PROJECTION_POLICY"
+          aliases = ["policy"]
+          type = "string"
+          help = "Trusted downstream projection verification policy."
+
+          [commands.verify-projection.flags.input-root]
+          env = "TSJSV_PROJECTION_INPUT_ROOT"
+          aliases = ["input-root"]
+          type = "string"
+          default = "."
+          help = "Root for operation inventory, projection metadata, and emitter configuration inputs."
+
+          [commands.verify-projection.flags.output-root]
+          env = "TSJSV_PROJECTION_OUTPUT_ROOT"
+          aliases = ["output-root"]
+          type = "string"
+          default = "."
+          help = "Root for independently rehashed generated projection outputs."
+
+          [commands.verify-projection.flags.verification]
+          env = "TSJSV_PROJECTION_VERIFICATION"
+          aliases = ["verification"]
+          type = "string"
+          default = ".typespec-json-schema-validator/projection-verification.json"
+          help = "Deterministic self-digesting projection verification receipt path."
+
+          '''
+          flags_block = '\n'.join(line[10:] if line.startswith('          ') else line for line in flags_block.splitlines()) + '\n'
+          replace_once(
+              Path('.cli-flags.toml'),
+              '[commands.doctor]\n',
+              flags_block + '[commands.doctor]\n',
+          )
+
+          replace_once(
+              Path('src/cli-config.mjs'),
+              "      verification: env.TSJSV_VERIFICATION || undefined,\n",
+              "      verification: env.TSJSV_VERIFICATION || undefined,\n"
+              "      projectionVerification: env.TSJSV_PROJECTION_VERIFICATION || undefined,\n",
+          )
+          projection_case = '''    case 'verify-projection':
+            return {
+              ...common,
+              projectionManifest: required(env, 'TSJSV_PROJECTION_MANIFEST', '--projection-manifest'),
+              contractIr: required(env, 'TSJSV_PROJECTION_CONTRACT_IR', '--contract-ir'),
+              parityReceipt: required(env, 'TSJSV_PROJECTION_PARITY_RECEIPT', '--parity-receipt'),
+              typespec: required(env, 'TSJSV_PROJECTION_TYPESPEC', '--typespec'),
+              generatedSchema: required(
+                env,
+                'TSJSV_PROJECTION_GENERATED_SCHEMA',
+                '--generated-schema',
+              ),
+              authoredSchema: required(env, 'TSJSV_PROJECTION_AUTHORED_SCHEMA', '--schema'),
+              projectionPolicy: required(env, 'TSJSV_PROJECTION_POLICY', '--policy'),
+              inputRoot: env.TSJSV_PROJECTION_INPUT_ROOT || '.',
+              outputRoot: env.TSJSV_PROJECTION_OUTPUT_ROOT || '.',
+              projectionVerification:
+                env.TSJSV_PROJECTION_VERIFICATION
+                || '.typespec-json-schema-validator/projection-verification.json',
+            };
+          '''
+          projection_case = '\n'.join(line[10:] if line.startswith('          ') else line for line in projection_case.splitlines()) + '\n'
+          replace_once(
+              Path('src/cli-config.mjs'),
+              "    case 'doctor':\n",
+              projection_case + "    case 'doctor':\n",
+          )
+
+          projection_import = '''import {
+            failedProjectionVerificationReceipt,
+            loadProjectionVerificationPolicy,
+            verifyProjectionWorkspace,
+            writeProjectionVerificationReceipt,
+          } from './projection-verification/index.mjs';
+          '''
+          projection_import = '\n'.join(line[10:] if line.startswith('          ') else line for line in projection_import.splitlines()) + '\n'
+          replace_once(
+              Path('src/cli.mjs'),
+              "} from './consumer-verification-receipt.mjs';\n",
+              "} from './consumer-verification-receipt.mjs';\n" + projection_import,
+          )
+
+          projection_runner = '''async function runProjectionVerification(configuration) {
+            const [manifest, contractIr, parityReceipt, policy] = await Promise.all([
+              readJsonArtifact(configuration.projectionManifest, 'projection manifest input'),
+              readJsonArtifact(configuration.contractIr, 'Contract IR input'),
+              readJsonArtifact(configuration.parityReceipt, 'parity receipt input'),
+              loadProjectionVerificationPolicy(configuration.projectionPolicy),
+            ]);
+            const { receipt } = await verifyProjectionWorkspace({
+              manifest,
+              contractIr,
+              parityReceipt,
+              typespec: configuration.typespec,
+              generatedSchema: configuration.generatedSchema,
+              authoredSchema: configuration.authoredSchema,
+              policy,
+              inputRoot: configuration.inputRoot,
+              outputRoot: configuration.outputRoot,
+            });
+            const verificationPath = await writeProjectionVerificationReceipt(
+              configuration.projectionVerification,
+              receipt,
+            );
+            if (!configuration.quiet) {
+              writeJson(receipt);
+              process.stdout.write(`projection-verification: ${verificationPath}\\n`);
+            }
+            return EXIT_CODES[receipt.status];
+          }
+
+          '''
+          projection_runner = '\n'.join(line[10:] if line.startswith('          ') else line for line in projection_runner.splitlines()) + '\n'
+          replace_once(
+              Path('src/cli.mjs'),
+              'export async function main(argv = process.argv) {\n',
+              projection_runner + 'export async function main(argv = process.argv) {\n',
+          )
+          replace_once(
+              Path('src/cli.mjs'),
+              "    if (configuration.command === 'verify-ir') {\n",
+              "    if (configuration.command === 'verify-projection') {\n"
+              "      return runProjectionVerification(configuration);\n"
+              "    }\n\n"
+              "    if (configuration.command === 'verify-ir') {\n",
+          )
+
+          projection_catch = '''    if (command === 'verify-projection') {
+            const verificationPath =
+              configuration?.projectionVerification
+              ?? error?.details?.projectionVerification
+              ?? optionHint(argv, '--verification')
+              ?? process.env.TSJSV_PROJECTION_VERIFICATION
+              ?? '.typespec-json-schema-validator/projection-verification.json';
+            try {
+              await writeProjectionVerificationReceipt(
+                verificationPath,
+                failedProjectionVerificationReceipt(),
+              );
+            } catch (writeError) {
+              process.stderr.write(
+                `could not write failed projection verification receipt: ${writeError.message}\\n`,
+              );
+            }
+            process.stderr.write(`Projection verification failed: ${error.message}\\n`);
+            if (error instanceof CliUsageError && error.details) {
+              process.stderr.write(`${canonicalStringify(error.details, 2)}\\n`);
+            }
+            return EXIT_CODES.failed;
+          }
+
+          '''
+          projection_catch = '\n'.join(line[10:] if line.startswith('          ') else line for line in projection_catch.splitlines()) + '\n'
+          replace_once(
+              Path('src/cli.mjs'),
+              "    if (command === 'verify-ir') {\n",
+              projection_catch + "    if (command === 'verify-ir') {\n",
+          )
+
+          replace_once(
+              Path('test/unit/projection-verification.test.mjs'),
+              "  const runBlock = action.slice(action.indexOf('      run: |'));\n"
+              "  assert.doesNotMatch(runBlock, /\\$\\{\\{ inputs\\./u);\n",
+              "  const runBlocks = action.split('\\n      run: |\\n').slice(1)\n"
+              "    .map((block) => block.split('\\n    - name:')[0]);\n"
+              "  assert.ok(runBlocks.length >= 2);\n"
+              "  for (const runBlock of runBlocks) {\n"
+              "    assert.doesNotMatch(runBlock, /\\$\\{\\{ inputs\\./u);\n"
+              "  }\n",
+          )
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text(encoding='utf-8'))
+          exports = package['exports']
+          rebuilt = {}
+          for key, value in exports.items():
+              rebuilt[key] = value
+              if key == './projection-admission':
+                  rebuilt['./projection-verification'] = {
+                      'import': './src/projection-verification/index.mjs',
+                      'types': './src/projection-verification/index.d.mts',
+                  }
+              if key == './schema/projection-manifest':
+                  rebuilt['./schema/projection-verification-policy'] = (
+                      './schema/projection-verification-policy.schema.json'
+                  )
+                  rebuilt['./schema/projection-verification-receipt'] = (
+                      './schema/projection-verification-receipt.schema.json'
+                  )
+          package['exports'] = rebuilt
+          write_json(package_path, package)
+
+          test_path = Path('test/unit/projection-verification.test.mjs')
+          test_contents = test_path.read_text(encoding='utf-8')
+          export_test = '''
+
+          test('package publishes projection verification as a typed SDK and schema surface', async () => {
+            const packageJson = JSON.parse(
+              await readFile(new URL('../../package.json', import.meta.url), 'utf8'),
+            );
+            assert.deepEqual(packageJson.exports['./projection-verification'], {
+              import: './src/projection-verification/index.mjs',
+              types: './src/projection-verification/index.d.mts',
+            });
+            assert.equal(
+              packageJson.exports['./schema/projection-verification-policy'],
+              './schema/projection-verification-policy.schema.json',
+            );
+            assert.equal(
+              packageJson.exports['./schema/projection-verification-receipt'],
+              './schema/projection-verification-receipt.schema.json',
+            );
+          });
+          '''
+          export_test = '\n'.join(line[10:] if line.startswith('          ') else line for line in export_test.splitlines())
+          if "package publishes projection verification as a typed SDK" in test_contents:
+              raise SystemExit('projection SDK export test already exists')
+          test_path.write_text(test_contents.rstrip() + export_test + '\n', encoding='utf-8')
+
+          Path('.github/workflows/den-3830-one-shot-contract-reconcile.yml').unlink()
+          PY
+
+      - name: Verify the complete package
+        run: npm run test:all
+
+      - name: Commit only the reconciled contract surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            .cli-flags.toml \
+            package.json \
+            schema/projection-verification-policy.schema.json \
+            schema/projection-verification-receipt.schema.json \
+            src/cli-config.mjs \
+            src/cli.mjs \
+            test/unit/projection-verification.test.mjs \
+            .github/workflows/den-3830-one-shot-contract-reconcile.yml
+          git diff --cached --check
+          git commit -m 'fix(DEN-3830): reconcile projection verifier contracts'
+          git push origin HEAD:feat/DEN-3830-projection-verification-receipt
