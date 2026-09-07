@@ -71,8 +71,11 @@ The package pins compatible versions of `@typespec/compiler`, `@typespec/json-sc
 
 ## Usage
 
+> `tjsv` is the canonical command. The older `tsjsv` and `typespec-json-schema-validator` names remain compatibility aliases.
+
+
 ```bash
-npx tsjsv check \
+npx tjsv check \
   --typespec=./contracts/main.tsp \
   --schema=./contracts/authored.schema.json \
   --report=./artifacts/schema-parity.json
@@ -83,7 +86,7 @@ The command generates its witness under `.typespec-json-schema-validator/generat
 Compare an already generated witness:
 
 ```bash
-npx tsjsv compare \
+npx tjsv compare \
   --typespec=./contracts/main.tsp \
   --generated-schema=./artifacts/typespec.generated.schema.json \
   --schema=./contracts/authored.schema.json
@@ -93,7 +96,7 @@ Run only the differential lane — the independently authored schema validating 
 generated one, and the reverse — with no TypeSpec compiler required:
 
 ```bash
-npx tsjsv validate \
+npx tjsv validate \
   --schema=./contracts/authored.schema.json \
   --generated-schema=./artifacts/typespec.generated.schema.json \
   --instances=./contracts/instances
@@ -102,13 +105,13 @@ npx tsjsv validate \
 Inspect TypeSpec declarations without invoking the emitter:
 
 ```bash
-npx tsjsv inventory --typespec=./contracts/main.tsp
+npx tjsv inventory --typespec=./contracts/main.tsp
 ```
 
 Inspect the installed compiler and emitter:
 
 ```bash
-npx tsjsv doctor
+npx tjsv doctor
 ```
 
 All flags and defaults are declared in the repository-root `.cli-flags.toml` contract and parsed through `flags-2-env`; there is no second ad hoc flag parser.
@@ -188,7 +191,7 @@ Ignored declarations are explicit policy and are included in the configuration e
     node-version: 22
     cache: npm
 - run: npm ci
-- run: npx tsjsv check --typespec=contracts/main.tsp --schema=contracts/authored.schema.json --quiet
+- run: npx tjsv check --typespec=contracts/main.tsp --schema=contracts/authored.schema.json --quiet
 ```
 
 The repository's own CI also runs positive and negative compiler-backed integration fixtures. The negative fixture must exit `2`; accepting drift is a test failure.

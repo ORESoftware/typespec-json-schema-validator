@@ -32,8 +32,9 @@
   },
   "types": "./src/index.d.ts",
   "bin": {
-    "typespec-json-schema-validator": "./bin/typespec-json-schema-validator.mjs",
-    "tsjsv": "./bin/typespec-json-schema-validator.mjs"
+    "tjsv": "./bin/typespec-json-schema-validator.mjs",
+    "tsjsv": "./bin/typespec-json-schema-validator.mjs",
+    "typespec-json-schema-validator": "./bin/typespec-json-schema-validator.mjs"
   },
   "files": [
     ".cli-flags.toml",
