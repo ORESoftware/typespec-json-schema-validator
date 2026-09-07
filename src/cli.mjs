@@ -1,3 +1,4 @@
+import { lstat, readFile } from 'node:fs/promises';
 import { canonicalStringify } from './canonical.mjs';
 import { loadCliConfiguration, CliUsageError } from './cli-config.mjs';
 import {
@@ -5,6 +6,11 @@ import {
   buildContractIrTombstone,
   writeContractIr,
 } from './contract-ir.mjs';
+import {
+  failedContractIrVerification,
+  verifyContractIrForConsumer,
+  writeContractIrVerification,
+} from './contract-ir-verification.mjs';
 import { emitTypeSpecJsonSchema, resolveTspBinary, toolVersion } from './emitter.mjs';
 import {
   EXIT_CODES,
@@ -20,6 +26,44 @@ import { inventoryTypeSpec } from './typespec-inventory.mjs';
 
 function writeJson(value) {
   process.stdout.write(`${canonicalStringify(value, 2)}\n`);
+}
+
+function commandHint(argv, configuration, error) {
+  if (typeof configuration?.command === 'string') return configuration.command;
+  if (typeof error?.details?.command === 'string') return error.details.command;
+  if (typeof argv?.[2] === 'string' && !argv[2].startsWith('-')) return argv[2];
+  return process.env.TSJSV_COMMAND || null;
+}
+
+async function readJsonArtifact(path, label) {
+  let info;
+  try {
+    info = await lstat(path);
+  } catch {
+    throw new Error(`${label} could not be read`);
+  }
+  if (!info.isFile() || info.isSymbolicLink()) {
+    throw new Error(`${label} must be a regular, non-symlink file`);
+  }
+  if (info.nlink !== 1) {
+    throw new Error(`${label} must not have multiple hard links`);
+  }
+  let text;
+  try {
+    text = await readFile(path, 'utf8');
+  } catch {
+    throw new Error(`${label} could not be read`);
+  }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw new Error(`${label} is not valid JSON`);
+  }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} must be a JSON object`);
+  }
+  return value;
 }
 
 async function doctor(configuration) {
@@ -64,6 +108,37 @@ async function writeRunArtifacts(configuration, report) {
   const sarifPath = configuration.sarif ? await writeSarif(configuration.sarif, report) : null;
   const contractIrPath = await writeContractIrArtifact(configuration, report);
   return { reportPath, sarifPath, contractIrPath };
+}
+
+async function runContractIrVerification(configuration) {
+  let contractIr = null;
+  let report = null;
+  let verification;
+  try {
+    [contractIr, report] = await Promise.all([
+      readJsonArtifact(configuration.contractIr, 'Contract IR input'),
+      readJsonArtifact(configuration.parityReceipt, 'parity receipt input'),
+    ]);
+    verification = await verifyContractIrForConsumer({
+      contractIr,
+      report,
+      typespec: configuration.typespec,
+      generatedSchema: configuration.generatedSchema,
+      authoredSchema: configuration.authoredSchema,
+    });
+  } catch (error) {
+    verification = failedContractIrVerification({ contractIr, report, error });
+  }
+
+  const verificationPath = await writeContractIrVerification(
+    configuration.verification,
+    verification,
+  );
+  if (!configuration.quiet) {
+    writeJson(verification);
+    process.stdout.write(`contract-ir-verification: ${verificationPath}\n`);
+  }
+  return verification.status === 'passed' ? EXIT_CODES.passed : EXIT_CODES.failed;
 }
 
 export async function main(argv = process.argv) {
@@ -119,6 +194,10 @@ export async function main(argv = process.argv) {
       return EXIT_CODES.passed;
     }
 
+    if (configuration.command === 'verify-ir') {
+      return runContractIrVerification(configuration);
+    }
+
     const runners = {
       check: runCheck,
       compare: runCompare,
@@ -134,8 +213,32 @@ export async function main(argv = process.argv) {
     }
     return EXIT_CODES[report.status];
   } catch (error) {
+    const command = commandHint(argv, configuration, error);
+    if (command === 'verify-ir') {
+      const verificationPath =
+        configuration?.verification
+        ?? error?.details?.verification
+        ?? process.env.TSJSV_VERIFICATION
+        ?? '.typespec-json-schema-validator/contract-ir-verification.json';
+      try {
+        await writeContractIrVerification(
+          verificationPath,
+          failedContractIrVerification({ error }),
+        );
+      } catch (writeError) {
+        process.stderr.write(
+          `could not write failure Contract IR verification: ${writeError.message}\n`,
+        );
+      }
+      process.stderr.write(`Contract IR verification failed: ${error.message}\n`);
+      if (error instanceof CliUsageError && error.details) {
+        process.stderr.write(`${canonicalStringify(error.details, 2)}\n`);
+      }
+      return EXIT_CODES.failed;
+    }
+
     const report = await failedReport(error, {
-      command: configuration?.command ?? null,
+      command: configuration?.command ?? command,
       usageError: error instanceof CliUsageError,
       details: error instanceof CliUsageError ? error.details : undefined,
     });
@@ -149,11 +252,12 @@ export async function main(argv = process.argv) {
       (error instanceof CliUsageError ? error.details?.sarif : undefined) ??
       process.env.TSJSV_SARIF ??
       undefined;
-    const contractIrPath =
-      configuration?.contractIr ??
-      (error instanceof CliUsageError ? error.details?.contractIr : undefined) ??
-      process.env.TSJSV_CONTRACT_IR ??
-      undefined;
+    const contractIrPath = ['check', 'compare'].includes(command)
+      ? configuration?.contractIr
+        ?? (error instanceof CliUsageError ? error.details?.contractIr : undefined)
+        ?? process.env.TSJSV_CONTRACT_IR
+        ?? undefined
+      : undefined;
     try {
       await writeReport(reportPath, report);
     } catch (writeError) {
