@@ -299,6 +299,69 @@ type = "string"
 default = ".typespec-json-schema-validator/consumer-verification.json"
 help = "Deterministic self-digesting consumer verification receipt path."
 
+[commands.verify-projection]
+help = "Verify a downstream projection manifest against the exact current peer-authority closure, trusted policy, and current generated files."
+env = "TSJSV_COMMAND_VERIFY_PROJECTION"
+
+[commands.verify-projection.flags.root]
+env = "TSJSV_PROJECTION_ROOT"
+aliases = ["root"]
+type = "string"
+default = "."
+help = "Trusted workspace root; all verify-projection paths are normalized relative paths inside this root."
+
+[commands.verify-projection.flags.projection-manifest]
+env = "TSJSV_PROJECTION_MANIFEST"
+aliases = ["projection-manifest"]
+type = "string"
+help = "Existing projection manifest path relative to root."
+
+[commands.verify-projection.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir"]
+type = "string"
+help = "Existing parity-approved Contract IR path relative to root."
+
+[commands.verify-projection.flags.parity-receipt]
+env = "TSJSV_PARITY_RECEIPT"
+aliases = ["parity-receipt", "receipt"]
+type = "string"
+help = "Passed parity receipt path relative to root."
+
+[commands.verify-projection.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "Current independently authored TypeSpec entry path relative to root."
+
+[commands.verify-projection.flags.generated-schema]
+env = "TSJSV_GENERATED_SCHEMA"
+aliases = ["generated-schema"]
+short = "g"
+type = "string"
+help = "Current TypeSpec-generated comparison-only JSON Schema B path relative to root."
+
+[commands.verify-projection.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Current independently authored JSON Schema A path relative to root."
+
+[commands.verify-projection.flags.policy]
+env = "TSJSV_PROJECTION_POLICY"
+aliases = ["policy"]
+type = "string"
+help = "Trusted projection verification policy path relative to root."
+
+[commands.verify-projection.flags.verification]
+env = "TSJSV_PROJECTION_VERIFICATION"
+aliases = ["verification"]
+type = "string"
+default = ".typespec-json-schema-validator/projection-verification.json"
+help = "Deterministic self-digesting projection verification receipt path relative to root."
+
 [commands.doctor]
 help = "Check the flags-2-env and TypeSpec toolchain required by the validator."
 env = "TSJSV_COMMAND_DOCTOR"

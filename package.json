@@ -18,9 +18,15 @@
       "import": "./src/projection-admission/index.mjs",
       "types": "./src/projection-admission/index.d.mts"
     },
+    "./projection-verification": {
+      "import": "./src/projection-verification/index.mjs",
+      "types": "./src/projection-verification/index.d.mts"
+    },
     "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
     "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
     "./schema/projection-manifest": "./schema/projection-manifest.schema.json",
+    "./schema/projection-verification-policy": "./schema/projection-verification-policy.schema.json",
+    "./schema/projection-verification-receipt": "./schema/projection-verification-receipt.schema.json",
     "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
     "./package.json": "./package.json"
   },

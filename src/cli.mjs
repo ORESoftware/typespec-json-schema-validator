@@ -1,4 +1,5 @@
 import { lstat, readFile } from 'node:fs/promises';
+import { isAbsolute, relative, resolve } from 'node:path';
 import { canonicalStringify } from './canonical.mjs';
 import { loadCliConfiguration, CliUsageError } from './cli-config.mjs';
 import {
@@ -12,6 +13,14 @@ import {
   writeConsumerVerificationReceipt,
 } from './consumer-verification-receipt.mjs';
 import { emitTypeSpecJsonSchema, resolveTspBinary, toolVersion } from './emitter.mjs';
+import { loadProjectionManifest } from './projection-admission/index.mjs';
+import { validRelativePath } from './projection-admission/constants.mjs';
+import {
+  failedProjectionVerificationReceipt,
+  loadProjectionVerificationPolicy,
+  verifyProjectionWorkspace,
+  writeProjectionVerificationReceipt,
+} from './projection-verification/index.mjs';
 import {
   EXIT_CODES,
   failedReport,
@@ -98,6 +107,20 @@ async function readJsonArtifact(path, label) {
   return value;
 }
 
+function workspacePath(root, value, label) {
+  if (!validRelativePath(value)) {
+    throw new Error(`${label} must be a normalized relative POSIX path`);
+  }
+  const absoluteRoot = resolve(root);
+  const candidate = resolve(absoluteRoot, value);
+  const local = relative(absoluteRoot, candidate);
+  if (local === '' || local === '..' || isAbsolute(local)
+    || local.startsWith('../') || local.startsWith('..\\')) {
+    throw new Error(`${label} must remain inside the configured root`);
+  }
+  return candidate;
+}
+
 async function doctor(configuration) {
   const tspBin = await resolveTspBinary(configuration.tspBin);
   const typespec = await toolVersion(tspBin);
@@ -162,11 +185,7 @@ async function runConsumerVerification(configuration) {
       expectedDeclarations,
     });
   } catch {
-    receipt = failedConsumerVerificationReceipt({
-      contractIr,
-      report,
-      expectedDeclarations,
-    });
+    receipt = failedConsumerVerificationReceipt({ contractIr, report, expectedDeclarations });
   }
 
   const verificationPath = await writeConsumerVerificationReceipt(
@@ -180,6 +199,58 @@ async function runConsumerVerification(configuration) {
   return receipt.status === 'passed' ? EXIT_CODES.passed : EXIT_CODES.failed;
 }
 
+async function runProjectionVerification(configuration) {
+  const root = resolve(configuration.root);
+  let manifest = null;
+  let contractIr = null;
+  let parityReceipt = null;
+  let receipt;
+  try {
+    [manifest, contractIr, parityReceipt] = await Promise.all([
+      loadProjectionManifest(workspacePath(
+        root,
+        configuration.projectionManifest,
+        'projection manifest',
+      )),
+      loadProjectionManifest(workspacePath(root, configuration.contractIr, 'Contract IR')),
+      loadProjectionManifest(workspacePath(
+        root,
+        configuration.parityReceipt,
+        'parity receipt',
+      )),
+    ]);
+    const policy = await loadProjectionVerificationPolicy(workspacePath(
+      root,
+      configuration.projectionPolicy,
+      'projection verification policy',
+    ));
+    ({ receipt } = await verifyProjectionWorkspace({
+      root,
+      manifest,
+      contractIr,
+      parityReceipt,
+      typespec: configuration.typespec,
+      generatedSchema: configuration.generatedSchema,
+      authoredSchema: configuration.authoredSchema,
+      policy,
+    }));
+  } catch {
+    receipt = failedProjectionVerificationReceipt({ manifest, contractIr, parityReceipt });
+  }
+
+  const verificationPath = workspacePath(
+    root,
+    configuration.projectionVerification,
+    'projection verification receipt',
+  );
+  await writeProjectionVerificationReceipt(verificationPath, receipt);
+  if (!configuration.quiet) {
+    writeJson(receipt);
+    process.stdout.write(`projection-verification: ${verificationPath}\n`);
+  }
+  return EXIT_CODES[receipt.status];
+}
+
 export async function main(argv = process.argv) {
   let configuration;
   try {
@@ -188,10 +259,7 @@ export async function main(argv = process.argv) {
       configuration.printHelp();
       return EXIT_CODES.passed;
     }
-
-    if (configuration.command === 'doctor') {
-      return doctor(configuration);
-    }
+    if (configuration.command === 'doctor') return doctor(configuration);
 
     if (configuration.command === 'inventory') {
       const inventory = await inventoryTypeSpec(configuration.typespec);
@@ -233,15 +301,12 @@ export async function main(argv = process.argv) {
       return EXIT_CODES.passed;
     }
 
-    if (configuration.command === 'verify-ir') {
-      return runConsumerVerification(configuration);
+    if (configuration.command === 'verify-ir') return runConsumerVerification(configuration);
+    if (configuration.command === 'verify-projection') {
+      return runProjectionVerification(configuration);
     }
 
-    const runners = {
-      check: runCheck,
-      compare: runCompare,
-      validate: runValidate,
-    };
+    const runners = { check: runCheck, compare: runCompare, validate: runValidate };
     const report = await runners[configuration.command](configuration);
     const { reportPath, sarifPath, contractIrPath } = await writeRunArtifacts(configuration, report);
     if (!configuration.quiet) {
@@ -277,21 +342,53 @@ export async function main(argv = process.argv) {
       return EXIT_CODES.failed;
     }
 
+    if (command === 'verify-projection') {
+      const root = resolve(
+        configuration?.root
+        ?? error?.details?.projectionRoot
+        ?? optionHint(argv, '--root')
+        ?? process.env.TSJSV_PROJECTION_ROOT
+        ?? '.',
+      );
+      const requested =
+        configuration?.projectionVerification
+        ?? error?.details?.projectionVerification
+        ?? optionHint(argv, '--verification')
+        ?? process.env.TSJSV_PROJECTION_VERIFICATION
+        ?? '.typespec-json-schema-validator/projection-verification.json';
+      try {
+        const verificationPath = workspacePath(root, requested, 'projection verification receipt');
+        await writeProjectionVerificationReceipt(
+          verificationPath,
+          failedProjectionVerificationReceipt(),
+        );
+      } catch (writeError) {
+        process.stderr.write(
+          `could not write failed projection verification receipt: ${writeError.message}\n`,
+        );
+      }
+      process.stderr.write(`Projection verification failed: ${error.message}\n`);
+      if (error instanceof CliUsageError && error.details) {
+        process.stderr.write(`${canonicalStringify(error.details, 2)}\n`);
+      }
+      return EXIT_CODES.failed;
+    }
+
     const report = await failedReport(error, {
       command: configuration?.command ?? command,
       usageError: error instanceof CliUsageError,
       details: error instanceof CliUsageError ? error.details : undefined,
     });
     const reportPath =
-      configuration?.report ??
-      (error instanceof CliUsageError ? error.details?.report : undefined) ??
-      process.env.TSJSV_REPORT ??
-      '.typespec-json-schema-validator/report.json';
+      configuration?.report
+      ?? (error instanceof CliUsageError ? error.details?.report : undefined)
+      ?? process.env.TSJSV_REPORT
+      ?? '.typespec-json-schema-validator/report.json';
     const sarifPath =
-      configuration?.sarif ??
-      (error instanceof CliUsageError ? error.details?.sarif : undefined) ??
-      process.env.TSJSV_SARIF ??
-      undefined;
+      configuration?.sarif
+      ?? (error instanceof CliUsageError ? error.details?.sarif : undefined)
+      ?? process.env.TSJSV_SARIF
+      ?? undefined;
     const contractIrPath = ['check', 'compare'].includes(command)
       ? configuration?.contractIr
         ?? (error instanceof CliUsageError ? error.details?.contractIr : undefined)
