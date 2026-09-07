@@ -1,0 +1,234 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/contract-ir.v1.schema.json",
+  "title": "ORESoftware parity-approved Contract IR v1",
+  "type": "object",
+  "required": [
+    "schema",
+    "irId",
+    "status",
+    "admissible",
+    "role",
+    "editableAuthority",
+    "authorities",
+    "admission",
+    "declarations",
+    "excludedDeclarations",
+    "outOfScopeDeclarations"
+  ],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.contract-ir/v1" },
+    "irId": { "$ref": "#/$defs/sha256" },
+    "status": { "enum": ["passed", "stopped_for_evaluation", "failed"] },
+    "admissible": { "type": "boolean" },
+    "role": { "const": "downstream-derived-parity-artifact" },
+    "editableAuthority": { "const": false },
+    "authorities": { "$ref": "#/$defs/authorities" },
+    "admission": { "$ref": "#/$defs/admission" },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "toolchain": { "type": ["object", "null"] },
+    "configuration": { "type": ["object", "null"] },
+    "coverage": { "type": "object" },
+    "differential": {},
+    "declarations": { "type": "array", "items": { "$ref": "#/$defs/declaration" } },
+    "excludedDeclarations": { "type": "array", "items": { "$ref": "#/$defs/excludedDeclaration" } },
+    "outOfScopeDeclarations": { "type": "array", "items": { "$ref": "#/$defs/outOfScopeDeclaration" } }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "passed" } }, "required": ["status"] },
+      "then": {
+        "properties": { "admissible": { "const": true } },
+        "required": ["provenance", "coverage"]
+      },
+      "else": {
+        "properties": {
+          "admissible": { "const": false },
+          "declarations": { "maxItems": 0 }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "source": {
+      "type": "object",
+      "required": ["file"],
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "pointer": { "type": "string", "minLength": 1 },
+        "line": { "type": "integer", "minimum": 1 },
+        "column": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "authorities": {
+      "type": "object",
+      "required": ["typespec", "jsonSchema", "generatedJsonSchema", "precedence"],
+      "properties": {
+        "typespec": { "const": "independently-authored" },
+        "jsonSchema": { "const": "independently-authored" },
+        "generatedJsonSchema": { "const": "comparison-evidence-only" },
+        "precedence": { "const": "none" }
+      },
+      "additionalProperties": false
+    },
+    "receiptBinding": {
+      "type": "object",
+      "required": ["schema", "runId", "digest", "status", "zeroUnexplainedFindings"],
+      "properties": {
+        "schema": { "const": "ores.typespec-json-schema-validator.report/v1" },
+        "runId": { "$ref": "#/$defs/sha256" },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "status": { "enum": ["passed", "stopped_for_evaluation", "failed"] },
+        "zeroUnexplainedFindings": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "admission": {
+      "type": "object",
+      "required": ["receipt"],
+      "properties": {
+        "receipt": { "$ref": "#/$defs/receiptBinding" },
+        "requirements": {
+          "type": "object",
+          "required": [
+            "exactInputDigests",
+            "directDeclarationInventory",
+            "generatedSchemaComparison",
+            "differentialInstanceValidation",
+            "zeroUnexplainedFindings"
+          ],
+          "properties": {
+            "exactInputDigests": { "const": true },
+            "directDeclarationInventory": { "const": true },
+            "generatedSchemaComparison": { "const": true },
+            "differentialInstanceValidation": { "const": true },
+            "zeroUnexplainedFindings": { "const": true }
+          },
+          "additionalProperties": false
+        },
+        "scope": {
+          "type": "object",
+          "required": ["admittedDeclarations", "excludedDeclarations", "outOfScopeDeclarations", "complete"],
+          "properties": {
+            "admittedDeclarations": { "type": "integer", "minimum": 0 },
+            "excludedDeclarations": { "type": "integer", "minimum": 0 },
+            "outOfScopeDeclarations": { "type": "integer", "minimum": 0 },
+            "complete": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "reason": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "provenanceLane": {
+      "type": "object",
+      "required": ["role", "digest", "files"],
+      "properties": {
+        "role": { "enum": ["independently-authored-authority", "comparison-evidence-only"] },
+        "digest": { "$ref": "#/$defs/sha256" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "sha256"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "sha256": { "$ref": "#/$defs/sha256" }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["typespec", "generatedJsonSchema", "authoredJsonSchema"],
+      "properties": {
+        "typespec": { "$ref": "#/$defs/provenanceLane" },
+        "generatedJsonSchema": { "$ref": "#/$defs/provenanceLane" },
+        "authoredJsonSchema": { "$ref": "#/$defs/provenanceLane" }
+      },
+      "additionalProperties": false
+    },
+    "lane": {
+      "type": "object",
+      "required": ["role", "name", "kind", "schemaDigest", "normalizedSchema"],
+      "properties": {
+        "role": { "enum": ["independently-authored-authority", "comparison-evidence-only"] },
+        "name": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "schemaDigest": { "$ref": "#/$defs/sha256" },
+        "normalizedSchema": {}
+      },
+      "additionalProperties": false
+    },
+    "declaration": {
+      "type": "object",
+      "required": ["id", "kind", "names", "sources", "assertionSchema", "assertionDigest", "lanes"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "names": {
+          "type": "object",
+          "required": ["typespec", "generatedJsonSchema", "authoredJsonSchema"],
+          "properties": {
+            "typespec": { "type": "string", "minLength": 1 },
+            "generatedJsonSchema": { "type": "string", "minLength": 1 },
+            "authoredJsonSchema": { "type": "string", "minLength": 1 }
+          },
+          "additionalProperties": false
+        },
+        "sources": {
+          "type": "object",
+          "required": ["typespec", "generatedJsonSchema", "authoredJsonSchema"],
+          "properties": {
+            "typespec": { "$ref": "#/$defs/source" },
+            "generatedJsonSchema": { "$ref": "#/$defs/source" },
+            "authoredJsonSchema": { "$ref": "#/$defs/source" }
+          },
+          "additionalProperties": false
+        },
+        "assertionSchema": {},
+        "assertionDigest": { "$ref": "#/$defs/sha256" },
+        "lanes": {
+          "type": "object",
+          "required": ["typespecGeneratedJsonSchema", "authoredJsonSchema"],
+          "properties": {
+            "typespecGeneratedJsonSchema": { "$ref": "#/$defs/lane" },
+            "authoredJsonSchema": { "$ref": "#/$defs/lane" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "excludedDeclaration": {
+      "type": "object",
+      "required": ["authority", "id", "kind", "source"],
+      "properties": {
+        "authority": { "enum": ["typespec", "typespec-generated-json-schema", "authored-json-schema"] },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/source" }
+      },
+      "additionalProperties": false
+    },
+    "outOfScopeDeclaration": {
+      "type": "object",
+      "required": ["authority", "id", "kind", "reason", "source"],
+      "properties": {
+        "authority": { "const": "typespec" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "source": { "$ref": "#/$defs/source" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
