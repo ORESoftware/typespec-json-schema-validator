@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "ores.container-runtime-contract/v1",
+  "serviceName": "example-api-server",
+  "runtimeBase": "shell",
+  "entrypointMode": "exec_wrapper",
+  "entrypoint": ["/usr/local/bin/entrypoint.sh"],
+  "cmd": ["/usr/local/bin/example-api-server"],
+  "platforms": ["linux/amd64", "linux/arm64"],
+  "runsAsNonRoot": true,
+  "preservesPid1": true
+}
