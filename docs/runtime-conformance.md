@@ -1,43 +1,57 @@
 # Cross-runtime validator evidence
 
-This module admits evidence produced by runtime validators such as Zod in TypeScript, Serde-backed validation in Rust, and generated Dart/Freezed validation. It does **not** treat those libraries as new contract authorities and it does not execute arbitrary adapter commands.
+This module admits evidence produced by runtime validators such as Zod in TypeScript, Serde-backed validation in Rust, and generated Dart/Freezed validation. It does **not** treat those libraries as contract authorities, and it does not execute arbitrary adapter commands.
 
-The authority graph remains:
+The authority and evidence chain is:
 
 ```text
 independently authored TypeSpec ----.
-                                     +-- exact input closure digest
-independently authored JSON Schema -'              |
-                                                    v
-trusted recorded instance corpus --------> runtime adapter jobs
-                                                    |
-                       whitelisted verdict evidence only
-                                                    |
-                                                    v
-                                      compareRuntimeEvidence()
+                                     +--> parity receipt --> verified Contract IR
+independently authored JSON Schema -'                          |
+                                                                v
+trusted generated-validator closure + recorded corpus --> adapter jobs
+                                                                |
+                               compact IR/receipt binding + verdicts
+                                                                |
+                                                                v
+                                               compareRuntimeEvidence()
 ```
 
-The adapter evidence is a downstream execution receipt. A pass requires all of the following:
+The generated TypeSpec JSON Schema remains comparison evidence only. The verified Contract IR is downstream-derived and immutable; it is not a third editable authority.
 
-- the evidence is bound to the exact authority/configuration closure by `inputDigest`;
-- the evidence is bound to the exact recorded corpus by `corpusDigest`;
+## Admission requirements
+
+A runtime-conformance report passes only when all of the following hold:
+
+- the caller supplies the actual parity-approved Contract IR;
+- the caller supplies a current `verifyContractIr()` result whose supplied, computed, and expected IR IDs all match;
+- the Contract IR canonical self-digest matches `irId`;
+- the IR is admissible and its parity receipt passed with zero unexplained findings;
+- the evidence names that exact `irId`, parity receipt `runId`, and canonical receipt digest;
+- `inputDigest` matches the exact generated-validator, adapter configuration, and toolchain closure;
+- `corpusDigest` matches the exact trusted recorded corpus;
 - every required adapter is present with the expected language and validator identity;
 - every adapter reports `status: "passed"`;
-- every expected case is present exactly once;
-- no unknown case is reported;
-- declaration identities match;
-- each verdict matches the trusted corpus expectation; and
+- every expected case is present exactly once, bound to the expected declaration, and has the trusted verdict; and
 - independently executed adapters do not disagree.
 
-Missing, stale, malformed, skipped, unsupported, errored, duplicated, or divergent evidence returns `stopped_for_evaluation`. A validator process crash is **not** equivalent to a schema rejection.
+Missing, stale, malformed, skipped, unsupported, errored, duplicated, tampered, or divergent evidence returns `stopped_for_evaluation`. A validator process crash is **not** equivalent to a schema rejection.
 
 ## Evidence format
 
-The JSON format is defined by `schema/runtime-evidence.schema.json` and deliberately excludes raw payloads, stdout, stderr, environment values, stack traces, and credentials.
+The adapter receipt is defined by `schema/runtime-evidence.schema.json`. It contains a compact binding rather than a copy of the full Contract IR:
 
 ```json
 {
   "schema": "ores.typespec-json-schema-validator.runtime-evidence/v1",
+  "contractIr": {
+    "schema": "ores.typespec-json-schema-validator.contract-ir/v1",
+    "irId": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "parityReceipt": {
+      "runId": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    }
+  },
   "inputDigest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "corpusDigest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "adapters": [
@@ -65,17 +79,41 @@ The JSON format is defined by `schema/runtime-evidence.schema.json` and delibera
 }
 ```
 
-The trusted caller supplies expectations separately. Adapter-authored `expected` fields are intentionally not accepted because an adapter must not grade its own output.
+Raw payloads, stdout, stderr, environment values, stack traces, remote URLs, and credentials are intentionally outside the receipt format.
+
+## Verify and compare
+
+Recompute Contract IR verification from the current checkout. Do not trust a copied green verification JSON document supplied by an adapter.
 
 ```js
 import {
+  verifyContractIr,
+} from '@oresoftware/typespec-json-schema-validator';
+import {
   compareRuntimeEvidence,
+  createRuntimeEvidenceContractBinding,
   loadRuntimeEvidence,
 } from '@oresoftware/typespec-json-schema-validator/runtime-conformance';
+
+const contractIrVerification = await verifyContractIr({
+  contractIr,
+  report: parityReceipt,
+  typespec: 'contracts/main.tsp',
+  generatedSchema: '.typespec-json-schema-validator/generated',
+  authoredSchema: 'contracts/authored.schema.json',
+});
+
+const binding = createRuntimeEvidenceContractBinding({
+  contractIr,
+  contractIrVerification,
+});
+// Pass `binding` to the isolated adapter jobs; they must return it unchanged.
 
 const evidence = await loadRuntimeEvidence('./artifacts/runtime-evidence.json');
 const report = compareRuntimeEvidence({
   evidence,
+  contractIr,
+  contractIrVerification,
   expectedInputDigest,
   expectedCorpusDigest,
   expectedCases: [
@@ -97,8 +135,10 @@ if (report.status !== 'passed') {
 }
 ```
 
+The deterministic decision uses schema `ores.typespec-json-schema-validator.runtime-conformance-report/v1`, published at `schema/runtime-conformance-report.schema.json`. It records the admitted Contract IR ID, parity receipt run ID and digest, normalized evidence digest, trusted case digest, finding count, truncation state, and adapter summary.
+
 ## Safety and boundedness
 
-`loadRuntimeEvidence()` accepts only regular, non-symbolic-link files and applies an 8 MiB default limit. The normalizer processes at most 64 adapters and 100,000 results per adapter by default. Unknown object properties are discarded by the JavaScript API and rejected by the JSON Schema, so untrusted adapter logs cannot leak into deterministic reports.
+`loadRuntimeEvidence()` accepts only regular, non-symbolic-link files and applies an 8 MiB default limit. The normalizer processes at most 64 adapters and 100,000 results per adapter by default. Unknown properties are discarded by the JavaScript API and rejected by the JSON Schema, so untrusted adapter logs cannot leak into deterministic reports.
 
-These functions validate and compare evidence only. Separate, sandboxed language-specific runners still need to compile generated validators, run the corpus, and emit the minimal receipt. Their commands, filesystem permissions, network policy, and resource limits remain explicit CI responsibilities.
+These functions validate and compare evidence only. Separate sandboxed language-specific runners still need to compile generated validators, execute the corpus, and emit the minimal receipt. Their commands, filesystem permissions, network policy, CPU/memory limits, and toolchain pins remain explicit CI responsibilities.

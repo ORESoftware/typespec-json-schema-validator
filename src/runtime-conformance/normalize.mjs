@@ -5,6 +5,7 @@ import {
   positiveSafeInteger,
 } from './constants.mjs';
 import { normalizeAdapter } from './adapter.mjs';
+import { normalizeRuntimeEvidenceContractBinding } from './contract-ir-binding.mjs';
 import { makeRuntimeFinding, sortRuntimeFindings } from './findings.mjs';
 
 function validateDigest(value, pointer, label, findings) {
@@ -53,6 +54,7 @@ export function validateRuntimeEvidence(value, options = {}) {
       right: RUNTIME_EVIDENCE_SCHEMA,
     }));
   }
+  const contractIr = normalizeRuntimeEvidenceContractBinding(value.contractIr, findings);
   const inputDigest = validateDigest(value.inputDigest, '#/inputDigest', 'inputDigest', findings);
   const corpusDigest = validateDigest(value.corpusDigest, '#/corpusDigest', 'corpusDigest', findings);
 
@@ -65,7 +67,13 @@ export function validateRuntimeEvidence(value, options = {}) {
       right: 'array',
     }));
     return {
-      normalized: Object.freeze({ schema: value.schema, inputDigest, corpusDigest, adapters: Object.freeze([]) }),
+      normalized: Object.freeze({
+        schema: value.schema,
+        contractIr,
+        inputDigest,
+        corpusDigest,
+        adapters: Object.freeze([]),
+      }),
       findings: sortRuntimeFindings(findings),
     };
   }
@@ -109,6 +117,7 @@ export function validateRuntimeEvidence(value, options = {}) {
 
   const normalized = Object.freeze({
     schema: value.schema,
+    contractIr,
     inputDigest,
     corpusDigest,
     adapters: Object.freeze(adapters.sort((left, right) => left.id.localeCompare(right.id))),

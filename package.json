@@ -15,6 +15,7 @@
       "types": "./src/runtime-conformance/index.d.mts"
     },
     "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
+    "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./src/index.d.ts",

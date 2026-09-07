@@ -1,4 +1,10 @@
 export const RUNTIME_EVIDENCE_SCHEMA = 'ores.typespec-json-schema-validator.runtime-evidence/v1';
+export const RUNTIME_CONFORMANCE_REPORT_SCHEMA =
+  'ores.typespec-json-schema-validator.runtime-conformance-report/v1';
+export const CONTRACT_IR_SCHEMA = 'ores.typespec-json-schema-validator.contract-ir/v1';
+export const CONTRACT_IR_VERIFICATION_SCHEMA =
+  'ores.typespec-json-schema-validator.contract-ir-verification/v1';
+export const PARITY_REPORT_SCHEMA = 'ores.typespec-json-schema-validator.report/v1';
 
 export const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 export const IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/;
