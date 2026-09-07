@@ -253,7 +253,12 @@ export function crossValidate({
 
     for (const probe of probes) {
       const encoding = canonicalStringify(probe.instance);
-      if (seen.has(encoding)) {
+      // Equal JSON values do not make independent expectations interchangeable.
+      // A synthetic probe may precede a contradictory fixture, and every corpus
+      // source must retain its own diagnostic even when another source is equal.
+      const carriesExpectation = probe.origin === 'corpus'
+        || probe.origin.startsWith('declared-example') || probe.origin === 'declared-default';
+      if (!carriesExpectation && seen.has(encoding)) {
         continue;
       }
       seen.add(encoding);
