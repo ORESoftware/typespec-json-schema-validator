@@ -40,7 +40,7 @@ bins = ["tjsv", "tsjsv", "typespec-json-schema-validator"]
 [publish]
 include_readme = true
 tag_format = "v{version}"
-smoke_test = "node "$ZED_PKG_TEST_TARGET/bin/typespec-json-schema-validator.mjs" doctor --quiet"
+smoke_test = 'node "$ZED_PKG_TEST_TARGET/bin/typespec-json-schema-validator.mjs" doctor --quiet'
 exclude = [
   ".env",
   ".env.*",
