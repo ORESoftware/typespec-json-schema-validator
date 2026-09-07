@@ -1,12 +1,40 @@
 import { createHash } from 'node:crypto';
 
-const SET_LIKE_ARRAY_KEYS = new Set([
+const SCHEMA_SET_LIKE_ARRAY_KEYS = new Set([
   'allOf',
   'anyOf',
   'enum',
-  'oneOf',
   'required',
   'type',
+]);
+
+const SCHEMA_ARRAY_KEYS = new Set([
+  'allOf',
+  'anyOf',
+  'oneOf',
+  'prefixItems',
+]);
+
+const SCHEMA_MAP_KEYS = new Set([
+  '$defs',
+  'definitions',
+  'dependentSchemas',
+  'patternProperties',
+  'properties',
+]);
+
+const SINGLE_SCHEMA_KEYS = new Set([
+  'additionalProperties',
+  'contains',
+  'contentSchema',
+  'else',
+  'if',
+  'items',
+  'not',
+  'propertyNames',
+  'then',
+  'unevaluatedItems',
+  'unevaluatedProperties',
 ]);
 
 // These keywords do not assert whether an instance is valid. They may still be
@@ -37,7 +65,20 @@ const COMPARISON_NORMALIZATION = Object.freeze({
 });
 
 export function isPlainObject(value) {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function setOwn(target, key, value) {
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: true,
+    value,
+    writable: true,
+  });
 }
 
 export function sha256(value) {
@@ -48,19 +89,13 @@ export function canonicalStringify(value, space = 0) {
   return JSON.stringify(canonicalizeJson(value), null, space);
 }
 
-export function canonicalizeJson(value, parentKey = '') {
+/**
+ * Canonicalize generic JSON. Arrays remain ordered and multiplicity-preserving;
+ * schema-specific set semantics belong only in the schema normalizer below.
+ */
+export function canonicalizeJson(value) {
   if (Array.isArray(value)) {
-    const values = value.map((item) => canonicalizeJson(item, ''));
-    if (SET_LIKE_ARRAY_KEYS.has(parentKey)) {
-      const byEncoding = new Map();
-      for (const item of values) {
-        byEncoding.set(JSON.stringify(item), item);
-      }
-      return [...byEncoding.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([, item]) => item);
-    }
-    return values;
+    return value.map((item) => canonicalizeJson(item));
   }
 
   if (!isPlainObject(value)) {
@@ -69,7 +104,7 @@ export function canonicalizeJson(value, parentKey = '') {
 
   const result = {};
   for (const key of Object.keys(value).sort()) {
-    result[key] = canonicalizeJson(value[key], key);
+    setOwn(result, key, canonicalizeJson(value[key]));
   }
   return result;
 }
@@ -80,6 +115,15 @@ export function escapeJsonPointerSegment(value) {
 
 export function unescapeJsonPointerSegment(value) {
   return String(value).replaceAll('~1', '/').replaceAll('~0', '~');
+}
+
+/** Decode one URI-fragment JSON Pointer token and reject invalid RFC 6901 escapes. */
+export function decodeJsonPointerSegment(value) {
+  const decoded = decodeURIComponent(String(value));
+  if (/~(?:[^01]|$)/u.test(decoded)) {
+    throw new URIError(`invalid JSON Pointer escape in segment: ${value}`);
+  }
+  return unescapeJsonPointerSegment(decoded);
 }
 
 function declarationRef(name) {
@@ -140,11 +184,10 @@ function canCollapseSimpleTypeUnion(value) {
     return null;
   }
   const keys = Object.keys(value);
-  const unionKey = keys.includes('anyOf') ? 'anyOf' : keys.includes('oneOf') ? 'oneOf' : null;
-  if (!unionKey || keys.some((key) => key !== unionKey)) {
+  if (keys.length !== 1 || keys[0] !== 'anyOf') {
     return null;
   }
-  const branches = value[unionKey];
+  const branches = value.anyOf;
   if (!Array.isArray(branches) || branches.length === 0) {
     return null;
   }
@@ -164,23 +207,69 @@ function canCollapseSimpleTypeUnion(value) {
   return { type: types.sort() };
 }
 
-function normalizeSchemaNodeWith(value, parentKey, options) {
+function sortSchemaArray(values, deduplicate) {
+  const entries = values
+    .map((item, index) => ({ encoding: JSON.stringify(canonicalizeJson(item)), index, item }))
+    .sort((left, right) => left.encoding.localeCompare(right.encoding) || left.index - right.index);
+  if (!deduplicate) {
+    return entries.map(({ item }) => item);
+  }
+  const result = [];
+  let prior;
+  for (const entry of entries) {
+    if (entry.encoding !== prior) {
+      result.push(entry.item);
+      prior = entry.encoding;
+    }
+  }
+  return result;
+}
+
+function normalizeSchemaMap(value, options) {
+  if (!isPlainObject(value)) {
+    return normalizeSchemaValue(value, '', options, 'literal');
+  }
+  const result = {};
+  for (const key of Object.keys(value).sort()) {
+    setOwn(result, key, normalizeSchemaValue(value[key], '', options, 'schema'));
+  }
+  return result;
+}
+
+function normalizeSchemaArray(value, keyword, options) {
+  if (!Array.isArray(value)) {
+    return normalizeSchemaValue(value, keyword, options, 'literal');
+  }
+  const childContext = SCHEMA_ARRAY_KEYS.has(keyword) ? 'schema' : 'literal';
+  const normalized = value.map((item) => normalizeSchemaValue(item, '', options, childContext));
+  if (keyword === 'oneOf') {
+    return sortSchemaArray(normalized, false);
+  }
+  if (SCHEMA_SET_LIKE_ARRAY_KEYS.has(keyword)) {
+    return sortSchemaArray(normalized, true);
+  }
+  return normalized;
+}
+
+function normalizeSchemaValue(value, parentKey, options, context) {
   if (value === true || value === false || value === null || typeof value !== 'object') {
     return value;
   }
 
+  if (context === 'literal') {
+    return canonicalizeJson(value);
+  }
+
+  if (context === 'schema-map') {
+    return normalizeSchemaMap(value, options);
+  }
+
   if (Array.isArray(value)) {
-    const normalized = value.map((item) => normalizeSchemaNodeWith(item, '', options));
-    if (SET_LIKE_ARRAY_KEYS.has(parentKey)) {
-      const byEncoding = new Map();
-      for (const item of normalized) {
-        byEncoding.set(JSON.stringify(canonicalizeJson(item)), item);
-      }
-      return [...byEncoding.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([, item]) => item);
-    }
-    return normalized;
+    return normalizeSchemaArray(value, parentKey, options);
+  }
+
+  if (!isPlainObject(value)) {
+    return value;
   }
 
   if (isAlwaysFalseSchema(value)) {
@@ -197,7 +286,18 @@ function normalizeSchemaNodeWith(value, parentKey, options) {
     if (targetKey === '$ref') {
       child = options.normalizeReference(child);
     }
-    result[targetKey] = normalizeSchemaNodeWith(child, targetKey, options);
+
+    let childContext = 'literal';
+    if (SCHEMA_MAP_KEYS.has(key)) {
+      childContext = 'schema-map';
+    } else if (SCHEMA_ARRAY_KEYS.has(key) || SINGLE_SCHEMA_KEYS.has(key)) {
+      childContext = 'schema';
+    }
+
+    const normalized = Array.isArray(child)
+      ? normalizeSchemaArray(child, targetKey, options)
+      : normalizeSchemaValue(child, targetKey, options, childContext);
+    setOwn(result, targetKey, normalized);
   }
 
   const collapsed = canCollapseSimpleTypeUnion(result);
@@ -209,23 +309,23 @@ function normalizeSchemaNodeWith(value, parentKey, options) {
  * resource resolution, declaration inference, and probe generation.
  */
 export function normalizeSchemaNode(value, parentKey = '') {
-  return normalizeSchemaNodeWith(value, parentKey, EXECUTABLE_NORMALIZATION);
+  return normalizeSchemaValue(value, parentKey, EXECUTABLE_NORMALIZATION, 'schema');
 }
 
 /**
  * Normalize a schema for semantic cross-authority comparison only.
  */
 export function normalizeSchemaNodeForComparison(value, parentKey = '') {
-  return normalizeSchemaNodeWith(value, parentKey, COMPARISON_NORMALIZATION);
+  return normalizeSchemaValue(value, parentKey, COMPARISON_NORMALIZATION, 'schema');
 }
 
-function normalizeSchemaDocumentWith(document, nodeNormalizer) {
+function normalizeSchemaDocumentWith(document, nodeNormalizer, options) {
   if (!isPlainObject(document)) {
     return nodeNormalizer(document);
   }
   if (document.$defs !== undefined && document.definitions !== undefined) {
-    const left = canonicalStringify(nodeNormalizer(document.$defs));
-    const right = canonicalStringify(nodeNormalizer(document.definitions));
+    const left = canonicalStringify(normalizeSchemaMap(document.$defs, options));
+    const right = canonicalStringify(normalizeSchemaMap(document.definitions, options));
     if (left !== right) {
       throw new Error('JSON Schema document contains conflicting $defs and definitions objects');
     }
@@ -234,11 +334,23 @@ function normalizeSchemaDocumentWith(document, nodeNormalizer) {
 }
 
 export function normalizeSchemaDocument(document) {
-  return normalizeSchemaDocumentWith(document, normalizeSchemaNode);
+  return normalizeSchemaDocumentWith(document, normalizeSchemaNode, EXECUTABLE_NORMALIZATION);
 }
 
 export function normalizeSchemaDocumentForComparison(document) {
-  return normalizeSchemaDocumentWith(document, normalizeSchemaNodeForComparison);
+  return normalizeSchemaDocumentWith(
+    document,
+    normalizeSchemaNodeForComparison,
+    COMPARISON_NORMALIZATION,
+  );
+}
+
+function arrayIndex(segment, length) {
+  if (!/^(?:0|[1-9][0-9]*)$/u.test(segment)) {
+    return undefined;
+  }
+  const index = Number(segment);
+  return Number.isSafeInteger(index) && index < length ? index : undefined;
 }
 
 export function resolveJsonPointer(document, pointer) {
@@ -252,11 +364,19 @@ export function resolveJsonPointer(document, pointer) {
   for (const encoded of pointer.slice(2).split('/')) {
     let segment;
     try {
-      segment = unescapeJsonPointerSegment(decodeURIComponent(encoded));
+      segment = decodeJsonPointerSegment(encoded);
     } catch {
       return undefined;
     }
-    if (current === null || typeof current !== 'object' || !(segment in current)) {
+    if (Array.isArray(current)) {
+      const index = arrayIndex(segment, current.length);
+      if (index === undefined) {
+        return undefined;
+      }
+      current = current[index];
+      continue;
+    }
+    if (!isPlainObject(current) || !Object.hasOwn(current, segment)) {
       return undefined;
     }
     current = current[segment];
@@ -298,9 +418,9 @@ export function deepDiff(left, right, options = {}) {
       const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
       for (const key of keys) {
         const childPointer = `${pointer}/${escapeJsonPointerSegment(key)}`;
-        if (!(key in a)) {
+        if (!Object.hasOwn(a, key)) {
           differences.push({ pointer: childPointer, kind: 'missing-left', left: undefined, right: b[key] });
-        } else if (!(key in b)) {
+        } else if (!Object.hasOwn(b, key)) {
           differences.push({ pointer: childPointer, kind: 'missing-right', left: a[key], right: undefined });
         } else {
           visit(a[key], b[key], childPointer);
