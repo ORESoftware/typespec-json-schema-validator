@@ -3,9 +3,11 @@ import test from 'node:test';
 import {
   canonicalStringify,
   deepDiff,
+  normalizeComparisonRef,
   normalizeRef,
   normalizeSchemaDocument,
   normalizeSchemaNode,
+  normalizeSchemaNodeForComparison,
   resolveJsonPointer,
 } from '../../src/canonical.mjs';
 
@@ -36,17 +38,46 @@ test('legacy definitions and refs normalize to Draft 2020-12 spellings', () => {
   });
 });
 
-test('reference normalization preserves runtime-resolvable locations', () => {
+test('executable normalization preserves resource identifiers and probe annotations', () => {
+  const normalized = normalizeSchemaDocument({
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    $id: 'bundle.json',
+    title: 'Bundle',
+    $defs: {
+      User: {
+        $id: 'User',
+        type: 'string',
+        default: 'u-default',
+        examples: ['u-1'],
+      },
+    },
+  });
+  assert.equal(normalized.$id, 'bundle.json');
+  assert.equal(normalized.$schema, 'https://json-schema.org/draft/2020-12/schema');
+  assert.equal(normalized.title, 'Bundle');
+  assert.equal(normalized.$defs.User.$id, 'User');
+  assert.equal(normalized.$defs.User.default, 'u-default');
+  assert.deepEqual(normalized.$defs.User.examples, ['u-1']);
+});
+
+test('runtime and comparison reference normalization stay intentionally separate', () => {
   assert.equal(normalizeRef('User.json'), 'User.json');
   assert.equal(normalizeRef('./User.json'), './User.json');
   assert.equal(normalizeRef('#/$defs/User'), '#/$defs/User');
   assert.equal(normalizeRef('#/definitions/User'), '#/$defs/User');
   assert.equal(normalizeRef('schemas/User.json'), 'schemas/User.json');
   assert.equal(normalizeRef('User.json#/properties/id'), 'User.json#/properties/id');
+
+  assert.equal(normalizeComparisonRef('User.json'), 'urn:tsjsv:declaration:User');
+  assert.equal(normalizeComparisonRef('./User.json'), 'urn:tsjsv:declaration:User');
+  assert.equal(normalizeComparisonRef('#/$defs/User'), 'urn:tsjsv:declaration:User');
+  assert.equal(normalizeComparisonRef('#/definitions/User'), 'urn:tsjsv:declaration:User');
+  assert.equal(normalizeComparisonRef('schemas/User.json'), 'schemas/User.json');
+  assert.equal(normalizeComparisonRef('User.json#/properties/id'), 'User.json#/properties/id');
 });
 
 test('non-assertion schema metadata does not create false parity failures', () => {
-  const generated = normalizeSchemaNode({
+  const generated = normalizeSchemaNodeForComparison({
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     $id: 'User.json',
     title: 'Generated user',
@@ -54,7 +85,7 @@ test('non-assertion schema metadata does not create false parity failures', () =
     type: 'object',
     properties: { id: { type: 'string', description: 'Generated id wording' } },
   });
-  const authored = normalizeSchemaNode({
+  const authored = normalizeSchemaNodeForComparison({
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     $id: 'urn:example:user',
     $comment: 'Independent source note',
@@ -66,13 +97,25 @@ test('non-assertion schema metadata does not create false parity failures', () =
   assert.equal(canonicalStringify(generated), canonicalStringify(authored));
 });
 
+test('comparison normalization unifies top-level declaration reference layouts', () => {
+  const generated = normalizeSchemaNodeForComparison({
+    type: 'object',
+    properties: { user: { $ref: 'User.json' } },
+  });
+  const authored = normalizeSchemaNodeForComparison({
+    type: 'object',
+    properties: { user: { $ref: '#/$defs/User' } },
+  });
+  assert.equal(canonicalStringify(generated), canonicalStringify(authored));
+});
+
 test('assertion differences remain visible after metadata normalization', () => {
-  const generated = normalizeSchemaNode({
+  const generated = normalizeSchemaNodeForComparison({
     description: 'generated',
     type: 'integer',
     minimum: 0,
   });
-  const authored = normalizeSchemaNode({
+  const authored = normalizeSchemaNodeForComparison({
     description: 'authored',
     type: 'integer',
     minimum: 1,
