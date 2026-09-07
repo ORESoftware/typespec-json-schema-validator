@@ -86,8 +86,11 @@ test('verify-ir replaces prior green verification with failure on stale current 
   const passing = await run(verifyArgs(artifacts, verificationPath));
   assert.equal(passing.code, 0, passing.stderr || passing.stdout);
 
+  const staleTypespec = join(temp, 'stale-main.tsp');
+  const originalTypespec = await readFile(resolve(fixtures, 'pass/main.tsp'), 'utf8');
+  await writeFile(staleTypespec, `${originalTypespec}\n// changed after the parity receipt\n`);
   const stale = await run(verifyArgs(artifacts, verificationPath, {
-    typespec: resolve(fixtures, 'drift/main.tsp'),
+    typespec: staleTypespec,
   }));
   assert.equal(stale.code, 3, stale.stderr || stale.stdout);
   const verification = JSON.parse(await readFile(verificationPath, 'utf8'));
@@ -100,7 +103,7 @@ test('verify-ir detects tampered IR and never repairs or overwrites its input', 
   const temp = await mkdtemp(join(tmpdir(), 'tsjsv-verify-ir-tamper-'));
   const artifacts = await createPassingArtifacts(temp);
   const contractIr = JSON.parse(await readFile(artifacts.contractIrPath, 'utf8'));
-  contractIr.declarations[0].assertionSchema.type = 'string';
+  contractIr.declarations[0].assertionSchema.type = 'integer';
   const tamperedText = `${JSON.stringify(contractIr, null, 2)}\n`;
   await writeFile(artifacts.contractIrPath, tamperedText);
 
