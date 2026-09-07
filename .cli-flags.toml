@@ -136,6 +136,12 @@ type = "string"
 default = "oneOf"
 help = "Official emitter discriminator strategy: ignore, oneOf, or anyOf."
 
+[commands.check.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir", "emit-ir"]
+type = "string"
+help = "Optional path for a digest-bound parity-approved Contract IR, or a non-admissible tombstone on failure."
+
 [commands.compare]
 help = "Compare a pre-generated TypeSpec JSON Schema witness with the authored JSON Schema and source inventory."
 env = "TSJSV_COMMAND_COMPARE"
@@ -160,6 +166,12 @@ aliases = ["generated-schema"]
 short = "g"
 type = "string"
 help = "JSON Schema previously generated from TypeSpec."
+
+[commands.compare.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir", "emit-ir"]
+type = "string"
+help = "Optional path for a digest-bound parity-approved Contract IR, or a non-admissible tombstone on failure."
 
 [commands.validate]
 help = "Run only the differential lane: execute both authorities as validators over one instance corpus."
