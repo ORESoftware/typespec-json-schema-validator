@@ -1,0 +1,62 @@
+[package]
+org = "oresoftware"
+name = "typespec-json-schema-validator"
+version = "0.1.0"
+description = "Fail-closed TypeSpec and JSON Schema parity CLI"
+license = "MIT"
+keywords = ["typespec", "json-schema", "schema-parity", "cli"]
+language = "nodejs"
+
+[package.repository]
+vcs = "git"
+url = "https://github.com/ORESoftware/typespec-json-schema-validator"
+
+[build]
+command = "npm ci --ignore-scripts && npm rebuild @oresoftware/f2e --foreground-scripts && node ./bin/typespec-json-schema-validator.mjs doctor --quiet"
+outputs = [
+  ".cli-flags.toml",
+  "bin",
+  "src",
+  "schema",
+  "node_modules",
+  "package.json",
+  "LICENSE",
+  "README.md",
+]
+
+[bin]
+tjsv = "bin/typespec-json-schema-validator.mjs"
+tsjsv = "bin/typespec-json-schema-validator.mjs"
+typespec-json-schema-validator = "bin/typespec-json-schema-validator.mjs"
+
+[install]
+adapter = "none"
+dir = ".vendor/.zed"
+
+[interop.flags-2-env]
+config = ".cli-flags.toml"
+bins = ["tjsv", "tsjsv", "typespec-json-schema-validator"]
+
+[publish]
+include_readme = true
+tag_format = "v{version}"
+smoke_test = "node "$ZED_PKG_TEST_TARGET/bin/typespec-json-schema-validator.mjs" doctor --quiet"
+exclude = [
+  ".env",
+  ".env.*",
+  ".direnv/**",
+  ".zed/**",
+  ".zed-pack/**",
+  ".vendor/.zed/**",
+  "node_modules/**",
+  "tmp/**",
+  "**/*.log",
+  ".DS_Store",
+]
+
+[publish.native]
+registry = "npm"
+package = "@oresoftware/typespec-json-schema-validator"
+
+[scripts]
+test = "npm run test:all"
