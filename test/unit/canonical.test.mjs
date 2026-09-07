@@ -156,3 +156,10 @@ test('local JSON Pointer resolution decodes escaped segments', () => {
   assert.deepEqual(resolveJsonPointer(document, '#/$defs/a~1b'), { type: 'string' });
   assert.deepEqual(resolveJsonPointer(document, '#/$defs/x~0y'), { type: 'integer' });
 });
+
+test('malformed percent-encoded JSON Pointer segments fail closed', () => {
+  const document = { $defs: { User: { type: 'string' } } };
+  assert.equal(resolveJsonPointer(document, '#/$defs/%'), undefined);
+  assert.equal(resolveJsonPointer(document, '#/$defs/%GG'), undefined);
+  assert.equal(resolveJsonPointer(document, '#/$defs/%E0%A4%A'), undefined);
+});
