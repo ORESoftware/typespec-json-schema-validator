@@ -260,6 +260,7 @@ export async function writeProjectionVerificationReceipt(path, receipt) {
     }
     if (before === null) {
       await link(temporary, target);
+      await unlink(temporary);
     } else {
       const after = await inspectExistingDestination(target);
       if (!unchanged(before, after)) {
