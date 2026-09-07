@@ -15,6 +15,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
 import { canonicalStringify, isPlainObject, stableFindingFingerprint } from './canonical.mjs';
+import { assertFindingLimit } from './finding-limit.mjs';
 import {
   SchemaResolver,
   SchemaResolutionError,
@@ -176,6 +177,7 @@ export function crossValidate({
   maxFindings = 250,
   formatAssertion = false,
 }) {
+  assertFindingLimit(maxFindings);
   const findings = [];
   const generatedLane = buildLaneResolver(generatedCollection);
   const authoredLane = buildLaneResolver(authoredCollection);

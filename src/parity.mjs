@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { assertFindingLimit } from './finding-limit.mjs';
 import {
   canonicalStringify,
   deepDiff,
@@ -269,6 +270,7 @@ export function compareParity({
   mapping,
   maxFindings = 250,
 }) {
+  assertFindingLimit(maxFindings);
   const findings = [];
 
   for (const error of typespecInventory.errors) {
