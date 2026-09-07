@@ -25,21 +25,22 @@ test('schema normalization is deterministic and respects semantic set ordering',
   assert.equal(canonicalStringify(left), canonicalStringify(right));
 });
 
-test('legacy definitions and refs normalize to Draft 2020-12 declaration identities', () => {
+test('legacy definitions and refs normalize to Draft 2020-12 spellings', () => {
   const normalized = normalizeSchemaDocument({
     definitions: { User: { type: 'object' } },
     $ref: '#/definitions/User',
   });
   assert.deepEqual(normalized, {
     $defs: { User: { type: 'object' } },
-    $ref: 'urn:tsjsv:declaration:User',
+    $ref: '#/$defs/User',
   });
 });
 
-test('generated file refs and bundled defs refs normalize to the same declaration', () => {
-  assert.equal(normalizeRef('User.json'), 'urn:tsjsv:declaration:User');
-  assert.equal(normalizeRef('./User.json'), 'urn:tsjsv:declaration:User');
-  assert.equal(normalizeRef('#/$defs/User'), 'urn:tsjsv:declaration:User');
+test('reference normalization preserves runtime-resolvable locations', () => {
+  assert.equal(normalizeRef('User.json'), 'User.json');
+  assert.equal(normalizeRef('./User.json'), './User.json');
+  assert.equal(normalizeRef('#/$defs/User'), '#/$defs/User');
+  assert.equal(normalizeRef('#/definitions/User'), '#/$defs/User');
   assert.equal(normalizeRef('schemas/User.json'), 'schemas/User.json');
   assert.equal(normalizeRef('User.json#/properties/id'), 'User.json#/properties/id');
 });
