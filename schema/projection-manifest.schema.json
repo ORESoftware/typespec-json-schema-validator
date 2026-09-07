@@ -1,0 +1,454 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/projection-manifest.v1.schema.json",
+  "title": "ORESoftware downstream projection admission manifest v1",
+  "description": "Digest-bound evidence for downstream projections generated only from an admissible parity-approved Contract IR. The manifest is evidence, not an editable schema or transport authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "manifestId",
+    "status",
+    "contract",
+    "inputs",
+    "toolchains",
+    "declarations",
+    "projections",
+    "outputs",
+    "representationDeltas",
+    "runtimeValidators"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.projection-manifest/v1"
+    },
+    "manifestId": {
+      "$ref": "#/$defs/sha256"
+    },
+    "status": {
+      "const": "passed"
+    },
+    "contract": {
+      "$ref": "#/$defs/contract"
+    },
+    "inputs": {
+      "$ref": "#/$defs/inputs"
+    },
+    "toolchains": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/toolchain"
+      }
+    },
+    "declarations": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "projections": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/projection"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/output"
+      }
+    },
+    "representationDeltas": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/representationDelta"
+      }
+    },
+    "runtimeValidators": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/runtimeValidator"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*(?:^|/)\\.(?:/|$))(?!.*\\\\)(?!.*//)(?!.*\\/$)[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "size",
+        "mediaType",
+        "projection"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "mediaType": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 255,
+          "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$"
+        },
+        "projection": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contractIrId",
+        "contractIrDigest",
+        "receiptRunId",
+        "receiptDigest",
+        "sourceDigests"
+      ],
+      "properties": {
+        "contractIrId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "contractIrDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "receiptRunId": {
+          "$ref": "#/$defs/sha256"
+        },
+        "receiptDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sourceDigests": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "typespec",
+            "generatedJsonSchema",
+            "authoredJsonSchema"
+          ],
+          "properties": {
+            "typespec": {
+              "$ref": "#/$defs/sha256"
+            },
+            "generatedJsonSchema": {
+              "$ref": "#/$defs/sha256"
+            },
+            "authoredJsonSchema": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationInventory",
+        "projectionMetadata",
+        "emitterConfiguration"
+      ],
+      "properties": {
+        "operationInventory": {
+          "$ref": "#/$defs/file"
+        },
+        "projectionMetadata": {
+          "$ref": "#/$defs/file"
+        },
+        "emitterConfiguration": {
+          "$ref": "#/$defs/file"
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "artifactDigest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "artifactDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "emitter",
+        "declarationIds",
+        "outputPaths",
+        "representationDeltaIds",
+        "runtimeValidatorIds"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "emitter": {
+          "$ref": "#/$defs/identifier"
+        },
+        "declarationIds": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "outputPaths": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
+        },
+        "representationDeltaIds": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        },
+        "runtimeValidatorIds": {
+          "type": "array",
+          "maxItems": 100000,
+          "items": {
+            "$ref": "#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewer",
+        "reviewedAt",
+        "approvalDigest"
+      ],
+      "properties": {
+        "reviewer": {
+          "$ref": "#/$defs/identifier"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?Z$"
+        },
+        "approvalDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "representationDelta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "projection",
+        "declaration",
+        "sourcePointer",
+        "reason",
+        "sourceDigest",
+        "review",
+        "runtimeValidatorRequired",
+        "runtimeValidatorId",
+        "negativeFixtureDigest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "projection": {
+          "$ref": "#/$defs/identifier"
+        },
+        "declaration": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "sourcePointer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^#(?:/(?:[^~/]|~[01])*)*$"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "sourceDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "review": {
+          "$ref": "#/$defs/review"
+        },
+        "runtimeValidatorRequired": {
+          "type": "boolean"
+        },
+        "runtimeValidatorId": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/identifier"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "negativeFixtureDigest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/sha256"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "runtimeValidatorRequired": {
+                "const": true
+              }
+            },
+            "required": [
+              "runtimeValidatorRequired"
+            ]
+          },
+          "then": {
+            "properties": {
+              "runtimeValidatorId": {
+                "$ref": "#/$defs/identifier"
+              },
+              "negativeFixtureDigest": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "runtimeValidatorId": {
+                "type": "null"
+              },
+              "negativeFixtureDigest": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "runtimeValidator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "projection",
+        "artifactPath",
+        "artifactDigest",
+        "fixtureDigest",
+        "ingressEgressCoverageDigest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "projection": {
+          "$ref": "#/$defs/identifier"
+        },
+        "artifactPath": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "artifactDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "fixtureDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "ingressEgressCoverageDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}
