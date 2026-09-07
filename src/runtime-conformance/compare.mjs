@@ -4,6 +4,7 @@ import {
   RUNTIME_EVIDENCE_SCHEMA,
   positiveSafeInteger,
 } from './constants.mjs';
+import { validateContractIrBinding } from './contract-ir-binding.mjs';
 import { makeRuntimeFinding, sortRuntimeFindings } from './findings.mjs';
 import {
   normalizeExpectedCases,
@@ -111,8 +112,27 @@ function compareAdapters(adapters, expectedById, findings) {
   }
 }
 
+function compareCorpusToContractIr(corpus, binding, findings) {
+  if (!binding.verified) return;
+  for (let index = 0; index < corpus.length; index += 1) {
+    const expected = corpus[index];
+    if (!binding.declarationIds.has(expected.declaration)) {
+      findings.push(makeRuntimeFinding({
+        ruleId: 'runtime-corpus-declaration-not-admitted',
+        declaration: expected.declaration,
+        pointer: `#/expectedCases/${index}/declaration`,
+        message: `trusted runtime case ${expected.id} targets a declaration not admitted by Contract IR`,
+        left: expected.declaration,
+        right: 'an admitted Contract IR declaration id',
+      }));
+    }
+  }
+}
+
 export function compareRuntimeEvidence({
   evidence,
+  contractIr,
+  contractIrVerification,
   expectedInputDigest,
   expectedCorpusDigest,
   expectedCases,
@@ -134,7 +154,7 @@ export function compareRuntimeEvidence({
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-expected-input-digest-invalid',
       pointer: '#/expectedInputDigest',
-      message: 'expectedInputDigest must be a lowercase SHA-256 digest from the trusted input closure',
+      message: 'expectedInputDigest must be the lowercase SHA-256 runId from the trusted parity receipt',
       left: expectedInputDigest,
       right: '64 lowercase hexadecimal characters',
     }));
@@ -149,13 +169,30 @@ export function compareRuntimeEvidence({
     }));
   }
 
+  const binding = validateContractIrBinding({
+    contractIr,
+    contractIrVerification,
+    expectedInputDigest,
+    findings,
+  });
+  compareCorpusToContractIr(corpus, binding, findings);
+
   const normalized = validated.normalized;
   if (normalized) {
+    if (binding.irId && normalized.contractIrId !== binding.irId) {
+      findings.push(makeRuntimeFinding({
+        ruleId: 'runtime-contract-ir-id-mismatch',
+        pointer: '#/contractIrId',
+        message: 'runtime evidence was emitted for a different Contract IR',
+        left: normalized.contractIrId,
+        right: binding.irId,
+      }));
+    }
     if (normalized.inputDigest !== expectedInputDigest) {
       findings.push(makeRuntimeFinding({
         ruleId: 'runtime-input-digest-mismatch',
         pointer: '#/inputDigest',
-        message: 'runtime evidence is not bound to the requested authority/configuration closure',
+        message: 'runtime evidence is not bound to the requested parity receipt and authority/configuration closure',
         left: normalized.inputDigest,
         right: expectedInputDigest,
       }));
@@ -211,6 +248,9 @@ export function compareRuntimeEvidence({
     findings: Object.freeze(sorted),
     findingCount,
     truncated: findingCount > maxFindings,
+    contractIrId: binding.irId,
+    contractIrVerified: binding.verified,
+    receiptRunId: binding.receiptRunId,
     evidenceDigest: normalized ? sha256(canonicalStringify(normalized)) : null,
     expectedCaseDigest: sha256(canonicalStringify(corpus)),
     summary: Object.freeze({

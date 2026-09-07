@@ -6,16 +6,74 @@ import {
   loadRuntimeEvidence,
   validateRuntimeEvidence,
 } from '../../src/runtime-conformance/index.mjs';
+import { canonicalStringify, sha256 } from '../../src/canonical.mjs';
+import {
+  CONTRACT_IR_SCHEMA,
+  CONTRACT_IR_VERIFICATION_SCHEMA,
+} from '../../src/contract-ir.mjs';
 import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const INPUT_DIGEST = 'a'.repeat(64);
 const CORPUS_DIGEST = 'b'.repeat(64);
+const RECEIPT_DIGEST = 'c'.repeat(64);
+const TYPESPEC_DIGEST = 'd'.repeat(64);
+const GENERATED_DIGEST = 'e'.repeat(64);
+const AUTHORED_DIGEST = 'f'.repeat(64);
 const cases = [
   { id: 'user.valid.basic', declaration: 'Example.User', expectation: 'accepted' },
   { id: 'user.invalid.missing-id', declaration: 'Example.User', expectation: 'rejected' },
 ];
+
+function contractIr(overrides = {}) {
+  const body = {
+    schema: CONTRACT_IR_SCHEMA,
+    status: 'passed',
+    admissible: true,
+    role: 'downstream-derived-parity-artifact',
+    editableAuthority: false,
+    authorities: {
+      typespec: 'independently-authored',
+      jsonSchema: 'independently-authored',
+      generatedJsonSchema: 'comparison-evidence-only',
+      precedence: 'none',
+    },
+    admission: {
+      receipt: {
+        schema: 'ores.typespec-json-schema-validator.report/v1',
+        runId: INPUT_DIGEST,
+        digest: RECEIPT_DIGEST,
+        status: 'passed',
+        zeroUnexplainedFindings: true,
+      },
+    },
+    provenance: {
+      typespec: { digest: TYPESPEC_DIGEST },
+      generatedJsonSchema: { digest: GENERATED_DIGEST },
+      authoredJsonSchema: { digest: AUTHORED_DIGEST },
+    },
+    declarations: [{ id: 'Example.User' }],
+    excludedDeclarations: [],
+    outOfScopeDeclarations: [],
+    ...overrides,
+  };
+  return { ...body, irId: sha256(canonicalStringify(body)) };
+}
+
+function contractIrVerification(ir, overrides = {}) {
+  return {
+    schema: CONTRACT_IR_VERIFICATION_SCHEMA,
+    status: 'passed',
+    admissible: true,
+    suppliedIrId: ir.irId,
+    computedIrId: ir.irId,
+    expectedIrId: ir.irId,
+    receiptRunId: ir.admission?.receipt?.runId ?? null,
+    error: null,
+    ...overrides,
+  };
+}
 
 const adapter = (overrides = {}) => ({
   id: 'typescript-zod',
@@ -31,44 +89,66 @@ const adapter = (overrides = {}) => ({
   ...overrides,
 });
 
-const evidence = (overrides = {}) => ({
-  schema: RUNTIME_EVIDENCE_SCHEMA,
-  inputDigest: INPUT_DIGEST,
-  corpusDigest: CORPUS_DIGEST,
-  adapters: [adapter()],
-  ...overrides,
-});
+const evidence = (overrides = {}) => {
+  const ir = contractIr();
+  return {
+    schema: RUNTIME_EVIDENCE_SCHEMA,
+    contractIrId: ir.irId,
+    inputDigest: INPUT_DIGEST,
+    corpusDigest: CORPUS_DIGEST,
+    adapters: [adapter()],
+    ...overrides,
+  };
+};
 
-const compare = (overrides = {}) => compareRuntimeEvidence({
-  evidence: evidence(),
-  expectedInputDigest: INPUT_DIGEST,
-  expectedCorpusDigest: CORPUS_DIGEST,
-  expectedCases: cases,
-  requiredAdapters: [{ id: 'typescript-zod', language: 'typescript', validator: 'zod@4.5.4' }],
-  ...overrides,
-});
+function compare(overrides = {}) {
+  const ir = overrides.contractIr ?? contractIr();
+  const verification = Object.hasOwn(overrides, 'contractIrVerification')
+    ? overrides.contractIrVerification
+    : contractIrVerification(ir);
+  const runtimeEvidence = overrides.evidence
+    ?? evidence({ contractIrId: ir.irId });
+  return compareRuntimeEvidence({
+    evidence: runtimeEvidence,
+    contractIr: ir,
+    contractIrVerification: verification,
+    expectedInputDigest: INPUT_DIGEST,
+    expectedCorpusDigest: CORPUS_DIGEST,
+    expectedCases: cases,
+    requiredAdapters: [{ id: 'typescript-zod', language: 'typescript', validator: 'zod@4.5.4' }],
+    ...overrides,
+    evidence: runtimeEvidence,
+    contractIr: ir,
+    contractIrVerification: verification,
+  });
+}
 
 function ruleIds(result) {
   return result.findings.map((finding) => finding.ruleId);
 }
 
-test('passes exact-input evidence when every required adapter executes every case', () => {
+test('passes exact-input evidence bound to a freshly verified Contract IR', () => {
   const result = compare();
   assert.equal(result.status, 'passed');
   assert.equal(result.zeroUnexplainedFindings, true);
   assert.equal(result.findingCount, 0);
   assert.equal(result.summary.expectedCases, 2);
   assert.equal(result.summary.passedAdapters, 1);
+  assert.equal(result.contractIrVerified, true);
+  assert.equal(result.contractIrId, contractIr().irId);
+  assert.equal(result.receiptRunId, INPUT_DIGEST);
   assert.match(result.evidenceDigest, /^[a-f0-9]{64}$/);
   assert.match(result.expectedCaseDigest, /^[a-f0-9]{64}$/);
 });
 
 test('normalization makes evidence and findings deterministic', () => {
+  const ir = contractIr();
   const reordered = evidence({
+    contractIrId: ir.irId,
     adapters: [adapter({ results: [...adapter().results].reverse() })],
   });
-  const first = compare();
-  const second = compare({ evidence: reordered });
+  const first = compare({ contractIr: ir });
+  const second = compare({ contractIr: ir, evidence: reordered });
   assert.equal(first.evidenceDigest, second.evidenceDigest);
   assert.deepEqual(first.findings, second.findings);
 });
@@ -77,6 +157,94 @@ test('fails closed when the evidence schema id is missing', () => {
   const result = compare({ evidence: evidence({ schema: undefined }) });
   assert.equal(result.status, 'stopped_for_evaluation');
   assert.ok(ruleIds(result).includes('runtime-evidence-schema-mismatch'));
+});
+
+test('requires runtime evidence to name the exact Contract IR', () => {
+  const missing = compare({ evidence: evidence({ contractIrId: undefined }) });
+  assert.ok(ruleIds(missing).includes('runtime-evidence-invalid-digest'));
+
+  const mismatched = compare({ evidence: evidence({ contractIrId: '9'.repeat(64) }) });
+  assert.ok(ruleIds(mismatched).includes('runtime-contract-ir-id-mismatch'));
+});
+
+test('rejects a tampered Contract IR self-digest', () => {
+  const ir = contractIr();
+  ir.declarations = [{ id: 'Example.User' }, { id: 'Example.Secret' }];
+  const result = compare({ contractIr: ir });
+  assert.ok(ruleIds(result).includes('runtime-contract-ir-self-digest-mismatch'));
+  assert.equal(result.contractIrVerified, false);
+});
+
+test('rejects stopped or non-admissible Contract IR even with a valid self-digest', () => {
+  const ir = contractIr({ status: 'stopped_for_evaluation', admissible: false });
+  const result = compare({
+    contractIr: ir,
+    contractIrVerification: contractIrVerification(ir, {
+      status: 'failed',
+      admissible: false,
+    }),
+  });
+  assert.ok(ruleIds(result).includes('runtime-contract-ir-not-admissible'));
+  assert.ok(ruleIds(result).includes('runtime-contract-ir-verification-failed'));
+});
+
+test('requires a fresh Contract IR verification over the current inputs', () => {
+  const missing = compare({ contractIrVerification: undefined });
+  assert.ok(ruleIds(missing).includes('runtime-contract-ir-verification-missing'));
+
+  const ir = contractIr();
+  const stale = compare({
+    contractIr: ir,
+    contractIrVerification: contractIrVerification(ir, {
+      expectedIrId: '9'.repeat(64),
+      receiptRunId: '8'.repeat(64),
+    }),
+  });
+  assert.ok(ruleIds(stale).includes('runtime-contract-ir-verification-failed'));
+});
+
+test('binds the Contract IR parity receipt to expectedInputDigest', () => {
+  const wrongRun = '7'.repeat(64);
+  const ir = contractIr({
+    admission: {
+      receipt: {
+        schema: 'ores.typespec-json-schema-validator.report/v1',
+        runId: wrongRun,
+        digest: RECEIPT_DIGEST,
+        status: 'passed',
+        zeroUnexplainedFindings: true,
+      },
+    },
+  });
+  const result = compare({ contractIr: ir });
+  assert.ok(ruleIds(result).includes('runtime-contract-ir-input-digest-mismatch'));
+});
+
+test('rejects missing or malformed Contract IR source-lane provenance', () => {
+  const ir = contractIr({
+    provenance: {
+      typespec: { digest: 'not-a-digest' },
+      generatedJsonSchema: { digest: GENERATED_DIGEST },
+      authoredJsonSchema: { digest: AUTHORED_DIGEST },
+    },
+  });
+  const result = compare({ contractIr: ir });
+  assert.ok(ruleIds(result).includes('runtime-contract-ir-provenance-invalid'));
+});
+
+test('trusted cases may target only Contract IR-admitted declarations', () => {
+  const otherCases = [
+    { id: 'other.valid', declaration: 'Example.Other', expectation: 'accepted' },
+  ];
+  const result = compare({
+    expectedCases: otherCases,
+    evidence: evidence({
+      adapters: [adapter({
+        results: [{ caseId: 'other.valid', declaration: 'Example.Other', verdict: 'accepted' }],
+      })],
+    }),
+  });
+  assert.ok(ruleIds(result).includes('runtime-corpus-declaration-not-admitted'));
 });
 
 test('fails closed on stale authority input evidence', () => {
@@ -90,7 +258,9 @@ test('fails closed on stale corpus evidence', () => {
 });
 
 test('rejects malformed digests rather than normalizing them', () => {
-  const result = compare({ evidence: evidence({ inputDigest: 'A'.repeat(64), corpusDigest: 'nope' }) });
+  const result = compare({
+    evidence: evidence({ inputDigest: 'A'.repeat(64), corpusDigest: 'nope' }),
+  });
   assert.equal(ruleIds(result).filter((rule) => rule === 'runtime-evidence-invalid-digest').length, 2);
 });
 
@@ -222,6 +392,7 @@ test('duplicate trusted cases and required adapters are rejected', () => {
 test('malformed evidence and adapter metadata return findings instead of throwing', () => {
   const invalid = validateRuntimeEvidence({
     schema: RUNTIME_EVIDENCE_SCHEMA,
+    contractIrId: contractIr().irId,
     inputDigest: INPUT_DIGEST,
     corpusDigest: CORPUS_DIGEST,
     adapters: [{ id: 'Bad ID', status: 'maybe', results: {} }],
@@ -238,7 +409,9 @@ test('control characters in metadata are rejected to prevent log injection', () 
 });
 
 test('adapter and result limits are enforced with bounded processing', () => {
-  const validation = validateRuntimeEvidence(evidence({ adapters: [adapter(), adapter({ id: 'rust-serde' })] }), {
+  const validation = validateRuntimeEvidence(evidence({
+    adapters: [adapter(), adapter({ id: 'rust-serde' })],
+  }), {
     maxAdapters: 1,
     maxResultsPerAdapter: 1,
   });
@@ -247,8 +420,6 @@ test('adapter and result limits are enforced with bounded processing', () => {
   assert.equal(validation.normalized.adapters.length, 1);
   assert.equal(validation.normalized.adapters[0].results.length, 1);
 });
-
-
 
 test('trusted processing limits must be positive safe integers', () => {
   assert.throws(() => validateRuntimeEvidence(evidence(), { maxAdapters: 0 }), /maxAdapters/);
@@ -289,7 +460,20 @@ test('runtime evidence normalization discards untrusted stdout and arbitrary fie
   assert.equal('arbitrary' in validation.normalized.adapters[0], false);
 });
 
-
+test('Contract IR verification failures do not echo arbitrary error content', () => {
+  const ir = contractIr();
+  const result = compare({
+    contractIr: ir,
+    contractIrVerification: contractIrVerification(ir, {
+      status: 'failed',
+      admissible: false,
+      error: 'secret-looking-path-or-value',
+    }),
+  });
+  const rendered = JSON.stringify(result.findings);
+  assert.ok(ruleIds(result).includes('runtime-contract-ir-verification-failed'));
+  assert.doesNotMatch(rendered, /secret-looking-path-or-value/);
+});
 
 test('package exports publish the runtime API and evidence schema', async () => {
   const packageJson = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
@@ -301,6 +485,15 @@ test('package exports publish the runtime API and evidence schema', async () => 
     packageJson.exports['./schema/runtime-evidence'],
     './schema/runtime-evidence.schema.json',
   );
+});
+
+test('runtime evidence schema requires the Contract IR self-digest', async () => {
+  const schema = JSON.parse(await readFile(
+    new URL('../../schema/runtime-evidence.schema.json', import.meta.url),
+    'utf8',
+  ));
+  assert.ok(schema.required.includes('contractIrId'));
+  assert.deepEqual(schema.properties.contractIrId, { $ref: '#/$defs/sha256' });
 });
 
 test('loadRuntimeEvidence parses JSON without executing adapter output', async () => {
