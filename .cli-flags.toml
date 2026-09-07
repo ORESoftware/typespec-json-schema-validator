@@ -233,7 +233,7 @@ env = "TSJSV_INT64_STRATEGY"
 aliases = ["int64-strategy"]
 type = "string"
 default = "string"
-help = "Official TypeSpec JSON Schema emitter int64 strategy: string or number."
+help = "Official emitter int64 strategy: string or number."
 
 [commands.generate.flags.seal-object-schemas]
 env = "TSJSV_SEAL_OBJECT_SCHEMAS"
@@ -248,6 +248,50 @@ aliases = ["polymorphic-models-strategy"]
 type = "string"
 default = "oneOf"
 help = "Official emitter discriminator strategy: ignore, oneOf, or anyOf."
+
+[commands.verify-ir]
+help = "Verify an existing Contract IR against its parity receipt and the exact current TypeSpec/generated/authored input closure."
+env = "TSJSV_COMMAND_VERIFY_IR"
+
+[commands.verify-ir.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir"]
+type = "string"
+help = "Existing parity-approved Contract IR to verify. This command never overwrites the input."
+
+[commands.verify-ir.flags.parity-receipt]
+env = "TSJSV_PARITY_RECEIPT"
+aliases = ["parity-receipt", "receipt"]
+type = "string"
+help = "Passed parity receipt that the Contract IR claims to consume."
+
+[commands.verify-ir.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "Current independently authored TypeSpec entry file or project directory."
+
+[commands.verify-ir.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Current independently authored JSON Schema file or directory."
+
+[commands.verify-ir.flags.generated-schema]
+env = "TSJSV_GENERATED_SCHEMA"
+aliases = ["generated-schema"]
+short = "g"
+type = "string"
+help = "Current TypeSpec-generated comparison-only JSON Schema witness."
+
+[commands.verify-ir.flags.verification]
+env = "TSJSV_VERIFICATION"
+aliases = ["verification"]
+type = "string"
+default = ".typespec-json-schema-validator/contract-ir-verification.json"
+help = "Deterministic consumer-verification artifact path."
 
 [commands.doctor]
 help = "Check the flags-2-env and TypeSpec toolchain required by the validator."
