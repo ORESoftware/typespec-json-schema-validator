@@ -1,0 +1,170 @@
+name: DEN-2757 tjsv Zed package bootstrap
+
+on:
+  push:
+    branches: [DEN-2757-tjsv-zed-package]
+    paths:
+      - '.github/workflows/den-2757-tjsv-zed-bootstrap.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-2757-tjsv-zed-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: DEN-2757-tjsv-zed-package
+          persist-credentials: true
+          show-progress: false
+
+      - name: Make tjsv canonical and declare the Zed CLI package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text())
+          entry = './bin/typespec-json-schema-validator.mjs'
+          package['bin'] = {
+              'tjsv': entry,
+              'tsjsv': entry,
+              'typespec-json-schema-validator': entry,
+          }
+          package_path.write_text(json.dumps(package, indent=2) + '\n')
+
+          readme_path = Path('README.md')
+          readme = readme_path.read_text().replace('npx tsjsv', 'npx tjsv')
+          heading = '## Usage\n'
+          note = (
+              '> `tjsv` is the canonical command. The older `tsjsv` and '
+              '`typespec-json-schema-validator` names remain compatibility aliases.\n\n'
+          )
+          if note not in readme:
+              if heading not in readme:
+                  raise SystemExit('README usage heading not found')
+              readme = readme.replace(heading, heading + '\n' + note, 1)
+          readme_path.write_text(readme)
+
+          Path('.zpkg.toml').write_text('''[package]
+          org = "oresoftware"
+          name = "typespec-json-schema-validator"
+          version = "0.1.0"
+          description = "Fail-closed TypeSpec and JSON Schema parity CLI"
+          license = "MIT"
+          keywords = ["typespec", "json-schema", "schema-parity", "cli"]
+          language = "nodejs"
+
+          [package.repository]
+          vcs = "git"
+          url = "https://github.com/ORESoftware/typespec-json-schema-validator"
+
+          [build]
+          command = "npm ci --ignore-scripts && node ./bin/typespec-json-schema-validator.mjs doctor --quiet"
+          outputs = [
+            ".cli-flags.toml",
+            "bin",
+            "src",
+            "schema",
+            "node_modules",
+            "package.json",
+            "LICENSE",
+            "README.md",
+          ]
+
+          [bin]
+          tjsv = "bin/typespec-json-schema-validator.mjs"
+          tsjsv = "bin/typespec-json-schema-validator.mjs"
+          typespec-json-schema-validator = "bin/typespec-json-schema-validator.mjs"
+
+          [install]
+          adapter = "none"
+          dir = ".vendor/.zed"
+
+          [interop.flags-2-env]
+          config = ".cli-flags.toml"
+          bins = ["tjsv", "tsjsv", "typespec-json-schema-validator"]
+
+          [publish]
+          include_readme = true
+          tag_format = "v{version}"
+          smoke_test = "node \"$ZED_PKG_TEST_TARGET/bin/typespec-json-schema-validator.mjs\" doctor --quiet"
+          exclude = [
+            ".env",
+            ".env.*",
+            ".direnv/**",
+            ".zed/**",
+            ".zed-pack/**",
+            ".vendor/.zed/**",
+            "node_modules/**",
+            "tmp/**",
+            "**/*.log",
+            ".DS_Store",
+          ]
+
+          [publish.native]
+          registry = "npm"
+          package = "@oresoftware/typespec-json-schema-validator"
+
+          [scripts]
+          test = "npm run test:all"
+          '''.replace('          ', ''))
+          Path('.zpkg.lock').write_text('version = 1\n')
+
+          contract_test = Path('test/unit/package-contract.test.mjs')
+          contract_test.write_text('''import assert from 'node:assert/strict';
+          import { readFile } from 'node:fs/promises';
+          import test from 'node:test';
+
+          test('tjsv is canonical while compatibility aliases remain', async () => {
+            const pkg = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+            assert.equal(pkg.bin.tjsv, './bin/typespec-json-schema-validator.mjs');
+            assert.equal(pkg.bin.tsjsv, pkg.bin.tjsv);
+            assert.equal(pkg.bin['typespec-json-schema-validator'], pkg.bin.tjsv);
+          });
+
+          test('Zed retains and binds the package-owned flags contract', async () => {
+            const manifest = await readFile(new URL('../../.zpkg.toml', import.meta.url), 'utf8');
+            assert.match(manifest, /\[bin\][\s\S]*tjsv = "bin\/typespec-json-schema-validator\.mjs"/);
+            assert.match(manifest, /\[interop\.flags-2-env\]/);
+            assert.match(manifest, /config = "\.cli-flags\.toml"/);
+            assert.match(manifest, /bins = \["tjsv", "tsjsv", "typespec-json-schema-validator"\]/);
+            assert.match(manifest, /outputs = \[[\s\S]*"\.cli-flags\.toml"/);
+          });
+          '''.replace(/^          /gm, ''))
+          PY
+
+      - name: Install and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npm run check
+          npm run flags:audit
+          npm test
+          node ./bin/typespec-json-schema-validator.mjs doctor --quiet
+
+      - name: Commit tested package contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- package.json README.md .zpkg.toml .zpkg.lock test/unit/package-contract.test.mjs
+          if git diff --cached --quiet; then
+            echo 'No package changes remain.'
+            exit 0
+          fi
+          git diff --cached --stat
+          git commit -m 'feat(DEN-2757): publish tjsv as a Zed CLI package'
+          git push origin HEAD:refs/heads/DEN-2757-tjsv-zed-package
