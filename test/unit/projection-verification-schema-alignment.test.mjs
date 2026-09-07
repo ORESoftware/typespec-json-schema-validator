@@ -20,7 +20,10 @@ async function schema(name) {
 test('projection policy schema publishes runtime grammars and cardinalities exactly', async () => {
   const value = await schema('projection-verification-policy.schema.json');
   assert.equal(value.$defs.identifier.pattern, IDENTIFIER_PATTERN.source);
-  assert.equal(value.$defs.output.properties.mediaType.pattern, MEDIA_TYPE_PATTERN.source);
+  assert.equal(
+    new RegExp(value.$defs.output.properties.mediaType.pattern, 'u').source,
+    MEDIA_TYPE_PATTERN.source,
+  );
   assert.equal(value.$defs.output.properties.mediaType.maxLength, 255);
   assert.equal(value.$defs.toolchain.properties.version.maxLength, 256);
   assert.equal(value.properties.expectedDeclarations.maxItems, MAX_DECLARATIONS);
