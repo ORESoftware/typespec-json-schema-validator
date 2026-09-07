@@ -10,3 +10,4 @@ export {
   projectionManifestDigest,
   verifyProjectionManifest,
 } from './verify.mjs';
+export { verifyProjectionManifestWithCurrentFiles } from './current-files.mjs';
