@@ -72,30 +72,20 @@ export function unescapeJsonPointerSegment(value) {
   return String(value).replaceAll('~1', '/').replaceAll('~0', '~');
 }
 
-function declarationRef(name) {
-  return `urn:tsjsv:declaration:${name}`;
-}
-
 export function normalizeRef(reference) {
   if (typeof reference !== 'string') {
     return reference;
   }
   if (reference.startsWith('#/definitions/')) {
-    return declarationRef(reference.slice('#/definitions/'.length));
-  }
-  if (reference.startsWith('#/$defs/')) {
-    return declarationRef(reference.slice('#/$defs/'.length));
+    return `#/$defs/${reference.slice('#/definitions/'.length)}`;
   }
 
-  // The official TypeSpec bundle emitter uses declaration-local files such as
-  // `User.json`, while independently authored bundles commonly use
-  // `#/$defs/User`. At declaration-comparison time both spellings identify the
-  // same mapped top-level declaration. Paths, URLs, query strings, and nested
-  // fragments remain untouched because their resolution semantics may differ.
-  const localFile = /^(?:\.\/)?([^/#?]+)\.json$/.exec(reference);
-  if (localFile) {
-    return declarationRef(localFile[1]);
-  }
+  // Preserve every other runtime-resolvable spelling. In particular, local
+  // declaration files and bundled $defs references are not interchangeable
+  // while a schema document is being executed as a validator. Rewriting them
+  // to a synthetic identity here would make the differential lane refuse
+  // otherwise valid references. Cross-lane declaration mapping belongs in the
+  // inventory/comparison layer, not in executable schema documents.
   return reference;
 }
 
