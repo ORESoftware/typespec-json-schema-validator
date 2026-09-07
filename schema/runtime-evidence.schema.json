@@ -2,16 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/runtime-evidence/v1",
   "title": "TypeSpec JSON Schema validator runtime evidence",
-  "description": "Non-authoritative, exact-input evidence emitted by language/runtime validator adapters and bound to one verified parity-approved Contract IR. Raw stdout, stderr, payloads, and credentials are intentionally outside this format.",
+  "description": "Non-authoritative, exact-input evidence emitted by language/runtime validator adapters and bound to a freshly verified parity-approved Contract IR. Raw stdout, stderr, payloads, and credentials are intentionally outside this format.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "contractIr", "inputDigest", "corpusDigest", "adapters"],
+  "required": ["schema", "contractIrId", "inputDigest", "corpusDigest", "adapters"],
   "properties": {
     "schema": {
       "const": "ores.typespec-json-schema-validator.runtime-evidence/v1"
     },
-    "contractIr": {
-      "$ref": "#/$defs/contractIrBinding"
+    "contractIrId": {
+      "$ref": "#/$defs/sha256"
     },
     "inputDigest": {
       "$ref": "#/$defs/sha256"
@@ -44,32 +44,6 @@
       "minLength": 1,
       "maxLength": 512,
       "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
-    },
-    "contractIrBinding": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["schema", "irId", "parityReceipt"],
-      "properties": {
-        "schema": {
-          "const": "ores.typespec-json-schema-validator.contract-ir/v1"
-        },
-        "irId": {
-          "$ref": "#/$defs/sha256"
-        },
-        "parityReceipt": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["runId", "digest"],
-          "properties": {
-            "runId": {
-              "$ref": "#/$defs/sha256"
-            },
-            "digest": {
-              "$ref": "#/$defs/sha256"
-            }
-          }
-        }
-      }
     },
     "adapter": {
       "type": "object",

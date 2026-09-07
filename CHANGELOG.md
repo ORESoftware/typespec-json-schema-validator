@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- Exact-input, deterministic cross-runtime validator evidence admission for Zod, Serde-backed Rust validators, Dart/Freezed, and future adapters, including exact Contract IR and parity-receipt binding, strict Draft 2020-12 evidence and decision schemas, bounded non-symbolic-link loading, fail-closed adapter/corpus/digest checks, and cross-adapter divergence findings.
+- Exact-input, deterministic cross-runtime validator evidence admission for Zod, Serde-backed Rust validators, Dart/Freezed, and future adapters, with a strict Draft 2020-12 receipt schema, bounded non-symbolic-link loading, fail-closed adapter/corpus/digest checks, and cross-adapter divergence findings.
 - Deterministic SARIF 2.1.0 presentation output through `--sarif`, the composite action, and the public JavaScript API.
 - Stable `TSJSV.<source-rule-id>` descriptors, existing SHA-256 finding fingerprints, bounded source/JSON Pointer locations, and failed-run results.
 - Safe SARIF persistence that replaces only validator-owned output and refuses unrelated files, symbolic links, and multiply linked targets.
@@ -18,13 +18,13 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Runtime conformance now consumes the actual verified Contract IR and records a dedicated `runtime-conformance-report/v1` decision instead of reusing the adapter-evidence schema identifier.
+- Runtime adapter evidence now names the exact Contract IR self-digest, exact parity receipt run id, and corpus digest; admission requires a fresh Contract IR verification against current checked-out inputs and rejects cases targeting declarations outside the admitted IR.
 - A requested Contract IR now requires direct declaration inventory, generated-witness comparison, differential validation, zero findings, and unchanged input digests.
 - Stopped and failed runs replace prior validator-owned IR with a non-admissible tombstone so stale green artifacts cannot survive beside red receipts.
 
 ### Security
 
-- Runtime evidence cannot pass by copying a stale green identifier: the comparator checks the Contract IR canonical self-digest, current verification result, supplied/computed/expected IR identities, and parity-receipt run and digest before evaluating adapter verdicts.
+- Runtime conformance findings expose only bounded status metadata and digests from Contract IR verification, never arbitrary verification errors or Contract IR payload content.
 - Contract IR publication is atomic, self-digest checked, and refuses unrelated files, symbolic links, non-regular files, and multiply linked destinations.
 
 ## 0.1.0 — 2026-09-05
