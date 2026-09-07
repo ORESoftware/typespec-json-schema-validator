@@ -1,5 +1,10 @@
 import { canonicalStringify } from './canonical.mjs';
 import { loadCliConfiguration, CliUsageError } from './cli-config.mjs';
+import {
+  buildContractIr,
+  buildContractIrTombstone,
+  writeContractIr,
+} from './contract-ir.mjs';
 import { emitTypeSpecJsonSchema, resolveTspBinary, toolVersion } from './emitter.mjs';
 import {
   EXIT_CODES,
@@ -38,10 +43,27 @@ async function doctor(configuration) {
   return result.status === 'passed' ? EXIT_CODES.passed : EXIT_CODES.failed;
 }
 
+async function writeContractIrArtifact(configuration, report) {
+  if (!configuration.contractIr) return null;
+  const contractIr = report.status === 'passed'
+    ? await buildContractIr({
+      report,
+      typespec: configuration.typespec,
+      generatedSchema:
+        configuration.command === 'check'
+          ? report.inputs.generatedJsonSchema.input
+          : configuration.generatedSchema,
+      authoredSchema: configuration.authoredSchema,
+    })
+    : buildContractIrTombstone(report);
+  return writeContractIr(configuration.contractIr, contractIr);
+}
+
 async function writeRunArtifacts(configuration, report) {
   const reportPath = await writeReport(configuration.report, report);
   const sarifPath = configuration.sarif ? await writeSarif(configuration.sarif, report) : null;
-  return { reportPath, sarifPath };
+  const contractIrPath = await writeContractIrArtifact(configuration, report);
+  return { reportPath, sarifPath, contractIrPath };
 }
 
 export async function main(argv = process.argv) {
@@ -103,11 +125,12 @@ export async function main(argv = process.argv) {
       validate: runValidate,
     };
     const report = await runners[configuration.command](configuration);
-    const { reportPath, sarifPath } = await writeRunArtifacts(configuration, report);
+    const { reportPath, sarifPath, contractIrPath } = await writeRunArtifacts(configuration, report);
     if (!configuration.quiet) {
       process.stdout.write(renderHumanSummary(report));
       process.stdout.write(`report: ${reportPath}\n`);
       if (sarifPath) process.stdout.write(`sarif: ${sarifPath}\n`);
+      if (contractIrPath) process.stdout.write(`contract-ir: ${contractIrPath}\n`);
     }
     return EXIT_CODES[report.status];
   } catch (error) {
@@ -126,6 +149,11 @@ export async function main(argv = process.argv) {
       (error instanceof CliUsageError ? error.details?.sarif : undefined) ??
       process.env.TSJSV_SARIF ??
       undefined;
+    const contractIrPath =
+      configuration?.contractIr ??
+      (error instanceof CliUsageError ? error.details?.contractIr : undefined) ??
+      process.env.TSJSV_CONTRACT_IR ??
+      undefined;
     try {
       await writeReport(reportPath, report);
     } catch (writeError) {
@@ -136,6 +164,16 @@ export async function main(argv = process.argv) {
         await writeSarif(sarifPath, report);
       } catch (writeError) {
         process.stderr.write(`could not write failure SARIF: ${writeError.message}\n`);
+      }
+    }
+    if (contractIrPath) {
+      try {
+        await writeContractIr(
+          contractIrPath,
+          buildContractIrTombstone(report, 'validator-run-or-contract-ir-export-failed'),
+        );
+      } catch (writeError) {
+        process.stderr.write(`could not write failure Contract IR tombstone: ${writeError.message}\n`);
       }
     }
     process.stderr.write(renderHumanSummary(report));

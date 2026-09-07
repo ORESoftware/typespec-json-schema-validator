@@ -11,6 +11,19 @@ All notable changes to this project are documented in this file.
 - Stable `TSJSV.<source-rule-id>` descriptors, existing SHA-256 finding fingerprints, bounded source/JSON Pointer locations, and failed-run results.
 - Safe SARIF persistence that replaces only validator-owned output and refuses unrelated files, symbolic links, and multiply linked targets.
 - GitHub code-scanning guidance and redaction tests that keep schema values, witnesses, remote URIs, hostnames, and timestamps out of SARIF.
+- Digest-bound `ores.typespec-json-schema-validator.contract-ir/v1` export through `--contract-ir` / `--emit-ir` and the public JavaScript API.
+- Exact receipt, source-lane, declaration, source-pointer, toolchain, coverage, and per-schema digest provenance for downstream generators.
+- Contract IR verification APIs and a published Draft 2020-12 artifact schema.
+- Opt-in `contract_ir` support in the reusable GitHub Action.
+
+### Changed
+
+- A requested Contract IR now requires direct declaration inventory, generated-witness comparison, differential validation, zero findings, and unchanged input digests.
+- Stopped and failed runs replace prior validator-owned IR with a non-admissible tombstone so stale green artifacts cannot survive beside red receipts.
+
+### Security
+
+- Contract IR publication is atomic, self-digest checked, and refuses unrelated files, symbolic links, non-regular files, and multiply linked destinations.
 
 ## 0.1.0 — 2026-09-05
 

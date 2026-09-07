@@ -9,6 +9,17 @@ export {
   normalizeSchemaNodeForComparison,
   sha256,
 } from './canonical.mjs';
+export {
+  CONTRACT_IR_SCHEMA,
+  CONTRACT_IR_VERIFICATION_SCHEMA,
+  buildContractIr,
+  buildContractIrTombstone,
+  createContractIr,
+  verifyContractIr,
+  verifyContractIrEvidence,
+  writeContractIr,
+} from './contract-ir.mjs';
+export { UnsafeContractIrDestinationError, writeContractIrFile } from './contract-ir-file.mjs';
 export { emitTypeSpecJsonSchema, runCommand, toolVersion } from './emitter.mjs';
 export {
   extractSchemaDeclarations,
