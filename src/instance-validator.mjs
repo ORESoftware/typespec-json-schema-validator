@@ -14,6 +14,8 @@
  */
 
 import { isPlainObject, escapeJsonPointerSegment, unescapeJsonPointerSegment } from './canonical.mjs';
+import { registerSchemaUri } from './schema-uri-index.mjs';
+export { SchemaIdentityError } from './schema-uri-index.mjs';
 
 /** Synthetic base authority used when a schema document declares no absolute `$id`. */
 const SYNTHETIC_BASE = 'https://tsjsv.invalid/';
@@ -215,15 +217,20 @@ export class SchemaResolver {
     const fallbackBase = `${SYNTHETIC_BASE}${index}/${encodeURIComponent(path ?? `document-${index}`)}`;
     const rootBase = declaredId ? resolveUri(declaredId, fallbackBase) ?? fallbackBase : fallbackBase;
     const record = { path, document, base: rootBase };
+    // A rejected bundle must not leave new resources, anchors or document slots.
+    const pending = new Map();
+    registerSchemaUri(pending, this.#byUri, rootBase.split('#')[0], {
+      schema: document, base: rootBase, record, pointer: '#',
+    });
+    this.#register(document, rootBase, rootBase, '#', record, pending);
+    for (const [uri, entry] of pending) this.#byUri.set(uri, entry);
     this.#documents.push(record);
-    this.#byUri.set(rootBase.split('#')[0], { schema: document, base: rootBase, record });
-    this.#register(document, rootBase, rootBase, '#', record);
     return record;
   }
 
-  #register(node, base, rootBase, pointer, record) {
+  #register(node, base, rootBase, pointer, record, pending) {
     if (typeof node === 'boolean') {
-      this.#byUri.set(`${base}#${pointer === '#' ? '' : pointer.slice(1)}`, { schema: node, base, record });
+      registerSchemaUri(pending, this.#byUri, `${base}#${pointer === '#' ? '' : pointer.slice(1)}`, { schema: node, base, record, pointer });
       return;
     }
     if (!isPlainObject(node)) {
@@ -234,29 +241,27 @@ export class SchemaResolver {
       const resolved = resolveUri(node.$id, base);
       if (resolved) {
         currentBase = resolved.split('#')[0];
-        this.#byUri.set(currentBase, { schema: node, base: currentBase, record });
+        registerSchemaUri(pending, this.#byUri, currentBase, { schema: node, base: currentBase, record, pointer });
       }
     }
     const pointerUri = `${rootBase}#${pointer === '#' ? '' : pointer.slice(1)}`;
-    if (!this.#byUri.has(pointerUri)) {
-      this.#byUri.set(pointerUri, { schema: node, base: currentBase, record });
-    }
+    registerSchemaUri(pending, this.#byUri, pointerUri, { schema: node, base: currentBase, record, pointer });
     if (typeof node.$anchor === 'string') {
-      this.#byUri.set(`${currentBase}#${node.$anchor}`, { schema: node, base: currentBase, record });
+      registerSchemaUri(pending, this.#byUri, `${currentBase}#${node.$anchor}`, { schema: node, base: currentBase, record, pointer });
     }
 
     for (const [key, child] of Object.entries(node)) {
       const childPointer = `${pointer === '#' ? '#' : pointer}/${escapeJsonPointerSegment(key)}`;
       if (SCHEMA_MAP_KEYS.has(key) && isPlainObject(child)) {
         for (const [name, subschema] of Object.entries(child)) {
-          this.#register(subschema, currentBase, rootBase, `${childPointer}/${escapeJsonPointerSegment(name)}`, record);
+          this.#register(subschema, currentBase, rootBase, `${childPointer}/${escapeJsonPointerSegment(name)}`, record, pending);
         }
       } else if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(child)) {
         for (let itemIndex = 0; itemIndex < child.length; itemIndex += 1) {
-          this.#register(child[itemIndex], currentBase, rootBase, `${childPointer}/${itemIndex}`, record);
+          this.#register(child[itemIndex], currentBase, rootBase, `${childPointer}/${itemIndex}`, record, pending);
         }
       } else if (SCHEMA_SINGLE_KEYS.has(key)) {
-        this.#register(child, currentBase, rootBase, childPointer, record);
+        this.#register(child, currentBase, rootBase, childPointer, record, pending);
       }
     }
   }
