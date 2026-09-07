@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/contract-ir-verification.v1.schema.json",
+  "title": "TypeSpec and JSON Schema Contract IR consumer verification",
+  "description": "Deterministic downstream evidence that an existing Contract IR matches its exact parity receipt and current peer-authority input closure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "verificationId",
+    "status",
+    "admissible",
+    "suppliedIrId",
+    "computedIrId",
+    "expectedIrId",
+    "receiptRunId",
+    "error"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.contract-ir-verification/v1"
+    },
+    "verificationId": {
+      "$ref": "#/$defs/digest"
+    },
+    "status": {
+      "enum": ["passed", "failed"]
+    },
+    "admissible": {
+      "type": "boolean"
+    },
+    "suppliedIrId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "computedIrId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "expectedIrId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "receiptRunId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "error": {
+      "type": ["string", "null"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "passed" }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "admissible": { "const": true },
+          "suppliedIrId": { "$ref": "#/$defs/digest" },
+          "computedIrId": { "$ref": "#/$defs/digest" },
+          "expectedIrId": { "$ref": "#/$defs/digest" },
+          "receiptRunId": { "$ref": "#/$defs/digest" },
+          "error": { "type": "null" }
+        }
+      },
+      "else": {
+        "properties": {
+          "admissible": { "const": false }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableDigest": {
+      "anyOf": [
+        { "$ref": "#/$defs/digest" },
+        { "type": "null" }
+      ]
+    }
+  }
+}
