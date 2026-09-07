@@ -233,7 +233,7 @@ env = "TSJSV_INT64_STRATEGY"
 aliases = ["int64-strategy"]
 type = "string"
 default = "string"
-help = "Official emitter int64 strategy: string or number."
+help = "Official TypeSpec JSON Schema emitter int64 strategy: string or number."
 
 [commands.generate.flags.seal-object-schemas]
 env = "TSJSV_SEAL_OBJECT_SCHEMAS"
