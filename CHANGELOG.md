@@ -6,6 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Dedicated `ores.typespec-json-schema-validator.runtime-conformance-report/v1` decision protocol, distinct from the runtime evidence envelope, with a published Draft 2020-12 schema and verified parity-receipt digest binding.
+- Safe low-level and preferred current-input helpers that derive the minimal immutable runtime-adapter receipt binding `{ contractIrId, inputDigest }` without distributing the full Contract IR or parity receipt to adapter jobs.
 - Preferred `verifyRuntimeEvidenceAgainstCurrentInputs()` admission API that recomputes Contract IR verification from the current checked-out TypeSpec, generated Schema B, authored Schema A, and retained parity receipt before comparing runtime adapter evidence.
 - Digest-bound downstream projection admission for parity-approved Contract IR, operation inventories, projection metadata/field locks, emitter configuration, pinned toolchains, exact output files, reviewed representation deltas, and executable runtime-validator coverage.
 - Exact-input, deterministic cross-runtime validator evidence admission for Zod, Serde-backed Rust validators, Dart/Freezed, and future adapters, with a strict Draft 2020-12 receipt schema, bounded non-symbolic-link loading, fail-closed adapter/corpus/digest checks, and cross-adapter divergence findings.
@@ -20,12 +22,14 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Runtime admission decisions now use their own report schema identifier and include the retained parity receipt digest only when Contract IR verification succeeded.
 - Runtime adapter evidence now names the exact Contract IR self-digest, exact parity receipt run id, and corpus digest; admission requires a fresh Contract IR verification against current checked-out inputs and rejects cases targeting declarations outside the admitted IR.
 - A requested Contract IR now requires direct declaration inventory, generated-witness comparison, differential validation, zero findings, and unchanged input digests.
 - Stopped and failed runs replace prior validator-owned IR with a non-admissible tombstone so stale green artifacts cannot survive beside red receipts.
 
 ### Security
 
+- The preferred adapter-binding API verifies the current TypeSpec, generated Schema B, authored Schema A, and parity receipt before returning receipt fields; invalid bindings expose only stable rule identifiers rather than arbitrary verifier errors or source content.
 - The preferred runtime admission path computes current-input Contract IR verification inside the same call, preventing stale verification-object reuse while reporting only bounded verification status metadata rather than arbitrary paths or internal errors.
 - Projection admission refuses copied green status strings, stale source/receipt/IR bindings, unreviewed losses, unexecuted runtime-validator claims, unmanifested outputs, traversal, symbolic links, hard links, and oversized evidence files.
 - Runtime conformance findings expose only bounded status metadata and digests from Contract IR verification, never arbitrary verification errors or Contract IR payload content.
