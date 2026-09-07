@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oresoftware.github.io/typespec-json-schema-validator/schema/projection-verification-receipt.schema.json",
+  "title": "TypeSpec JSON Schema projection verification receipt",
+  "description": "Self-digesting downstream evidence produced after checking the current peer-authority closure, projection inputs, toolchains, manifest, and output bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "verificationId",
+    "status",
+    "admissible",
+    "manifestId",
+    "contractIrId",
+    "receiptRunId",
+    "evidenceDigest",
+    "sourceDigests",
+    "summary",
+    "findingRuleIds",
+    "failureCode"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.projection-verification-receipt/v1"
+    },
+    "verificationId": { "$ref": "#/$defs/sha256" },
+    "status": {
+      "enum": ["passed", "stopped_for_evaluation", "failed"]
+    },
+    "admissible": { "type": "boolean" },
+    "manifestId": { "$ref": "#/$defs/nullableSha256" },
+    "contractIrId": { "$ref": "#/$defs/nullableSha256" },
+    "receiptRunId": { "$ref": "#/$defs/nullableSha256" },
+    "evidenceDigest": { "$ref": "#/$defs/nullableSha256" },
+    "sourceDigests": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["typespec", "generatedJsonSchema", "authoredJsonSchema"],
+          "properties": {
+            "typespec": { "$ref": "#/$defs/sha256" },
+            "generatedJsonSchema": { "$ref": "#/$defs/sha256" },
+            "authoredJsonSchema": { "$ref": "#/$defs/sha256" }
+          }
+        }
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declarations",
+        "projections",
+        "outputs",
+        "representationDeltas",
+        "runtimeValidators"
+      ],
+      "properties": {
+        "declarations": { "$ref": "#/$defs/nonNegativeInteger" },
+        "projections": { "$ref": "#/$defs/nonNegativeInteger" },
+        "outputs": { "$ref": "#/$defs/nonNegativeInteger" },
+        "representationDeltas": { "$ref": "#/$defs/nonNegativeInteger" },
+        "runtimeValidators": { "$ref": "#/$defs/nonNegativeInteger" }
+      }
+    },
+    "findingRuleIds": {
+      "type": "array",
+      "maxItems": 250,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/identifier" }
+    },
+    "failureCode": {
+      "type": ["string", "null"],
+      "enum": [
+        null,
+        "projection-verification-stopped",
+        "projection-verification-failed"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "passed" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "admissible": { "const": true },
+          "manifestId": { "$ref": "#/$defs/sha256" },
+          "contractIrId": { "$ref": "#/$defs/sha256" },
+          "receiptRunId": { "$ref": "#/$defs/sha256" },
+          "evidenceDigest": { "$ref": "#/$defs/sha256" },
+          "sourceDigests": { "type": "object" },
+          "findingRuleIds": { "maxItems": 0 },
+          "failureCode": { "const": null }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "stopped_for_evaluation" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "admissible": { "const": false },
+          "findingRuleIds": { "minItems": 1 },
+          "failureCode": { "const": "projection-verification-stopped" }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "status": { "const": "failed" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "admissible": { "const": false },
+          "failureCode": { "const": "projection-verification-failed" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableSha256": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/sha256" }
+      ]
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$"
+    },
+    "nonNegativeInteger": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}
