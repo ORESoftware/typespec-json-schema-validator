@@ -72,3 +72,13 @@ test('unknown corpus declaration still fails rather than being treated as consum
   const result = check({ type: 'integer' }, [{ declaration: 'Missing', instance: 1, expectation: 'accepted' }]);
   assert.ok(result.findings.some(item => item.ruleId === 'corpus-declaration-unknown'));
 });
+
+for (const annotation of [{ default: null }, { examples: [null] }]) {
+  test(`both lanes retain their own invalid ${Object.keys(annotation)[0]} diagnostic`, () => {
+    const result = check({ type: 'integer', ...annotation }, []);
+    const findings = result.findings.filter(item => item.ruleId === 'declared-example-rejected');
+    assert.equal(findings.length, 2);
+    assert.ok(findings.some(item => item.message.startsWith('authored declaration')));
+    assert.ok(findings.some(item => item.message.startsWith('generated declaration')));
+  });
+}
