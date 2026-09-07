@@ -7,6 +7,12 @@ import {
 } from './constants.mjs';
 import { makeProjectionFinding } from './findings.mjs';
 
+const SOURCE_LANES = Object.freeze([
+  'typespec',
+  'generatedJsonSchema',
+  'authoredJsonSchema',
+]);
+
 function digestJson(value) {
   return sha256(canonicalStringify(value));
 }
@@ -49,17 +55,52 @@ function validPassedReceipt(receipt, findings) {
       }
     }
   }
-  const lanes = ['typespec', 'generatedJsonSchema', 'authoredJsonSchema'];
   if (!isPlainObject(receipt.inputs)) {
     add(findings, 'projection-receipt-inputs-missing', '#/receipt/inputs', 'parity receipt input evidence is missing');
   } else {
-    for (const lane of lanes) {
+    for (const lane of SOURCE_LANES) {
       if (!isPlainObject(receipt.inputs[lane]) || !validDigest(receipt.inputs[lane].digest)) {
         add(findings, 'projection-receipt-input-digest-invalid', `#/receipt/inputs/${lane}/digest`, 'parity input digest is invalid');
       }
     }
   }
   return findings.length === 0;
+}
+
+function validExpectedSourceClosure(expectedSourceDigests, findings) {
+  if (!isPlainObject(expectedSourceDigests)) {
+    add(
+      findings,
+      'projection-current-source-evidence-missing',
+      '#/expectedSourceDigests',
+      'independently observed current source digests are required',
+    );
+    return false;
+  }
+  const actualKeys = Object.keys(expectedSourceDigests).sort((left, right) => left.localeCompare(right));
+  const expectedKeys = [...SOURCE_LANES].sort((left, right) => left.localeCompare(right));
+  if (canonicalStringify(actualKeys) !== canonicalStringify(expectedKeys)) {
+    add(
+      findings,
+      'projection-current-source-closure-invalid',
+      '#/expectedSourceDigests',
+      'current source evidence must contain exactly the three peer-comparison lanes',
+    );
+  }
+  let valid = actualKeys.length === expectedKeys.length
+    && actualKeys.every((key, index) => key === expectedKeys[index]);
+  for (const lane of SOURCE_LANES) {
+    if (!validDigest(expectedSourceDigests[lane])) {
+      valid = false;
+      add(
+        findings,
+        'projection-current-source-digest-invalid',
+        `#/expectedSourceDigests/${lane}`,
+        'current source digest must be a lowercase SHA-256 digest',
+      );
+    }
+  }
+  return valid;
 }
 
 function verifyDeclarationDigests(contractIr, findings) {
@@ -101,6 +142,7 @@ function verifyDeclarationDigests(contractIr, findings) {
 export function verifyProjectionContract({ contractIr, parityReceipt, expectedSourceDigests } = {}) {
   const findings = [];
   validPassedReceipt(parityReceipt, findings);
+  const currentSourceClosureValid = validExpectedSourceClosure(expectedSourceDigests, findings);
   if (!isPlainObject(contractIr)) {
     add(findings, 'projection-contract-ir-invalid', '#/contractIr', 'Contract IR must be an object');
     return Object.freeze({ binding: null, declarationIds: Object.freeze([]), findings: Object.freeze(findings) });
@@ -161,7 +203,7 @@ export function verifyProjectionContract({ contractIr, parityReceipt, expectedSo
     generatedJsonSchema: 'comparison-evidence-only',
     authoredJsonSchema: 'independently-authored-authority',
   };
-  for (const lane of Object.keys(sourceDigests)) {
+  for (const lane of SOURCE_LANES) {
     if (!validDigest(sourceDigests[lane])) {
       add(findings, 'projection-contract-source-digest-invalid', `#/contractIr/provenance/${lane}/digest`, 'Contract IR source digest is invalid');
     }
@@ -171,7 +213,7 @@ export function verifyProjectionContract({ contractIr, parityReceipt, expectedSo
     if (parityReceipt?.inputs?.[lane]?.digest !== sourceDigests[lane]) {
       add(findings, 'projection-contract-source-receipt-mismatch', `#/contractIr/provenance/${lane}/digest`, 'Contract IR source digest does not match the parity receipt');
     }
-    if (expectedSourceDigests?.[lane] !== undefined && expectedSourceDigests[lane] !== sourceDigests[lane]) {
+    if (currentSourceClosureValid && expectedSourceDigests[lane] !== sourceDigests[lane]) {
       add(findings, 'projection-contract-current-source-mismatch', `#/expectedSourceDigests/${lane}`, 'checked-out source closure no longer matches the Contract IR');
     }
   }
