@@ -17,7 +17,7 @@ trusted recorded instance corpus ---------------------.           |
                                 contractIrId + receipt runId + corpus digest
                                                        |
                                                        v
-                                          compareRuntimeEvidence()
+                        verifyRuntimeEvidenceAgainstCurrentInputs()
 ```
 
 A runtime pass requires all of the following:
@@ -25,7 +25,7 @@ A runtime pass requires all of the following:
 - the supplied Contract IR is self-digest-valid, passed, non-editable, and admissible;
 - its authority roles still identify TypeSpec and JSON Schema as independent peers and generated JSON Schema as comparison evidence only;
 - its retained parity receipt and all three source-lane provenance digests are present;
-- a fresh `verifyContractIr()` or `verifyContractIrEvidence()` result proves the IR against the retained receipt and current checked-out source inputs;
+- the Contract IR is recomputed and verified against the retained receipt and the current checked-out source inputs immediately before runtime evidence is admitted;
 - adapter evidence names the exact verified `contractIrId`;
 - adapter evidence `inputDigest` equals the exact parity receipt `runId` for the authority, configuration, and toolchain closure;
 - adapter evidence is bound to the exact recorded corpus by `corpusDigest`;
@@ -77,36 +77,28 @@ The JSON format is defined by `schema/runtime-evidence.schema.json`. It delibera
 
 The trusted caller supplies case expectations separately. Adapter-authored `expected` fields are intentionally rejected by the JSON Schema because an adapter must not grade its own output.
 
-## Required verification sequence
+## Preferred current-input admission API
 
-Verify the Contract IR over the current checkout immediately before admitting runtime evidence:
+Use `verifyRuntimeEvidenceAgainstCurrentInputs()` whenever the current source files are available. It invokes `verifyContractIr()` internally immediately before comparison, so a caller cannot accidentally reuse a verification object retained from an earlier checkout.
 
 ```js
+import { readFile } from 'node:fs/promises';
 import {
-  verifyContractIr,
-} from '@oresoftware/typespec-json-schema-validator';
-import {
-  compareRuntimeEvidence,
   loadRuntimeEvidence,
+  verifyRuntimeEvidenceAgainstCurrentInputs,
 } from '@oresoftware/typespec-json-schema-validator/runtime-conformance';
 
 const parityReport = JSON.parse(await readFile('./artifacts/parity-report.json', 'utf8'));
 const contractIr = JSON.parse(await readFile('./artifacts/contract-ir.json', 'utf8'));
 const runtimeEvidence = await loadRuntimeEvidence('./artifacts/runtime-evidence.json');
 
-const contractIrVerification = await verifyContractIr({
+const report = await verifyRuntimeEvidenceAgainstCurrentInputs({
+  evidence: runtimeEvidence,
   contractIr,
-  report: parityReport,
+  parityReport,
   typespec: './idl/typespec/main.tsp',
   generatedSchema: './artifacts/generated-json-schema',
   authoredSchema: './json-schema',
-});
-
-const report = compareRuntimeEvidence({
-  evidence: runtimeEvidence,
-  contractIr,
-  contractIrVerification,
-  expectedInputDigest: parityReport.runId,
   expectedCorpusDigest,
   expectedCases: [
     {
@@ -132,7 +124,38 @@ if (report.status !== 'passed') {
 }
 ```
 
-Do not persist and reuse a prior verification result after changing the receipt, TypeSpec input closure, generated Schema B, authored Schema A, mapping/configuration, or toolchain. `verifyContractIr()` recomputes the expected IR from those current inputs; runtime admission checks that its supplied, computed, and expected IR ids all match.
+The three source paths may be omitted only when the retained parity report contains their exact current paths. Explicit paths are preferable in CI because they make the checkout boundary visible at the call site.
+
+Changing the receipt, TypeSpec input closure, generated Schema B, authored Schema A, mapping/configuration, toolchain, or Contract IR causes the internally computed verification to fail. Missing or unreadable current inputs also stop evaluation. Those failures do not echo arbitrary filesystem paths, schema values, or internal verifier error text into deterministic runtime findings.
+
+## Low-level orchestration API
+
+`compareRuntimeEvidence()` remains available for a trusted orchestrator that has already called `verifyContractIr()` or `verifyContractIrEvidence()` over the exact current inputs and wants to retain that verification object as separate evidence.
+
+```js
+import { verifyContractIr } from '@oresoftware/typespec-json-schema-validator';
+import { compareRuntimeEvidence } from '@oresoftware/typespec-json-schema-validator/runtime-conformance';
+
+const contractIrVerification = await verifyContractIr({
+  contractIr,
+  report: parityReport,
+  typespec: './idl/typespec/main.tsp',
+  generatedSchema: './artifacts/generated-json-schema',
+  authoredSchema: './json-schema',
+});
+
+const report = compareRuntimeEvidence({
+  evidence: runtimeEvidence,
+  contractIr,
+  contractIrVerification,
+  expectedInputDigest: parityReport.runId,
+  expectedCorpusDigest,
+  expectedCases,
+  requiredAdapters,
+});
+```
+
+Do not persist and reuse a prior verification result after any source, receipt, mapping, configuration, or toolchain change. Runtime admission checks that its supplied, computed, and expected IR ids all match, but the preferred API eliminates this lifecycle footgun by creating the verification result inside the admission call.
 
 ## Corpus boundary
 
