@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { assertFindingLimit } from './finding-limit.mjs';
 
 // Context is essential: keys inside properties/$defs name declarations, while
 // const/enum/default/examples contain JSON data, not nested schemas.
@@ -285,6 +286,7 @@ export function resolveJsonPointer(document, pointer) {
 
 export function deepDiff(left, right, options = {}) {
   const maxFindings = options.maxFindings ?? 250;
+  assertFindingLimit(maxFindings);
   const differences = [];
 
   function visit(a, b, pointer) {
