@@ -2,13 +2,16 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/runtime-evidence/v1",
   "title": "TypeSpec JSON Schema validator runtime evidence",
-  "description": "Non-authoritative, exact-input evidence emitted by language/runtime validator adapters. Raw stdout, stderr, payloads, and credentials are intentionally outside this format.",
+  "description": "Non-authoritative, exact-input evidence emitted by language/runtime validator adapters and bound to a freshly verified parity-approved Contract IR. Raw stdout, stderr, payloads, and credentials are intentionally outside this format.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "inputDigest", "corpusDigest", "adapters"],
+  "required": ["schema", "contractIrId", "inputDigest", "corpusDigest", "adapters"],
   "properties": {
     "schema": {
       "const": "ores.typespec-json-schema-validator.runtime-evidence/v1"
+    },
+    "contractIrId": {
+      "$ref": "#/$defs/sha256"
     },
     "inputDigest": {
       "$ref": "#/$defs/sha256"
