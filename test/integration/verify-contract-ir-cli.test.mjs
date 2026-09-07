@@ -138,3 +138,24 @@ test('verify-ir usage failures never reinterpret the Contract IR input as an out
   assert.equal(verification.status, 'failed');
   assert.equal(verification.admissible, false);
 });
+
+test('usage failure preserves a separately supplied verification destination', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-verify-ir-usage-spaced-'));
+  const contractIrPath = join(temp, 'contract-ir.json');
+  await writeFile(contractIrPath, '{"immutable":true}\n');
+  const verificationPath = join(temp, 'spaced-verification.json');
+  const result = await run([
+    'verify-ir',
+    `--contract-ir=${contractIrPath}`,
+    `--typespec=${resolve(fixtures, 'pass/main.tsp')}`,
+    `--generated-schema=${resolve(fixtures, 'equivalent/generated.schema.json')}`,
+    `--schema=${resolve(fixtures, 'pass/authored.schema.json')}`,
+    '--verification',
+    verificationPath,
+    '--quiet',
+  ]);
+  assert.equal(result.code, 3);
+  const verification = JSON.parse(await readFile(verificationPath, 'utf8'));
+  assert.equal(verification.status, 'failed');
+  assert.equal(verification.admissible, false);
+});
