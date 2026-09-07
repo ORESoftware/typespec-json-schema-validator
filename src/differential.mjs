@@ -253,10 +253,12 @@ export function crossValidate({
 
     for (const probe of probes) {
       const encoding = canonicalStringify(probe.instance);
-      // Corpus files carry independent expectations and source provenance.
-      // A synthesized value (or another file with the same JSON) must never
-      // suppress that obligation. Only synthesized probes are value-deduped.
-      if (probe.origin !== 'corpus' && seen.has(encoding)) {
+      // Equal JSON values do not make independent expectations interchangeable.
+      // A synthetic probe may precede a contradictory fixture, and every corpus
+      // source must retain its own diagnostic even when another source is equal.
+      const carriesExpectation = probe.origin === 'corpus'
+        || probe.origin.startsWith('declared-example') || probe.origin === 'declared-default';
+      if (!carriesExpectation && seen.has(encoding)) {
         continue;
       }
       seen.add(encoding);
