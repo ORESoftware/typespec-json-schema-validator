@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- First-class `verify-ir` CLI admission that recomputes canonical Contract IR verification from the exact retained parity receipt, current TypeSpec/generated/authored input closure, and complete expected declaration scope.
+- A distinct, self-digesting `consumer-verification-receipt/v1` artifact, closed Draft 2020-12 schema, and atomic safe writer for durable downstream admission evidence.
+- The existing scope-aware `actions/verify-contract-ir` consumer action now publishes the same deterministic receipt instead of returning only transient console output.
 - Dedicated `ores.typespec-json-schema-validator.runtime-conformance-report/v1` decision protocol, distinct from the runtime evidence envelope, with a published Draft 2020-12 schema and verified parity-receipt digest binding.
 - Safe low-level and preferred current-input helpers that derive the minimal immutable runtime-adapter receipt binding `{ contractIrId, inputDigest }` without distributing the full Contract IR or parity receipt to adapter jobs.
 - Preferred `verifyRuntimeEvidenceAgainstCurrentInputs()` admission API that recomputes Contract IR verification from the current checked-out TypeSpec, generated Schema B, authored Schema A, and retained parity receipt before comparing runtime adapter evidence.
@@ -22,6 +25,8 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
+- Consumer verification now binds the complete sorted declaration inventory into durable evidence and uses a schema identifier distinct from the canonical in-memory Contract IR verification result.
+- Contract IR and parity receipts are immutable inputs to `verify-ir`; usage, parse, stale-input, or evidence failures write only the separate consumer receipt and never reinterpret `--contract-ir` as an output tombstone.
 - Runtime admission decisions now use their own report schema identifier and include the retained parity receipt digest only when Contract IR verification succeeded.
 - Runtime adapter evidence now names the exact Contract IR self-digest, exact parity receipt run id, and corpus digest; admission requires a fresh Contract IR verification against current checked-out inputs and rejects cases targeting declarations outside the admitted IR.
 - A requested Contract IR now requires direct declaration inventory, generated-witness comparison, differential validation, zero findings, and unchanged input digests.
@@ -29,6 +34,8 @@ All notable changes to this project are documented in this file.
 
 ### Security
 
+- Consumer receipt persistence replaces only validator-owned, self-consistent output and refuses unrelated files, symbolic links, non-regular files, multiply linked targets, and destination races; failed receipts contain only a bounded failure code.
+- The consumer action requires singly linked, non-symbolic-link Contract IR and report files, keeps all resolved inputs and output parents inside the checked-out workspace, and emits failed evidence before returning nonzero.
 - The preferred adapter-binding API verifies the current TypeSpec, generated Schema B, authored Schema A, and parity receipt before returning receipt fields; invalid bindings expose only stable rule identifiers rather than arbitrary verifier errors or source content.
 - The preferred runtime admission path computes current-input Contract IR verification inside the same call, preventing stale verification-object reuse while reporting only bounded verification status metadata rather than arbitrary paths or internal errors.
 - Projection admission refuses copied green status strings, stale source/receipt/IR bindings, unreviewed losses, unexecuted runtime-validator claims, unmanifested outputs, traversal, symbolic links, hard links, and oversized evidence files.

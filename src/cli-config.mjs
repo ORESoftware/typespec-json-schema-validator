@@ -1,6 +1,5 @@
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
 import { parseStructured } from '@oresoftware/f2e';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -77,17 +76,20 @@ export function loadCliConfiguration(argv = process.argv) {
     };
   }
   const env = mergedEnvironment(parsed);
+  const parsedCommand = parsed.command || env.TSJSV_COMMAND || '';
   if (parsed.unknownOptions.length > 0 || parsed.errors.length > 0) {
     throw new CliUsageError('flags-2-env rejected the command line', {
+      command: parsedCommand,
       unknownOptions: parsed.unknownOptions,
       errors: parsed.errors,
-      // Preserve requested artifact destinations even when normal command construction fails.
       report: env.TSJSV_REPORT || undefined,
       sarif: env.TSJSV_SARIF || undefined,
       contractIr: env.TSJSV_CONTRACT_IR || undefined,
+      parityReceipt: env.TSJSV_PARITY_RECEIPT || undefined,
+      verification: env.TSJSV_VERIFICATION || undefined,
     });
   }
-  const command = parsed.command || env.TSJSV_COMMAND || '';
+  const command = parsedCommand;
   const common = {
     command,
     report: env.TSJSV_REPORT || '.typespec-json-schema-validator/report.json',
@@ -149,6 +151,23 @@ export function loadCliConfiguration(argv = process.argv) {
         sealObjectSchemas: booleanValue(env.TSJSV_SEAL_OBJECT_SCHEMAS, true),
         polymorphicModelsStrategy: env.TSJSV_POLYMORPHIC_MODELS_STRATEGY || 'oneOf',
       });
+    case 'verify-ir':
+      return {
+        ...common,
+        contractIr: required(env, 'TSJSV_CONTRACT_IR', '--contract-ir'),
+        parityReceipt: required(env, 'TSJSV_PARITY_RECEIPT', '--parity-receipt'),
+        typespec: required(env, 'TSJSV_TYPESPEC', '--typespec'),
+        authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
+        generatedSchema: required(env, 'TSJSV_GENERATED_SCHEMA', '--generated-schema'),
+        expectedDeclarations: required(
+          env,
+          'TSJSV_EXPECTED_DECLARATIONS',
+          '--expected-declarations',
+        ),
+        verification:
+          env.TSJSV_VERIFICATION
+          || '.typespec-json-schema-validator/consumer-verification.json',
+      };
     case 'doctor':
       return common;
     case '':
@@ -158,6 +177,6 @@ export function loadCliConfiguration(argv = process.argv) {
         printHelp: () => parsed.printTable(),
       };
     default:
-      throw new CliUsageError(`unsupported command: ${command}`);
+      throw new CliUsageError(`unsupported command: ${command}`, { command });
   }
 }

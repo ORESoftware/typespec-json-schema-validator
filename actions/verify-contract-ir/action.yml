@@ -1,5 +1,5 @@
 name: Verify parity-approved Contract IR for a downstream consumer
-description: Rebuild and verify retained Contract IR against explicit current source paths and the complete expected declaration inventory.
+description: Rebuild and verify retained Contract IR against explicit current source paths and the complete expected declaration inventory, then publish a self-digesting receipt.
 inputs:
   contract_ir:
     description: Retained Contract IR file in the checked-out workspace.
@@ -19,6 +19,14 @@ inputs:
   expected_declarations:
     description: JSON array of every qualified TypeSpec declaration ID this consumer expects. Empty or partial scopes fail.
     required: true
+  verification:
+    description: Workspace-relative path for the deterministic consumer verification receipt.
+    required: false
+    default: .typespec-json-schema-validator/consumer-verification.json
+outputs:
+  verification:
+    description: Consumer verification receipt path.
+    value: ${{ inputs.verification }}
 runs:
   using: composite
   steps:
@@ -26,7 +34,7 @@ runs:
       shell: bash
       working-directory: ${{ github.action_path }}/../..
       run: npm ci --omit=dev
-    - name: Verify actual receipt, input closure, IR digest, and declaration scope
+    - name: Verify receipt, current inputs, IR digest, and complete consumer scope
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
@@ -36,4 +44,5 @@ runs:
         TSJSV_VERIFY_AUTHORED: ${{ inputs.schema }}
         TSJSV_VERIFY_GENERATED: ${{ inputs.generated_schema }}
         TSJSV_VERIFY_DECLARATIONS: ${{ inputs.expected_declarations }}
+        TSJSV_VERIFY_VERIFICATION: ${{ inputs.verification }}
       run: node "${GITHUB_ACTION_PATH}/../../scripts/verify-consumer.mjs"
