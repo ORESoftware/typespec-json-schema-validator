@@ -9,6 +9,33 @@ const SET_LIKE_ARRAY_KEYS = new Set([
   'type',
 ]);
 
+// These keywords do not assert whether an instance is valid. They may still be
+// essential while executing a schema: $id builds the resource graph, examples
+// and defaults seed probes, and title can identify a root declaration. They are
+// therefore removed only by the comparison-specific normalizer below.
+const NON_ASSERTION_METADATA_KEYS = new Set([
+  '$comment',
+  '$id',
+  '$schema',
+  'default',
+  'deprecated',
+  'description',
+  'examples',
+  'readOnly',
+  'title',
+  'writeOnly',
+]);
+
+const EXECUTABLE_NORMALIZATION = Object.freeze({
+  stripMetadata: false,
+  normalizeReference: normalizeRef,
+});
+
+const COMPARISON_NORMALIZATION = Object.freeze({
+  stripMetadata: true,
+  normalizeReference: normalizeComparisonRef,
+});
+
 export function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -55,12 +82,46 @@ export function unescapeJsonPointerSegment(value) {
   return String(value).replaceAll('~1', '/').replaceAll('~0', '~');
 }
 
+function declarationRef(name) {
+  return `urn:tsjsv:declaration:${name}`;
+}
+
+/**
+ * Normalize references without changing runtime resolution semantics.
+ */
 export function normalizeRef(reference) {
   if (typeof reference !== 'string') {
     return reference;
   }
   if (reference.startsWith('#/definitions/')) {
     return `#/$defs/${reference.slice('#/definitions/'.length)}`;
+  }
+  return reference;
+}
+
+/**
+ * Normalize only references that identify a mapped top-level declaration.
+ * This representation is for cross-authority comparison and must never be
+ * installed into a schema document that will be executed as a validator.
+ */
+export function normalizeComparisonRef(reference) {
+  if (typeof reference !== 'string') {
+    return reference;
+  }
+  if (reference.startsWith('#/definitions/')) {
+    return declarationRef(reference.slice('#/definitions/'.length));
+  }
+  if (reference.startsWith('#/$defs/')) {
+    return declarationRef(reference.slice('#/$defs/'.length));
+  }
+
+  // The official TypeSpec bundle emitter uses declaration-local files such as
+  // `User.json`, while independently authored bundles commonly use
+  // `#/$defs/User`. Paths, URLs, query strings, and nested fragments remain
+  // untouched because their resolution semantics may differ.
+  const localFile = /^(?:\.\/)?([^/#?]+)\.json$/.exec(reference);
+  if (localFile) {
+    return declarationRef(localFile[1]);
   }
   return reference;
 }
@@ -103,13 +164,13 @@ function canCollapseSimpleTypeUnion(value) {
   return { type: types.sort() };
 }
 
-export function normalizeSchemaNode(value, parentKey = '') {
+function normalizeSchemaNodeWith(value, parentKey, options) {
   if (value === true || value === false || value === null || typeof value !== 'object') {
     return value;
   }
 
   if (Array.isArray(value)) {
-    const normalized = value.map((item) => normalizeSchemaNode(item, ''));
+    const normalized = value.map((item) => normalizeSchemaNodeWith(item, '', options));
     if (SET_LIKE_ARRAY_KEYS.has(parentKey)) {
       const byEncoding = new Map();
       for (const item of normalized) {
@@ -128,33 +189,56 @@ export function normalizeSchemaNode(value, parentKey = '') {
 
   const result = {};
   for (const key of Object.keys(value).sort()) {
-    let targetKey = key;
-    if (key === 'definitions') {
-      targetKey = '$defs';
+    if (options.stripMetadata && NON_ASSERTION_METADATA_KEYS.has(key)) {
+      continue;
     }
+    const targetKey = key === 'definitions' ? '$defs' : key;
     let child = value[key];
     if (targetKey === '$ref') {
-      child = normalizeRef(child);
+      child = options.normalizeReference(child);
     }
-    result[targetKey] = normalizeSchemaNode(child, targetKey);
+    result[targetKey] = normalizeSchemaNodeWith(child, targetKey, options);
   }
 
   const collapsed = canCollapseSimpleTypeUnion(result);
   return collapsed ?? result;
 }
 
-export function normalizeSchemaDocument(document) {
+/**
+ * Normalize a schema while retaining every value needed for execution,
+ * resource resolution, declaration inference, and probe generation.
+ */
+export function normalizeSchemaNode(value, parentKey = '') {
+  return normalizeSchemaNodeWith(value, parentKey, EXECUTABLE_NORMALIZATION);
+}
+
+/**
+ * Normalize a schema for semantic cross-authority comparison only.
+ */
+export function normalizeSchemaNodeForComparison(value, parentKey = '') {
+  return normalizeSchemaNodeWith(value, parentKey, COMPARISON_NORMALIZATION);
+}
+
+function normalizeSchemaDocumentWith(document, nodeNormalizer) {
   if (!isPlainObject(document)) {
-    return normalizeSchemaNode(document);
+    return nodeNormalizer(document);
   }
   if (document.$defs !== undefined && document.definitions !== undefined) {
-    const left = canonicalStringify(normalizeSchemaNode(document.$defs));
-    const right = canonicalStringify(normalizeSchemaNode(document.definitions));
+    const left = canonicalStringify(nodeNormalizer(document.$defs));
+    const right = canonicalStringify(nodeNormalizer(document.definitions));
     if (left !== right) {
       throw new Error('JSON Schema document contains conflicting $defs and definitions objects');
     }
   }
-  return normalizeSchemaNode(document);
+  return nodeNormalizer(document);
+}
+
+export function normalizeSchemaDocument(document) {
+  return normalizeSchemaDocumentWith(document, normalizeSchemaNode);
+}
+
+export function normalizeSchemaDocumentForComparison(document) {
+  return normalizeSchemaDocumentWith(document, normalizeSchemaNodeForComparison);
 }
 
 export function resolveJsonPointer(document, pointer) {

@@ -2,8 +2,11 @@ export {
   canonicalStringify,
   canonicalizeJson,
   deepDiff,
+  normalizeComparisonRef,
   normalizeSchemaDocument,
+  normalizeSchemaDocumentForComparison,
   normalizeSchemaNode,
+  normalizeSchemaNodeForComparison,
   sha256,
 } from './canonical.mjs';
 export { emitTypeSpecJsonSchema, runCommand, toolVersion } from './emitter.mjs';

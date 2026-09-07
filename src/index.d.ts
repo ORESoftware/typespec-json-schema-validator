@@ -172,8 +172,11 @@ export function inventoryTypeSpecSource(source: string, file?: string): Record<s
 export function loadSchemaCollection(input: string, options?: Record<string, unknown>): Promise<Record<string, unknown>>;
 export function validateJsonSchemaDocument(document: unknown, source?: string, options?: Record<string, unknown>): ValidatorFinding[];
 export function compareParity(input: Record<string, unknown>): Record<string, unknown>;
+export function normalizeComparisonRef(reference: unknown): unknown;
 export function normalizeSchemaNode(value: unknown, parentKey?: string): unknown;
+export function normalizeSchemaNodeForComparison(value: unknown, parentKey?: string): unknown;
 export function normalizeSchemaDocument(value: unknown): unknown;
+export function normalizeSchemaDocumentForComparison(value: unknown): unknown;
 export function canonicalStringify(value: unknown, space?: number): string;
 export function sha256(value: string | Buffer): string;
 export const REPORT_SCHEMA: 'ores.typespec-json-schema-validator.report/v1';

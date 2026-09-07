@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import {
   canonicalStringify,
   deepDiff,
-  normalizeSchemaNode,
+  normalizeSchemaNodeForComparison,
   stableFindingFingerprint,
 } from './canonical.mjs';
 import { declarationKindFamily } from './typespec-inventory.mjs';
@@ -244,8 +244,11 @@ function compareSemanticSchemas(generatedMap, authoredMap, expectedDeclarations,
     if (!generated || !authored) {
       continue;
     }
-    const left = normalizeSchemaNode(generated.schema);
-    const right = normalizeSchemaNode(authored.schema);
+    // Comparison normalization may erase non-assertion presentation metadata
+    // and unify declaration identities. The executable collections remain
+    // untouched so their $id resource graphs and probe annotations still work.
+    const left = normalizeSchemaNodeForComparison(generated.schema);
+    const right = normalizeSchemaNodeForComparison(authored.schema);
     const remaining = Math.max(1, maxFindings - findings.length);
     const { differences } = deepDiff(left, right, { maxFindings: remaining });
     for (const difference of differences) {
