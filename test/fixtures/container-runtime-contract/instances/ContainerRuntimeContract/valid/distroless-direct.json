@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "ores.container-runtime-contract/v1",
+  "serviceName": "example-sidecar",
+  "runtimeBase": "distroless",
+  "entrypointMode": "direct_binary",
+  "entrypoint": ["/example-sidecar"],
+  "cmd": [],
+  "platforms": ["linux/amd64", "linux/arm64"],
+  "runsAsNonRoot": true,
+  "preservesPid1": true
+}
