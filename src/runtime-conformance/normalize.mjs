@@ -53,6 +53,12 @@ export function validateRuntimeEvidence(value, options = {}) {
       right: RUNTIME_EVIDENCE_SCHEMA,
     }));
   }
+  const contractIrId = validateDigest(
+    value.contractIrId,
+    '#/contractIrId',
+    'contractIrId',
+    findings,
+  );
   const inputDigest = validateDigest(value.inputDigest, '#/inputDigest', 'inputDigest', findings);
   const corpusDigest = validateDigest(value.corpusDigest, '#/corpusDigest', 'corpusDigest', findings);
 
@@ -65,7 +71,13 @@ export function validateRuntimeEvidence(value, options = {}) {
       right: 'array',
     }));
     return {
-      normalized: Object.freeze({ schema: value.schema, inputDigest, corpusDigest, adapters: Object.freeze([]) }),
+      normalized: Object.freeze({
+        schema: value.schema,
+        contractIrId,
+        inputDigest,
+        corpusDigest,
+        adapters: Object.freeze([]),
+      }),
       findings: sortRuntimeFindings(findings),
     };
   }
@@ -109,6 +121,7 @@ export function validateRuntimeEvidence(value, options = {}) {
 
   const normalized = Object.freeze({
     schema: value.schema,
+    contractIrId,
     inputDigest,
     corpusDigest,
     adapters: Object.freeze(adapters.sort((left, right) => left.id.localeCompare(right.id))),
