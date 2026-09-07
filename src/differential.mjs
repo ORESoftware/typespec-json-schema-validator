@@ -253,7 +253,10 @@ export function crossValidate({
 
     for (const probe of probes) {
       const encoding = canonicalStringify(probe.instance);
-      if (seen.has(encoding)) {
+      // Corpus files carry independent expectations and source provenance.
+      // A synthesized value (or another file with the same JSON) must never
+      // suppress that obligation. Only synthesized probes are value-deduped.
+      if (probe.origin !== 'corpus' && seen.has(encoding)) {
         continue;
       }
       seen.add(encoding);
