@@ -8,6 +8,22 @@ Rules are grouped by gate. Every emitted rule is an error in v0.1; suppressions 
 - `typespec-ambiguous-simple-name`: multiple qualified TypeSpec declarations collapse to the same default schema name.
 - `mapping-target-collision`: explicit mappings route multiple TypeSpec declarations to one generated or authored name.
 
+## Mapping integrity
+
+- `mapping-typespec-declaration-missing`: a mapping names a TypeSpec declaration that is absent from the current source inventory.
+- `mapping-typespec-simple-name-ambiguous`: a mapping uses an unqualified TypeSpec name shared by multiple namespaces.
+- `mapping-typespec-duplicate`: a programmatic mapping repeats one TypeSpec key. Mapping files reject this as configuration before comparison.
+- `mapping-declaration-invalid`: a programmatic mapping declaration does not provide a usable TypeSpec name.
+- `mapping-ignore-typespec-stale`: a TypeSpec ignore entry no longer resolves.
+- `mapping-ignore-typespec-ambiguous`: an unqualified TypeSpec ignore entry resolves to multiple declarations.
+- `mapping-ignore-generated-stale` / `mapping-ignore-authored-stale`: a lane-specific ignore entry names no declaration in that lane.
+- `mapping-ignore-duplicate`: a programmatic ignore array repeats one name. Mapping files reject duplicates before comparison.
+- `mapping-ignore-invalid-name`: a programmatic ignore contains an empty or invalid name.
+- `mapping-typespec-ignore-conflict`: one TypeSpec declaration is both mapped and ignored.
+- `mapping-generated-ignore-conflict` / `mapping-authored-ignore-conflict`: a mapped lane target is also ignored.
+
+These rules make mappings and ignores auditable configuration, not a way to hide a rename or declaration-set mismatch. See [mapping integrity](mapping-integrity.md).
+
 ## Declaration inventory
 
 - `generated-declaration-missing` / `authored-declaration-missing`: a TypeSpec declaration has no peer in that lane.

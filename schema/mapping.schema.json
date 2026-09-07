@@ -24,17 +24,17 @@
     "ignore": {
       "type": "object",
       "properties": {
-        "typespec": { "$ref": "#/$defs/stringArray" },
-        "generated": { "$ref": "#/$defs/stringArray" },
-        "authored": { "$ref": "#/$defs/stringArray" }
+        "typespec": { "$ref": "#/$defs/nameArray" },
+        "generated": { "$ref": "#/$defs/nameArray" },
+        "authored": { "$ref": "#/$defs/nameArray" }
       },
       "additionalProperties": false
     }
   },
   "$defs": {
-    "stringArray": {
+    "nameArray": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true
     }
   },
