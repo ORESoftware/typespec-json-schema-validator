@@ -19,6 +19,7 @@
       "types": "./src/projection-admission/index.d.mts"
     },
     "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
+    "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
     "./schema/projection-manifest": "./schema/projection-manifest.schema.json",
     "./package.json": "./package.json"
   },

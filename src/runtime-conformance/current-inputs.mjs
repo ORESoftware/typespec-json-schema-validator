@@ -1,5 +1,5 @@
 import { verifyContractIr } from '../contract-ir.mjs';
-import { compareRuntimeEvidence } from './compare.mjs';
+import { compareRuntimeEvidence } from './decision.mjs';
 
 /**
  * Preferred runtime-evidence admission API.
