@@ -6,7 +6,8 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- A dedicated Draft 2020-12 `runtime-conformance-report/v1` decision schema, canonical parity-receipt digest reporting, and `createRuntimeEvidenceContractBinding()` for safely preparing isolated adapter jobs.
+- Preferred `verifyRuntimeEvidenceAgainstCurrentInputs()` admission API that recomputes Contract IR verification from the current checked-out TypeSpec, generated Schema B, authored Schema A, and retained parity receipt before comparing runtime adapter evidence.
+- Digest-bound downstream projection admission for parity-approved Contract IR, operation inventories, projection metadata/field locks, emitter configuration, pinned toolchains, exact output files, reviewed representation deltas, and executable runtime-validator coverage.
 - Exact-input, deterministic cross-runtime validator evidence admission for Zod, Serde-backed Rust validators, Dart/Freezed, and future adapters, with a strict Draft 2020-12 receipt schema, bounded non-symbolic-link loading, fail-closed adapter/corpus/digest checks, and cross-adapter divergence findings.
 - Deterministic SARIF 2.1.0 presentation output through `--sarif`, the composite action, and the public JavaScript API.
 - Stable `TSJSV.<source-rule-id>` descriptors, existing SHA-256 finding fingerprints, bounded source/JSON Pointer locations, and failed-run results.
@@ -19,14 +20,14 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- Runtime conformance decisions no longer reuse the untrusted adapter-evidence schema identifier; the public comparator now returns a separately identifiable decision receipt.
 - Runtime adapter evidence now names the exact Contract IR self-digest, exact parity receipt run id, and corpus digest; admission requires a fresh Contract IR verification against current checked-out inputs and rejects cases targeting declarations outside the admitted IR.
 - A requested Contract IR now requires direct declaration inventory, generated-witness comparison, differential validation, zero findings, and unchanged input digests.
 - Stopped and failed runs replace prior validator-owned IR with a non-admissible tombstone so stale green artifacts cannot survive beside red receipts.
 
 ### Security
 
-- Adapter-binding failures expose bounded rule identifiers rather than arbitrary Contract IR or verification payload content, and a failed Contract IR verification cannot promote a receipt digest into trusted output.
+- The preferred runtime admission path computes current-input Contract IR verification inside the same call, preventing stale verification-object reuse while reporting only bounded verification status metadata rather than arbitrary paths or internal errors.
+- Projection admission refuses copied green status strings, stale source/receipt/IR bindings, unreviewed losses, unexecuted runtime-validator claims, unmanifested outputs, traversal, symbolic links, hard links, and oversized evidence files.
 - Runtime conformance findings expose only bounded status metadata and digests from Contract IR verification, never arbitrary verification errors or Contract IR payload content.
 - Contract IR publication is atomic, self-digest checked, and refuses unrelated files, symbolic links, non-regular files, and multiply linked destinations.
 

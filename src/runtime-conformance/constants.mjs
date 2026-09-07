@@ -1,6 +1,4 @@
 export const RUNTIME_EVIDENCE_SCHEMA = 'ores.typespec-json-schema-validator.runtime-evidence/v1';
-export const RUNTIME_CONFORMANCE_REPORT_SCHEMA =
-  'ores.typespec-json-schema-validator.runtime-conformance-report/v1';
 
 export const DIGEST_PATTERN = /^[a-f0-9]{64}$/;
 export const IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/;
