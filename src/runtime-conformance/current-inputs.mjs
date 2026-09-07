@@ -1,5 +1,51 @@
 import { verifyContractIr } from '../contract-ir.mjs';
-import { compareRuntimeEvidence } from './compare.mjs';
+import {
+  compareRuntimeEvidence,
+  createRuntimeEvidenceContractBinding,
+} from './decision.mjs';
+
+async function verifyCurrentContractIr({
+  contractIr,
+  parityReport,
+  typespec,
+  generatedSchema,
+  authoredSchema,
+}) {
+  return verifyContractIr({
+    contractIr,
+    report: parityReport,
+    typespec,
+    generatedSchema,
+    authoredSchema,
+  });
+}
+
+/**
+ * Preferred binding API for isolated adapter jobs.
+ *
+ * Recompute Contract IR verification from the current source lanes before
+ * returning the two immutable values an adapter receipt must copy. This avoids
+ * distributing the full IR/receipt and prevents stale verification reuse.
+ */
+export async function createRuntimeEvidenceBindingAgainstCurrentInputs({
+  contractIr,
+  parityReport,
+  typespec,
+  generatedSchema,
+  authoredSchema,
+}) {
+  const contractIrVerification = await verifyCurrentContractIr({
+    contractIr,
+    parityReport,
+    typespec,
+    generatedSchema,
+    authoredSchema,
+  });
+  return createRuntimeEvidenceContractBinding({
+    contractIr,
+    contractIrVerification,
+  });
+}
 
 /**
  * Preferred runtime-evidence admission API.
@@ -27,9 +73,9 @@ export async function verifyRuntimeEvidenceAgainstCurrentInputs({
   maxAdapters = 64,
   maxResultsPerAdapter = 100_000,
 }) {
-  const contractIrVerification = await verifyContractIr({
+  const contractIrVerification = await verifyCurrentContractIr({
     contractIr,
-    report: parityReport,
+    parityReport,
     typespec,
     generatedSchema,
     authoredSchema,
