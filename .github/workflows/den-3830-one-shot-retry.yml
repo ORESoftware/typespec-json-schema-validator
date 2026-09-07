@@ -1,0 +1,80 @@
+name: DEN-3830 one-shot reconciliation retry
+
+on:
+  push:
+    branches:
+      - feat/DEN-3830-projection-verification-receipt
+    paths:
+      - .github/workflows/den-3830-one-shot-retry.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: den-3830-one-shot-reconciliation-retry
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: github.repository == 'ORESoftware/typespec-json-schema-validator'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: feat/DEN-3830-projection-verification-receipt
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Set up Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install lockfile-pinned dependencies
+        run: npm ci
+
+      - name: Reapply the reviewed reconciliation patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          awk '
+            /^[[:space:]]*python3 - <<'"'"'PY'"'"'$/ { inside = 1; next }
+            inside && /^[[:space:]]*PY$/ { exit }
+            inside { sub(/^          /, ""); print }
+          ' .github/workflows/den-3830-one-shot-contract-reconcile.yml > "$RUNNER_TEMP/reconcile.py"
+          test -s "$RUNNER_TEMP/reconcile.py"
+          python3 "$RUNNER_TEMP/reconcile.py"
+          rm .github/workflows/den-3830-one-shot-retry.yml
+
+      - name: Regenerate flags-to-environment artifacts
+        run: npm run generate:flags
+
+      - name: Verify the complete package
+        run: npm run test:all
+
+      - name: Commit the reconciled contract surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A -- \
+            .cli-flags.toml \
+            .env.example \
+            package.json \
+            docs/flags-to-env.generated.md \
+            schema/projection-verification-policy.schema.json \
+            schema/projection-verification-receipt.schema.json \
+            src/cli-config.mjs \
+            src/cli.mjs \
+            src/generated/flags-to-env.manifest.json \
+            test/unit/projection-verification.test.mjs \
+            .github/workflows/den-3830-one-shot-contract-reconcile.yml \
+            .github/workflows/den-3830-one-shot-retry.yml
+          git diff --cached --check
+          git commit -m 'fix(DEN-3830): reconcile projection verifier contracts'
+          git push origin HEAD:feat/DEN-3830-projection-verification-receipt
