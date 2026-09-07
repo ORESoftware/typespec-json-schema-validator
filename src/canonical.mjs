@@ -250,7 +250,12 @@ export function resolveJsonPointer(document, pointer) {
   }
   let current = document;
   for (const encoded of pointer.slice(2).split('/')) {
-    const segment = unescapeJsonPointerSegment(decodeURIComponent(encoded));
+    let segment;
+    try {
+      segment = unescapeJsonPointerSegment(decodeURIComponent(encoded));
+    } catch {
+      return undefined;
+    }
     if (current === null || typeof current !== 'object' || !(segment in current)) {
       return undefined;
     }
