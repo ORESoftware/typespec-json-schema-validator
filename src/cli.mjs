@@ -35,6 +35,25 @@ function commandHint(argv, configuration, error) {
   return process.env.TSJSV_COMMAND || null;
 }
 
+function optionHint(argv, name) {
+  const prefix = `${name}=`;
+  for (let index = 2; index < argv.length; index += 1) {
+    const token = argv[index];
+    if (typeof token !== 'string') continue;
+    if (token.startsWith(prefix)) {
+      const value = token.slice(prefix.length);
+      return value === '' ? undefined : value;
+    }
+    if (token === name) {
+      const value = argv[index + 1];
+      return typeof value === 'string' && value !== '' && !value.startsWith('-')
+        ? value
+        : undefined;
+    }
+  }
+  return undefined;
+}
+
 async function readJsonArtifact(path, label) {
   let info;
   try {
@@ -218,6 +237,7 @@ export async function main(argv = process.argv) {
       const verificationPath =
         configuration?.verification
         ?? error?.details?.verification
+        ?? optionHint(argv, '--verification')
         ?? process.env.TSJSV_VERIFICATION
         ?? '.typespec-json-schema-validator/contract-ir-verification.json';
       try {
