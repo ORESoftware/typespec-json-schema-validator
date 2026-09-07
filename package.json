@@ -15,6 +15,7 @@
       "types": "./src/runtime-conformance/index.d.mts"
     },
     "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
+    "./schema/contract-ir-verification": "./schema/contract-ir-verification.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./src/index.d.ts",
@@ -30,7 +31,8 @@
     "bin",
     "docs",
     "schema",
-    "src"
+    "src",
+    "verify-contract-ir"
   ],
   "scripts": {
     "check": "node ./scripts/check.mjs",
