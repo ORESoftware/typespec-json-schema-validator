@@ -6,6 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Digest-bound downstream projection admission for parity-approved Contract IR, operation inventories, projection metadata/field locks, emitter configuration, pinned toolchains, exact output files, reviewed representation deltas, and executable runtime-validator coverage.
 - Exact-input, deterministic cross-runtime validator evidence admission for Zod, Serde-backed Rust validators, Dart/Freezed, and future adapters, with a strict Draft 2020-12 receipt schema, bounded non-symbolic-link loading, fail-closed adapter/corpus/digest checks, and cross-adapter divergence findings.
 - Deterministic SARIF 2.1.0 presentation output through `--sarif`, the composite action, and the public JavaScript API.
 - Stable `TSJSV.<source-rule-id>` descriptors, existing SHA-256 finding fingerprints, bounded source/JSON Pointer locations, and failed-run results.
@@ -23,6 +24,7 @@ All notable changes to this project are documented in this file.
 
 ### Security
 
+- Projection admission refuses copied green status strings, stale source/receipt/IR bindings, unreviewed losses, unexecuted runtime-validator claims, unmanifested outputs, traversal, symbolic links, hard links, and oversized evidence files.
 - Contract IR publication is atomic, self-digest checked, and refuses unrelated files, symbolic links, non-regular files, and multiply linked destinations.
 
 ## 0.1.0 — 2026-09-05
