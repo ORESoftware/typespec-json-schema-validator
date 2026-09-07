@@ -14,8 +14,14 @@
       "import": "./src/runtime-conformance/index.mjs",
       "types": "./src/runtime-conformance/index.d.mts"
     },
+    "./projection-admission": {
+      "import": "./src/projection-admission/index.mjs",
+      "types": "./src/projection-admission/index.d.mts"
+    },
     "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
-    "./schema/contract-ir-verification": "./schema/contract-ir-verification.schema.json",
+    "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
+    "./schema/projection-manifest": "./schema/projection-manifest.schema.json",
+    "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./src/index.d.ts",
@@ -31,8 +37,7 @@
     "bin",
     "docs",
     "schema",
-    "src",
-    "verify-contract-ir"
+    "src"
   ],
   "scripts": {
     "check": "node ./scripts/check.mjs",

@@ -49,6 +49,11 @@ export interface ContractIrVerificationEvidence {
   error: string | null;
 }
 
+export interface RuntimeEvidenceContractBinding {
+  contractIrId: string;
+  inputDigest: string;
+}
+
 export interface RuntimeFinding {
   ruleId: string;
   severity: 'error';
@@ -68,7 +73,7 @@ export interface RuntimeEvidenceValidation {
 }
 
 export interface RuntimeConformanceReport {
-  schema: typeof RUNTIME_EVIDENCE_SCHEMA;
+  schema: typeof RUNTIME_CONFORMANCE_REPORT_SCHEMA;
   status: 'passed' | 'stopped_for_evaluation';
   zeroUnexplainedFindings: boolean;
   findings: readonly RuntimeFinding[];
@@ -77,6 +82,7 @@ export interface RuntimeConformanceReport {
   contractIrId: string | null;
   contractIrVerified: boolean;
   receiptRunId: string | null;
+  receiptDigest: string | null;
   evidenceDigest: string | null;
   expectedCaseDigest: string;
   summary: Readonly<{
@@ -92,12 +98,50 @@ export interface RuntimeEvidenceLimits {
   maxResultsPerAdapter?: number;
 }
 
+export interface CurrentContractIrInputs {
+  contractIr: unknown;
+  parityReport: { runId?: string; [key: string]: unknown } | null | undefined;
+  /** Current TypeSpec entry path; defaults to the path retained in parityReport. */
+  typespec?: string;
+  /** Current TypeSpec-emitted JSON Schema B path; defaults to parityReport. */
+  generatedSchema?: string;
+  /** Current independently authored JSON Schema A path; defaults to parityReport. */
+  authoredSchema?: string;
+}
+
+export interface CurrentInputRuntimeAdmissionOptions
+  extends RuntimeEvidenceLimits, CurrentContractIrInputs {
+  evidence: unknown;
+  expectedCorpusDigest: string;
+  expectedCases: ExpectedRuntimeCase[];
+  requiredAdapters?: Array<string | RequiredRuntimeAdapter>;
+  maxFindings?: number;
+}
+
 export const RUNTIME_EVIDENCE_SCHEMA: 'ores.typespec-json-schema-validator.runtime-evidence/v1';
+export const RUNTIME_CONFORMANCE_REPORT_SCHEMA: 'ores.typespec-json-schema-validator.runtime-conformance-report/v1';
 
 export function validateRuntimeEvidence(
   value: unknown,
   options?: RuntimeEvidenceLimits,
 ): RuntimeEvidenceValidation;
+
+/**
+ * Low-level helper for a caller that already holds a fresh Contract IR
+ * verification result over the exact current source lanes.
+ */
+export function createRuntimeEvidenceContractBinding(input: {
+  contractIr: unknown;
+  contractIrVerification: ContractIrVerificationEvidence;
+}): Readonly<RuntimeEvidenceContractBinding>;
+
+/**
+ * Preferred binding API. Recomputes Contract IR verification from the current
+ * checked-out source lanes before returning immutable adapter receipt fields.
+ */
+export function createRuntimeEvidenceBindingAgainstCurrentInputs(
+  input: CurrentContractIrInputs,
+): Promise<Readonly<RuntimeEvidenceContractBinding>>;
 
 export function compareRuntimeEvidence(input: RuntimeEvidenceLimits & {
   evidence: unknown;
@@ -109,6 +153,14 @@ export function compareRuntimeEvidence(input: RuntimeEvidenceLimits & {
   requiredAdapters?: Array<string | RequiredRuntimeAdapter>;
   maxFindings?: number;
 }): RuntimeConformanceReport;
+
+/**
+ * Preferred admission API. Recomputes Contract IR verification from the
+ * current checked-out source lanes immediately before comparing receipts.
+ */
+export function verifyRuntimeEvidenceAgainstCurrentInputs(
+  input: CurrentInputRuntimeAdmissionOptions,
+): Promise<RuntimeConformanceReport>;
 
 export function loadRuntimeEvidence(
   path: string,

@@ -82,7 +82,6 @@ export function loadCliConfiguration(argv = process.argv) {
       command: parsedCommand,
       unknownOptions: parsed.unknownOptions,
       errors: parsed.errors,
-      // Preserve requested artifact destinations even when normal command construction fails.
       report: env.TSJSV_REPORT || undefined,
       sarif: env.TSJSV_SARIF || undefined,
       contractIr: env.TSJSV_CONTRACT_IR || undefined,
@@ -160,9 +159,14 @@ export function loadCliConfiguration(argv = process.argv) {
         typespec: required(env, 'TSJSV_TYPESPEC', '--typespec'),
         authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
         generatedSchema: required(env, 'TSJSV_GENERATED_SCHEMA', '--generated-schema'),
+        expectedDeclarations: required(
+          env,
+          'TSJSV_EXPECTED_DECLARATIONS',
+          '--expected-declarations',
+        ),
         verification:
           env.TSJSV_VERIFICATION
-          || '.typespec-json-schema-validator/contract-ir-verification.json',
+          || '.typespec-json-schema-validator/consumer-verification.json',
       };
     case 'doctor':
       return common;

@@ -7,10 +7,10 @@ import {
   writeContractIr,
 } from './contract-ir.mjs';
 import {
-  failedContractIrVerification,
-  verifyContractIrForConsumer,
-  writeContractIrVerification,
-} from './contract-ir-verification.mjs';
+  failedConsumerVerificationReceipt,
+  verifyConsumerContractReceipt,
+  writeConsumerVerificationReceipt,
+} from './consumer-verification-receipt.mjs';
 import { emitTypeSpecJsonSchema, resolveTspBinary, toolVersion } from './emitter.mjs';
 import {
   EXIT_CODES,
@@ -52,6 +52,19 @@ function optionHint(argv, name) {
     }
   }
   return undefined;
+}
+
+function expectedDeclarationScope(value) {
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error('expected declaration scope is not valid JSON');
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error('expected declaration scope must be a JSON array');
+  }
+  return parsed;
 }
 
 async function readJsonArtifact(path, label) {
@@ -129,35 +142,42 @@ async function writeRunArtifacts(configuration, report) {
   return { reportPath, sarifPath, contractIrPath };
 }
 
-async function runContractIrVerification(configuration) {
+async function runConsumerVerification(configuration) {
   let contractIr = null;
   let report = null;
-  let verification;
+  let expectedDeclarations = null;
+  let receipt;
   try {
     [contractIr, report] = await Promise.all([
       readJsonArtifact(configuration.contractIr, 'Contract IR input'),
       readJsonArtifact(configuration.parityReceipt, 'parity receipt input'),
     ]);
-    verification = await verifyContractIrForConsumer({
+    expectedDeclarations = expectedDeclarationScope(configuration.expectedDeclarations);
+    receipt = await verifyConsumerContractReceipt({
       contractIr,
       report,
       typespec: configuration.typespec,
       generatedSchema: configuration.generatedSchema,
       authoredSchema: configuration.authoredSchema,
+      expectedDeclarations,
     });
-  } catch (error) {
-    verification = failedContractIrVerification({ contractIr, report, error });
+  } catch {
+    receipt = failedConsumerVerificationReceipt({
+      contractIr,
+      report,
+      expectedDeclarations,
+    });
   }
 
-  const verificationPath = await writeContractIrVerification(
+  const verificationPath = await writeConsumerVerificationReceipt(
     configuration.verification,
-    verification,
+    receipt,
   );
   if (!configuration.quiet) {
-    writeJson(verification);
-    process.stdout.write(`contract-ir-verification: ${verificationPath}\n`);
+    writeJson(receipt);
+    process.stdout.write(`consumer-verification: ${verificationPath}\n`);
   }
-  return verification.status === 'passed' ? EXIT_CODES.passed : EXIT_CODES.failed;
+  return receipt.status === 'passed' ? EXIT_CODES.passed : EXIT_CODES.failed;
 }
 
 export async function main(argv = process.argv) {
@@ -214,7 +234,7 @@ export async function main(argv = process.argv) {
     }
 
     if (configuration.command === 'verify-ir') {
-      return runContractIrVerification(configuration);
+      return runConsumerVerification(configuration);
     }
 
     const runners = {
@@ -239,18 +259,18 @@ export async function main(argv = process.argv) {
         ?? error?.details?.verification
         ?? optionHint(argv, '--verification')
         ?? process.env.TSJSV_VERIFICATION
-        ?? '.typespec-json-schema-validator/contract-ir-verification.json';
+        ?? '.typespec-json-schema-validator/consumer-verification.json';
       try {
-        await writeContractIrVerification(
+        await writeConsumerVerificationReceipt(
           verificationPath,
-          failedContractIrVerification({ error }),
+          failedConsumerVerificationReceipt(),
         );
       } catch (writeError) {
         process.stderr.write(
-          `could not write failure Contract IR verification: ${writeError.message}\n`,
+          `could not write failed consumer verification receipt: ${writeError.message}\n`,
         );
       }
-      process.stderr.write(`Contract IR verification failed: ${error.message}\n`);
+      process.stderr.write(`Contract IR consumer verification failed: ${error.message}\n`);
       if (error instanceof CliUsageError && error.details) {
         process.stderr.write(`${canonicalStringify(error.details, 2)}\n`);
       }

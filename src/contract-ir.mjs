@@ -7,6 +7,7 @@ import {
 import { loadSchemaCollection } from './json-schema.mjs';
 import { declarationKindFamily, inventoryTypeSpec } from './typespec-inventory.mjs';
 import { writeContractIrFile } from './contract-ir-file.mjs';
+import { assertExactSourceFiles } from './contract-ir-inputs.mjs';
 
 export const CONTRACT_IR_SCHEMA = 'ores.typespec-json-schema-validator.contract-ir/v1';
 export const CONTRACT_IR_VERIFICATION_SCHEMA =
@@ -89,6 +90,7 @@ function assertCurrentInputs(report, typespecInventory, generatedCollection, aut
     authoredCollection.digest === report.inputs.authoredJsonSchema.digest,
     'authored JSON Schema digest no longer matches the receipt',
   );
+  assertExactSourceFiles({ report, typespecInventory, generatedCollection, authoredCollection });
   requireCondition(
     Array.isArray(typespecInventory.errors) && typespecInventory.errors.length === 0,
     'TypeSpec inventory contains errors',

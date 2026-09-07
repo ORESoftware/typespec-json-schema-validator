@@ -250,7 +250,7 @@ default = "oneOf"
 help = "Official emitter discriminator strategy: ignore, oneOf, or anyOf."
 
 [commands.verify-ir]
-help = "Verify an existing Contract IR against its parity receipt and the exact current TypeSpec/generated/authored input closure."
+help = "Verify an existing Contract IR against its parity receipt, exact current peer-authority closure, and complete consumer declaration scope."
 env = "TSJSV_COMMAND_VERIFY_IR"
 
 [commands.verify-ir.flags.contract-ir]
@@ -286,12 +286,18 @@ short = "g"
 type = "string"
 help = "Current TypeSpec-generated comparison-only JSON Schema witness."
 
+[commands.verify-ir.flags.expected-declarations]
+env = "TSJSV_EXPECTED_DECLARATIONS"
+aliases = ["expected-declarations"]
+type = "string"
+help = "JSON array containing the complete qualified declaration IDs expected by this consumer."
+
 [commands.verify-ir.flags.verification]
 env = "TSJSV_VERIFICATION"
 aliases = ["verification"]
 type = "string"
-default = ".typespec-json-schema-validator/contract-ir-verification.json"
-help = "Deterministic consumer-verification artifact path."
+default = ".typespec-json-schema-validator/consumer-verification.json"
+help = "Deterministic self-digesting consumer verification receipt path."
 
 [commands.doctor]
 help = "Check the flags-2-env and TypeSpec toolchain required by the validator."

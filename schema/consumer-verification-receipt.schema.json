@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/contract-ir-verification.v1.schema.json",
-  "title": "TypeSpec and JSON Schema Contract IR consumer verification",
-  "description": "Deterministic downstream evidence that an existing Contract IR matches its exact parity receipt and current peer-authority input closure.",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/consumer-verification-receipt/v1",
+  "title": "TypeSpec and JSON Schema downstream consumer verification receipt",
+  "description": "Deterministic evidence that one complete consumer declaration scope was admitted from the exact retained Contract IR, parity receipt, and current peer-authority input closure.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,11 +14,12 @@
     "computedIrId",
     "expectedIrId",
     "receiptRunId",
-    "error"
+    "declarationIds",
+    "failureCode"
   ],
   "properties": {
     "schema": {
-      "const": "ores.typespec-json-schema-validator.contract-ir-verification/v1"
+      "const": "ores.typespec-json-schema-validator.consumer-verification-receipt/v1"
     },
     "verificationId": {
       "$ref": "#/$defs/digest"
@@ -41,8 +42,17 @@
     "receiptRunId": {
       "$ref": "#/$defs/nullableDigest"
     },
-    "error": {
-      "type": ["string", "null"]
+    "declarationIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "failureCode": {
+      "enum": [null, "consumer-verification-failed"]
     }
   },
   "allOf": [
@@ -60,12 +70,14 @@
           "computedIrId": { "$ref": "#/$defs/digest" },
           "expectedIrId": { "$ref": "#/$defs/digest" },
           "receiptRunId": { "$ref": "#/$defs/digest" },
-          "error": { "type": "null" }
+          "declarationIds": { "minItems": 1 },
+          "failureCode": { "type": "null" }
         }
       },
       "else": {
         "properties": {
-          "admissible": { "const": false }
+          "admissible": { "const": false },
+          "failureCode": { "const": "consumer-verification-failed" }
         }
       }
     }
@@ -76,7 +88,7 @@
       "pattern": "^[a-f0-9]{64}$"
     },
     "nullableDigest": {
-      "anyOf": [
+      "oneOf": [
         { "$ref": "#/$defs/digest" },
         { "type": "null" }
       ]

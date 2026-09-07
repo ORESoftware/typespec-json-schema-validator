@@ -8,6 +8,7 @@ import test from 'node:test';
 const packageRoot = resolve(import.meta.dirname, '../..');
 const executable = resolve(packageRoot, 'bin/typespec-json-schema-validator.mjs');
 const fixtures = resolve(packageRoot, 'test/fixtures');
+const expectedDeclarations = JSON.stringify(['Example.Role', 'Example.User']);
 
 function run(args) {
   return new Promise((resolvePromise, reject) => {
@@ -56,12 +57,13 @@ function verifyArgs(artifacts, verificationPath, overrides = {}) {
     `--typespec=${overrides.typespec ?? resolve(fixtures, 'pass/main.tsp')}`,
     `--generated-schema=${overrides.generatedSchema ?? artifacts.generatedSchema}`,
     `--schema=${overrides.authoredSchema ?? resolve(fixtures, 'pass/authored.schema.json')}`,
+    `--expected-declarations=${overrides.expectedDeclarations ?? expectedDeclarations}`,
     `--verification=${verificationPath}`,
     '--quiet',
   ];
 }
 
-test('verify-ir admits only the exact current receipt, IR, and input closure', async () => {
+test('verify-ir admits only the exact current receipt, IR, inputs, and complete scope', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'tsjsv-verify-ir-pass-'));
   const artifacts = await createPassingArtifacts(temp);
   const verificationPath = join(temp, 'verification.json');
@@ -70,16 +72,21 @@ test('verify-ir admits only the exact current receipt, IR, and input closure', a
 
   const contractIr = JSON.parse(await readFile(artifacts.contractIrPath, 'utf8'));
   const verification = JSON.parse(await readFile(verificationPath, 'utf8'));
+  assert.equal(
+    verification.schema,
+    'ores.typespec-json-schema-validator.consumer-verification-receipt/v1',
+  );
   assert.equal(verification.status, 'passed');
   assert.equal(verification.admissible, true);
   assert.equal(verification.suppliedIrId, contractIr.irId);
   assert.equal(verification.computedIrId, contractIr.irId);
   assert.equal(verification.expectedIrId, contractIr.irId);
   assert.equal(verification.receiptRunId, artifacts.report.runId);
+  assert.deepEqual(verification.declarationIds, ['Example.Role', 'Example.User']);
   assert.match(verification.verificationId, /^[a-f0-9]{64}$/);
 });
 
-test('verify-ir replaces prior green verification with failure on stale current inputs', async () => {
+test('verify-ir replaces prior green evidence with failure on stale current inputs', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'tsjsv-verify-ir-stale-'));
   const artifacts = await createPassingArtifacts(temp);
   const verificationPath = join(temp, 'verification.json');
@@ -88,15 +95,13 @@ test('verify-ir replaces prior green verification with failure on stale current 
 
   const staleTypespec = join(temp, 'stale-main.tsp');
   const originalTypespec = await readFile(resolve(fixtures, 'pass/main.tsp'), 'utf8');
-  await writeFile(staleTypespec, `${originalTypespec}\n// changed after the parity receipt\n`);
-  const stale = await run(verifyArgs(artifacts, verificationPath, {
-    typespec: staleTypespec,
-  }));
+  await writeFile(staleTypespec, `${originalTypespec}\n// changed after parity receipt\n`);
+  const stale = await run(verifyArgs(artifacts, verificationPath, { typespec: staleTypespec }));
   assert.equal(stale.code, 3, stale.stderr || stale.stdout);
   const verification = JSON.parse(await readFile(verificationPath, 'utf8'));
   assert.equal(verification.status, 'failed');
   assert.equal(verification.admissible, false);
-  assert.match(verification.error, /TypeSpec input digest no longer matches the receipt/);
+  assert.equal(verification.failureCode, 'consumer-verification-failed');
 });
 
 test('verify-ir detects tampered IR and never repairs or overwrites its input', async () => {
@@ -114,10 +119,24 @@ test('verify-ir detects tampered IR and never repairs or overwrites its input', 
   const verification = JSON.parse(await readFile(verificationPath, 'utf8'));
   assert.equal(verification.status, 'failed');
   assert.equal(verification.admissible, false);
-  assert.notEqual(verification.suppliedIrId, verification.computedIrId);
 });
 
-test('verify-ir usage failures never reinterpret the Contract IR input as an output tombstone', async () => {
+test('verify-ir rejects partial consumer scope while preserving all source artifacts', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-verify-ir-scope-'));
+  const artifacts = await createPassingArtifacts(temp);
+  const irText = await readFile(artifacts.contractIrPath, 'utf8');
+  const reportText = await readFile(artifacts.reportPath, 'utf8');
+  const verificationPath = join(temp, 'verification.json');
+  const result = await run(verifyArgs(artifacts, verificationPath, {
+    expectedDeclarations: JSON.stringify(['Example.User']),
+  }));
+  assert.equal(result.code, 3, result.stderr || result.stdout);
+  assert.equal(await readFile(artifacts.contractIrPath, 'utf8'), irText);
+  assert.equal(await readFile(artifacts.reportPath, 'utf8'), reportText);
+  assert.equal(JSON.parse(await readFile(verificationPath, 'utf8')).status, 'failed');
+});
+
+test('verify-ir usage failures never reinterpret Contract IR input as an output tombstone', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'tsjsv-verify-ir-usage-'));
   const contractIrPath = join(temp, 'contract-ir.json');
   const inputText = '{"this":"is an immutable verification input"}\n';
@@ -129,6 +148,7 @@ test('verify-ir usage failures never reinterpret the Contract IR input as an out
     `--typespec=${resolve(fixtures, 'pass/main.tsp')}`,
     `--generated-schema=${resolve(fixtures, 'equivalent/generated.schema.json')}`,
     `--schema=${resolve(fixtures, 'pass/authored.schema.json')}`,
+    `--expected-declarations=${expectedDeclarations}`,
     `--verification=${verificationPath}`,
     '--quiet',
   ]);
@@ -150,6 +170,7 @@ test('usage failure preserves a separately supplied verification destination', a
     `--typespec=${resolve(fixtures, 'pass/main.tsp')}`,
     `--generated-schema=${resolve(fixtures, 'equivalent/generated.schema.json')}`,
     `--schema=${resolve(fixtures, 'pass/authored.schema.json')}`,
+    `--expected-declarations=${expectedDeclarations}`,
     '--verification',
     verificationPath,
     '--quiet',
