@@ -164,7 +164,7 @@ export function normalizeProjectionManifest(value: unknown, options?: { limits?:
 export function verifyProjectionContract(options: {
   contractIr: Record<string, unknown>;
   parityReceipt: Record<string, unknown>;
-  expectedSourceDigests?: ProjectionContractBinding['sourceDigests'];
+  expectedSourceDigests: ProjectionContractBinding['sourceDigests'];
 }): {
   binding: ProjectionContractBinding | null;
   declarationIds: string[];
@@ -177,3 +177,20 @@ export function hashProjectionFiles<T extends { path: string }>(
   options?: { maxFiles?: number; maxBytes?: number; maxTotalFileBytes?: number },
 ): Promise<ReadonlyArray<T & ProjectionFileDescriptor>>;
 export function projectionManifestDigest(manifest: ProjectionManifest): string | null;
+
+/** Caller-owned inventory/policy; observed hashes cannot be supplied here. */
+export interface ProjectionCurrentFilesOptions extends Omit<
+  ProjectionVerificationOptions, 'expectedSourceDigests' | 'expectedInputs' | 'actualOutputs'
+> {
+  root: string;
+  /** Normalized relative POSIX paths under root; receipt-controlled defaults are forbidden. */
+  typespec: string;
+  generatedSchema: string;
+  authoredSchema: string;
+  expectedDeclarations: string[];
+  inputPaths: Record<keyof ProjectionInputSet, string>;
+  outputFiles: Array<Pick<ProjectionOutputDescriptor, 'path' | 'mediaType' | 'projection'>>;
+  /** File count and aggregate budgets cover all three projection inputs plus outputs. */
+  fileLimits?: { maxFiles?: number; maxBytes?: number; maxTotalFileBytes?: number };
+}
+export function verifyProjectionManifestWithCurrentFiles(options: ProjectionCurrentFilesOptions): Promise<ProjectionAdmissionReport>;
