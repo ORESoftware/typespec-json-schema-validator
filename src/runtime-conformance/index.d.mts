@@ -20,6 +20,7 @@ export interface RuntimeAdapterEvidence {
 
 export interface RuntimeEvidence {
   schema: typeof RUNTIME_EVIDENCE_SCHEMA;
+  contractIrId: string;
   inputDigest: string;
   corpusDigest: string;
   adapters: RuntimeAdapterEvidence[];
@@ -35,6 +36,17 @@ export interface RequiredRuntimeAdapter {
   id: string;
   language?: string;
   validator?: string;
+}
+
+export interface ContractIrVerificationEvidence {
+  schema: 'ores.typespec-json-schema-validator.contract-ir-verification/v1';
+  status: 'passed' | 'failed';
+  admissible: boolean;
+  suppliedIrId: string | null;
+  computedIrId: string | null;
+  expectedIrId: string | null;
+  receiptRunId: string | null;
+  error: string | null;
 }
 
 export interface RuntimeFinding {
@@ -62,6 +74,9 @@ export interface RuntimeConformanceReport {
   findings: readonly RuntimeFinding[];
   findingCount: number;
   truncated: boolean;
+  contractIrId: string | null;
+  contractIrVerified: boolean;
+  receiptRunId: string | null;
   evidenceDigest: string | null;
   expectedCaseDigest: string;
   summary: Readonly<{
@@ -86,6 +101,8 @@ export function validateRuntimeEvidence(
 
 export function compareRuntimeEvidence(input: RuntimeEvidenceLimits & {
   evidence: unknown;
+  contractIr: unknown;
+  contractIrVerification: ContractIrVerificationEvidence;
   expectedInputDigest: string;
   expectedCorpusDigest: string;
   expectedCases: ExpectedRuntimeCase[];
