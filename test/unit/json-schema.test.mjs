@@ -24,7 +24,7 @@ test('valid Draft 2020-12 declaration bundle passes structural validation', () =
   assert.deepEqual(extractSchemaDeclarations(schema, 'schema.json').map((item) => item.name), ['User']);
 });
 
-test('structural validator catches dialect, required, enum, and ref defects', () => {
+test('structural validator catches dialect, required, enum, and pointer defects', () => {
   const schema = {
     $schema: 'http://json-schema.org/draft-07/schema#',
     $defs: {
@@ -41,9 +41,85 @@ test('structural validator catches dialect, required, enum, and ref defects', ()
   for (const rule of [
     'json-schema-dialect',
     'json-schema-duplicate-array-item',
-    'json-schema-required-property-missing',
-    'json-schema-empty-enum',
+    'json-schema-empty-array',
     'json-schema-unresolved-local-ref',
+  ]) {
+    assert.ok(rules.has(rule), `missing expected rule ${rule}`);
+  }
+});
+
+test('required may constrain a property without declaring its value schema', () => {
+  assert.deepEqual(
+    validateJsonSchemaDocument({
+      $schema: dialect,
+      type: 'object',
+      required: ['id'],
+    }),
+    [],
+  );
+});
+
+test('anchor references are not misinterpreted as JSON Pointers', () => {
+  assert.deepEqual(
+    validateJsonSchemaDocument({
+      $schema: dialect,
+      $defs: {
+        Name: { $anchor: 'name', type: 'string' },
+        Holder: { $ref: '#name' },
+      },
+    }),
+    [],
+  );
+});
+
+test('local JSON Pointers resolve inside the nearest nested resource', () => {
+  const valid = {
+    $schema: dialect,
+    $defs: {
+      Child: {
+        $id: 'child.json',
+        $defs: { Value: { type: 'string' } },
+        $ref: '#/$defs/Value',
+      },
+    },
+  };
+  assert.deepEqual(validateJsonSchemaDocument(valid), []);
+
+  valid.$defs.Child.$ref = '#/$defs/Missing';
+  assert.ok(
+    validateJsonSchemaDocument(valid).some((item) => item.ruleId === 'json-schema-unresolved-local-ref'),
+  );
+});
+
+test('URI-fragment JSON Pointers are percent-decoded before lookup', () => {
+  assert.deepEqual(
+    validateJsonSchemaDocument({
+      $schema: dialect,
+      $defs: {
+        '$name': { type: 'string' },
+        Holder: { $ref: '#/%24defs/%24name' },
+      },
+    }),
+    [],
+  );
+});
+
+test('shared syntax guard runs during structural parity even without instance probes', () => {
+  const findings = validateJsonSchemaDocument({
+    $schema: dialect,
+    $id: 'bad id',
+    pattern: '\\8',
+    required: ['id', 'id'],
+    properties: [],
+    multipleOf: 0,
+  }, 'bad.schema.json');
+  const rules = new Set(findings.map((item) => item.ruleId));
+  for (const rule of [
+    'json-schema-invalid-id',
+    'json-schema-invalid-regex',
+    'json-schema-duplicate-array-item',
+    'json-schema-invalid-schema-map',
+    'json-schema-invalid-multiple-of',
   ]) {
     assert.ok(rules.has(rule), `missing expected rule ${rule}`);
   }
