@@ -20,6 +20,25 @@ const fixtures = resolve(packageRoot, 'test/fixtures');
 const sourceTypeSpec = resolve(fixtures, 'pass/main.tsp');
 const sourceAuthoredSchema = resolve(fixtures, 'pass/authored.schema.json');
 
+// A source scalar is sensitive; coincidental digits inside a receipt digest
+// are not. Preserve the key/path checks and match 120 as a complete token.
+const staleInputDisclosure = /maxLength|\b120\b|tsjsv-current-input-stale/;
+
+test('stale-input redaction guard distinguishes source scalars from digest substrings', () => {
+  for (const report of [
+    { value: 120 }, { value: '120' }, { message: 'source value: 120' },
+    { maxLength: 80 }, { path: '/tmp/tsjsv-current-input-stale-abc/schema.json' },
+  ]) {
+    assert.match(JSON.stringify(report), staleInputDisclosure);
+  }
+  for (const digest of [
+    '6f6c0c9c6653c1208c14b304b1b2221cdacc43e0d23eaaac15d7bfe7b824ff3d',
+    `120${'a'.repeat(61)}`, `${'a'.repeat(61)}120`,
+  ]) {
+    assert.doesNotMatch(JSON.stringify({ receiptRunId: digest }), staleInputDisclosure);
+  }
+});
+
 const expectedCases = Object.freeze([
   Object.freeze({
     id: 'user.valid.basic',
@@ -149,7 +168,7 @@ test('preferred runtime API rejects evidence after authored Schema A changes', a
     assert.equal(report.status, 'stopped_for_evaluation');
     assert.equal(report.contractIrVerified, false);
     assert.ok(ruleIds(report).includes('runtime-contract-ir-verification-failed'));
-    assert.doesNotMatch(JSON.stringify(report), /maxLength|120|tsjsv-current-input-stale/);
+    assert.doesNotMatch(JSON.stringify(report), staleInputDisclosure);
   } finally {
     await rm(artifacts.directory, { recursive: true, force: true });
     await rm(directory, { recursive: true, force: true });
