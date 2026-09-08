@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "authored.container-runtime.schema.json",
+  "$defs": {
+    "RuntimeBaseKind": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "RuntimeBaseKind",
+      "type": "string",
+      "enum": ["shell", "distroless", "scratch"]
+    },
+    "EntrypointMode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "EntrypointMode",
+      "type": "string",
+      "enum": ["exec_wrapper", "direct_binary"]
+    },
+    "ContainerPlatform": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ContainerPlatform",
+      "type": "string",
+      "enum": ["linux/amd64", "linux/arm64"]
+    },
+    "ContainerRuntimeContract": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "ContainerRuntimeContract",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "ores.container-runtime-contract/v1" },
+        "serviceName": { "type": "string" },
+        "runtimeBase": { "$ref": "RuntimeBaseKind" },
+        "entrypointMode": { "$ref": "EntrypointMode" },
+        "entrypoint": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "cmd": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "platforms": {
+          "type": "array",
+          "items": { "$ref": "ContainerPlatform" }
+        },
+        "runsAsNonRoot": { "type": "boolean" },
+        "preservesPid1": { "type": "boolean" }
+      },
+      "required": [
+        "schemaVersion",
+        "serviceName",
+        "runtimeBase",
+        "entrypointMode",
+        "entrypoint",
+        "cmd",
+        "platforms",
+        "runsAsNonRoot",
+        "preservesPid1"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

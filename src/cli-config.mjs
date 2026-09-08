@@ -1,6 +1,5 @@
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
 import { parseStructured } from '@oresoftware/f2e';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -15,23 +14,15 @@ export class CliUsageError extends Error {
 }
 
 function booleanValue(value, fallback) {
-  if (value === undefined || value === null || value === '') {
-    return fallback;
-  }
+  if (value === undefined || value === null || value === '') return fallback;
   const normalized = String(value).toLowerCase();
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-    return true;
-  }
-  if (['0', 'false', 'no', 'off'].includes(normalized)) {
-    return false;
-  }
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
   throw new CliUsageError(`expected boolean value, received ${value}`);
 }
 
 function integerValue(value, fallback) {
-  if (value === undefined || value === null || value === '') {
-    return fallback;
-  }
+  if (value === undefined || value === null || value === '') return fallback;
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed)) {
     throw new CliUsageError(`expected safe integer value, received ${value}`);
@@ -70,27 +61,30 @@ function validateEmitterOptions(options) {
 export function loadCliConfiguration(argv = process.argv) {
   const parsed = parseStructured(argv, { configPath: CONFIG_PATH });
   if (parsed.isHelpMenu) {
-    return {
-      help: true,
-      printHelp: () => parsed.printTable(),
-      command: parsed.command,
-    };
+    return { help: true, printHelp: () => parsed.printTable(), command: parsed.command };
   }
   const env = mergedEnvironment(parsed);
+  const parsedCommand = parsed.command || env.TSJSV_COMMAND || '';
   if (parsed.unknownOptions.length > 0 || parsed.errors.length > 0) {
     throw new CliUsageError('flags-2-env rejected the command line', {
+      command: parsedCommand,
       unknownOptions: parsed.unknownOptions,
       errors: parsed.errors,
-      // Keep the report destination available even when the command is rejected
-      // before a normal command configuration can be built. This is an error
-      // receipt destination, not a second option parser.
       report: env.TSJSV_REPORT || undefined,
+      sarif: env.TSJSV_SARIF || undefined,
+      contractIr: env.TSJSV_CONTRACT_IR || undefined,
+      parityReceipt: env.TSJSV_PARITY_RECEIPT || undefined,
+      verification: env.TSJSV_VERIFICATION || undefined,
+      projectionRoot: env.TSJSV_PROJECTION_ROOT || undefined,
+      projectionVerification: env.TSJSV_PROJECTION_VERIFICATION || undefined,
     });
   }
-  const command = parsed.command || env.TSJSV_COMMAND || '';
+  const command = parsedCommand;
   const common = {
     command,
     report: env.TSJSV_REPORT || '.typespec-json-schema-validator/report.json',
+    sarif: env.TSJSV_SARIF || undefined,
+    contractIr: env.TSJSV_CONTRACT_IR || undefined,
     mapping: env.TSJSV_MAPPING || undefined,
     maxFindings: integerValue(env.TSJSV_MAX_FINDINGS, 250),
     tspBin: env.TSJSV_TSP_BIN || undefined,
@@ -133,10 +127,7 @@ export function loadCliConfiguration(argv = process.argv) {
         generatedSchema: required(env, 'TSJSV_GENERATED_SCHEMA', '--generated-schema'),
       };
     case 'inventory':
-      return {
-        ...common,
-        typespec: required(env, 'TSJSV_TYPESPEC', '--typespec'),
-      };
+      return { ...common, typespec: required(env, 'TSJSV_TYPESPEC', '--typespec') };
     case 'generate':
       return validateEmitterOptions({
         ...common,
@@ -147,15 +138,41 @@ export function loadCliConfiguration(argv = process.argv) {
         sealObjectSchemas: booleanValue(env.TSJSV_SEAL_OBJECT_SCHEMAS, true),
         polymorphicModelsStrategy: env.TSJSV_POLYMORPHIC_MODELS_STRATEGY || 'oneOf',
       });
+    case 'verify-ir':
+      return {
+        ...common,
+        contractIr: required(env, 'TSJSV_CONTRACT_IR', '--contract-ir'),
+        parityReceipt: required(env, 'TSJSV_PARITY_RECEIPT', '--parity-receipt'),
+        typespec: required(env, 'TSJSV_TYPESPEC', '--typespec'),
+        authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
+        generatedSchema: required(env, 'TSJSV_GENERATED_SCHEMA', '--generated-schema'),
+        expectedDeclarations: required(env, 'TSJSV_EXPECTED_DECLARATIONS', '--expected-declarations'),
+        verification: env.TSJSV_VERIFICATION
+          || '.typespec-json-schema-validator/consumer-verification.json',
+      };
+    case 'verify-projection':
+      return {
+        ...common,
+        root: env.TSJSV_PROJECTION_ROOT || '.',
+        projectionManifest: required(
+          env,
+          'TSJSV_PROJECTION_MANIFEST',
+          '--projection-manifest',
+        ),
+        contractIr: required(env, 'TSJSV_CONTRACT_IR', '--contract-ir'),
+        parityReceipt: required(env, 'TSJSV_PARITY_RECEIPT', '--parity-receipt'),
+        typespec: required(env, 'TSJSV_TYPESPEC', '--typespec'),
+        generatedSchema: required(env, 'TSJSV_GENERATED_SCHEMA', '--generated-schema'),
+        authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
+        projectionPolicy: required(env, 'TSJSV_PROJECTION_POLICY', '--policy'),
+        projectionVerification: env.TSJSV_PROJECTION_VERIFICATION
+          || '.typespec-json-schema-validator/projection-verification.json',
+      };
     case 'doctor':
       return common;
     case '':
-      return {
-        ...common,
-        help: true,
-        printHelp: () => parsed.printTable(),
-      };
+      return { ...common, help: true, printHelp: () => parsed.printTable() };
     default:
-      throw new CliUsageError(`unsupported command: ${command}`);
+      throw new CliUsageError(`unsupported command: ${command}`, { command });
   }
 }

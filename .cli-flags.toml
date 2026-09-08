@@ -20,6 +20,12 @@ type = "string"
 default = ".typespec-json-schema-validator/report.json"
 help = "Machine-readable parity report path."
 
+[flags.sarif]
+env = "TSJSV_SARIF"
+aliases = ["sarif"]
+type = "string"
+help = "Optional deterministic SARIF 2.1.0 presentation artifact path."
+
 [flags.mapping]
 env = "TSJSV_MAPPING"
 aliases = ["mapping"]
@@ -130,6 +136,12 @@ type = "string"
 default = "oneOf"
 help = "Official emitter discriminator strategy: ignore, oneOf, or anyOf."
 
+[commands.check.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir", "emit-ir"]
+type = "string"
+help = "Optional path for a digest-bound parity-approved Contract IR, or a non-admissible tombstone on failure."
+
 [commands.compare]
 help = "Compare a pre-generated TypeSpec JSON Schema witness with the authored JSON Schema and source inventory."
 env = "TSJSV_COMMAND_COMPARE"
@@ -154,6 +166,12 @@ aliases = ["generated-schema"]
 short = "g"
 type = "string"
 help = "JSON Schema previously generated from TypeSpec."
+
+[commands.compare.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir", "emit-ir"]
+type = "string"
+help = "Optional path for a digest-bound parity-approved Contract IR, or a non-admissible tombstone on failure."
 
 [commands.validate]
 help = "Run only the differential lane: execute both authorities as validators over one instance corpus."
@@ -230,6 +248,119 @@ aliases = ["polymorphic-models-strategy"]
 type = "string"
 default = "oneOf"
 help = "Official emitter discriminator strategy: ignore, oneOf, or anyOf."
+
+[commands.verify-ir]
+help = "Verify an existing Contract IR against its parity receipt, exact current peer-authority closure, and complete consumer declaration scope."
+env = "TSJSV_COMMAND_VERIFY_IR"
+
+[commands.verify-ir.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir"]
+type = "string"
+help = "Existing parity-approved Contract IR to verify. This command never overwrites the input."
+
+[commands.verify-ir.flags.parity-receipt]
+env = "TSJSV_PARITY_RECEIPT"
+aliases = ["parity-receipt", "receipt"]
+type = "string"
+help = "Passed parity receipt that the Contract IR claims to consume."
+
+[commands.verify-ir.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "Current independently authored TypeSpec entry file or project directory."
+
+[commands.verify-ir.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Current independently authored JSON Schema file or directory."
+
+[commands.verify-ir.flags.generated-schema]
+env = "TSJSV_GENERATED_SCHEMA"
+aliases = ["generated-schema"]
+short = "g"
+type = "string"
+help = "Current TypeSpec-generated comparison-only JSON Schema witness."
+
+[commands.verify-ir.flags.expected-declarations]
+env = "TSJSV_EXPECTED_DECLARATIONS"
+aliases = ["expected-declarations"]
+type = "string"
+help = "JSON array containing the complete qualified declaration IDs expected by this consumer."
+
+[commands.verify-ir.flags.verification]
+env = "TSJSV_VERIFICATION"
+aliases = ["verification"]
+type = "string"
+default = ".typespec-json-schema-validator/consumer-verification.json"
+help = "Deterministic self-digesting consumer verification receipt path."
+
+[commands.verify-projection]
+help = "Verify a downstream projection manifest against the exact current peer-authority closure, trusted policy, and current generated files."
+env = "TSJSV_COMMAND_VERIFY_PROJECTION"
+
+[commands.verify-projection.flags.root]
+env = "TSJSV_PROJECTION_ROOT"
+aliases = ["root"]
+type = "string"
+default = "."
+help = "Trusted workspace root; all verify-projection paths are normalized relative paths inside this root."
+
+[commands.verify-projection.flags.projection-manifest]
+env = "TSJSV_PROJECTION_MANIFEST"
+aliases = ["projection-manifest"]
+type = "string"
+help = "Existing projection manifest path relative to root."
+
+[commands.verify-projection.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir"]
+type = "string"
+help = "Existing parity-approved Contract IR path relative to root."
+
+[commands.verify-projection.flags.parity-receipt]
+env = "TSJSV_PARITY_RECEIPT"
+aliases = ["parity-receipt", "receipt"]
+type = "string"
+help = "Passed parity receipt path relative to root."
+
+[commands.verify-projection.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+short = "t"
+type = "string"
+help = "Current independently authored TypeSpec entry path relative to root."
+
+[commands.verify-projection.flags.generated-schema]
+env = "TSJSV_GENERATED_SCHEMA"
+aliases = ["generated-schema"]
+short = "g"
+type = "string"
+help = "Current TypeSpec-generated comparison-only JSON Schema B path relative to root."
+
+[commands.verify-projection.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Current independently authored JSON Schema A path relative to root."
+
+[commands.verify-projection.flags.policy]
+env = "TSJSV_PROJECTION_POLICY"
+aliases = ["policy"]
+type = "string"
+help = "Trusted projection verification policy path relative to root."
+
+[commands.verify-projection.flags.verification]
+env = "TSJSV_PROJECTION_VERIFICATION"
+aliases = ["verification"]
+type = "string"
+default = ".typespec-json-schema-validator/projection-verification.json"
+help = "Deterministic self-digesting projection verification receipt path relative to root."
 
 [commands.doctor]
 help = "Check the flags-2-env and TypeSpec toolchain required by the validator."

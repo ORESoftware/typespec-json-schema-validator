@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/consumer-verification-receipt/v1",
+  "title": "TypeSpec and JSON Schema downstream consumer verification receipt",
+  "description": "Deterministic evidence that one complete consumer declaration scope was admitted from the exact retained Contract IR, parity receipt, and current peer-authority input closure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "verificationId",
+    "status",
+    "admissible",
+    "suppliedIrId",
+    "computedIrId",
+    "expectedIrId",
+    "receiptRunId",
+    "declarationIds",
+    "failureCode"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.consumer-verification-receipt/v1"
+    },
+    "verificationId": {
+      "$ref": "#/$defs/digest"
+    },
+    "status": {
+      "enum": ["passed", "failed"]
+    },
+    "admissible": {
+      "type": "boolean"
+    },
+    "suppliedIrId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "computedIrId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "expectedIrId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "receiptRunId": {
+      "$ref": "#/$defs/nullableDigest"
+    },
+    "declarationIds": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 512
+      }
+    },
+    "failureCode": {
+      "enum": [null, "consumer-verification-failed"]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": { "const": "passed" }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "admissible": { "const": true },
+          "suppliedIrId": { "$ref": "#/$defs/digest" },
+          "computedIrId": { "$ref": "#/$defs/digest" },
+          "expectedIrId": { "$ref": "#/$defs/digest" },
+          "receiptRunId": { "$ref": "#/$defs/digest" },
+          "declarationIds": { "minItems": 1 },
+          "failureCode": { "type": "null" }
+        }
+      },
+      "else": {
+        "properties": {
+          "admissible": { "const": false },
+          "failureCode": { "const": "consumer-verification-failed" }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableDigest": {
+      "oneOf": [
+        { "$ref": "#/$defs/digest" },
+        { "type": "null" }
+      ]
+    }
+  }
+}

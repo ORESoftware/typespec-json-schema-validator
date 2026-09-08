@@ -2,10 +2,24 @@ export {
   canonicalStringify,
   canonicalizeJson,
   deepDiff,
+  normalizeComparisonRef,
   normalizeSchemaDocument,
+  normalizeSchemaDocumentForComparison,
   normalizeSchemaNode,
+  normalizeSchemaNodeForComparison,
   sha256,
 } from './canonical.mjs';
+export {
+  CONTRACT_IR_SCHEMA,
+  CONTRACT_IR_VERIFICATION_SCHEMA,
+  buildContractIr,
+  buildContractIrTombstone,
+  createContractIr,
+  verifyContractIr,
+  verifyContractIrEvidence,
+  writeContractIr,
+} from './contract-ir.mjs';
+export { UnsafeContractIrDestinationError, writeContractIrFile } from './contract-ir-file.mjs';
 export { emitTypeSpecJsonSchema, runCommand, toolVersion } from './emitter.mjs';
 export {
   extractSchemaDeclarations,
@@ -38,6 +52,15 @@ export {
   runValidate,
   writeReport,
 } from './run.mjs';
+export {
+  SARIF_SCHEMA,
+  SARIF_TOOL_NAME,
+  SARIF_VERSION,
+  serializeSarif,
+  toSarif,
+  writeSarif,
+} from './sarif.mjs';
+export { UnsafeSarifDestinationError, writeSarifFile } from './sarif-file.mjs';
 export {
   buildProbes,
   collectValueDomains,

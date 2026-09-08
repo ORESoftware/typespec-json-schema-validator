@@ -1,0 +1,126 @@
+name: TypeSpec and JSON Schema peer-authority parity
+description: Generate comparison-only JSON Schema B from TypeSpec and fail closed unless it converges with independently authored JSON Schema A.
+author: ORESoftware
+
+branding:
+  icon: check-circle
+  color: purple
+
+inputs:
+  typespec:
+    description: Path to the independently authored TypeSpec entry file or project directory in the caller workspace.
+    required: true
+  schema:
+    description: Path to the independently authored JSON Schema Draft 2020-12 file or directory in the caller workspace.
+    required: true
+  report:
+    description: Path for the deterministic machine-readable parity receipt.
+    required: false
+    default: .typespec-json-schema-validator/report.json
+  sarif:
+    description: Optional path for deterministic SARIF 2.1.0 presentation output. Leave empty to disable.
+    required: false
+    default: .typespec-json-schema-validator/report.sarif
+  contract_ir:
+    description: Optional path for a digest-bound parity-approved Contract IR. A stopped or failed run writes a non-admissible tombstone instead of leaving stale IR.
+    required: false
+    default: ""
+  output_dir:
+    description: Dedicated directory for generated comparison evidence. This directory must not contain either authored authority.
+    required: false
+    default: .typespec-json-schema-validator/generated
+  mapping:
+    description: Optional declaration-mapping JSON file.
+    required: false
+    default: ""
+  instances:
+    description: Optional independently maintained instance corpus directory.
+    required: false
+    default: ""
+  max_probes:
+    description: Maximum synthesized probes per declaration per authority lane.
+    required: false
+    default: "64"
+  int64_strategy:
+    description: TypeSpec JSON Schema emitter strategy for int64/uint64 wire values. Use string for lossless interoperability or number only when the authored wire contract intentionally uses JSON numbers.
+    required: false
+    default: string
+  seal_object_schemas:
+    description: Whether generated comparison schemas reject undeclared object properties through the official emitter's seal-object-schemas option.
+    required: false
+    default: "true"
+  polymorphic_models_strategy:
+    description: Official emitter strategy for polymorphic models; one of ignore, oneOf, or anyOf.
+    required: false
+    default: oneOf
+  quiet:
+    description: Suppress the human-readable summary while retaining the JSON receipt.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Install the validator's lockfile-pinned toolchain
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      run: npm ci --omit=dev
+
+    - name: Compare independent TypeSpec and JSON Schema authorities
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        TSJSV_TYPESPEC_INPUT: ${{ inputs.typespec }}
+        TSJSV_SCHEMA_INPUT: ${{ inputs.schema }}
+        TSJSV_REPORT_INPUT: ${{ inputs.report }}
+        TSJSV_SARIF_INPUT: ${{ inputs.sarif }}
+        TSJSV_CONTRACT_IR_INPUT: ${{ inputs.contract_ir }}
+        TSJSV_OUTPUT_DIR_INPUT: ${{ inputs.output_dir }}
+        TSJSV_MAPPING_INPUT: ${{ inputs.mapping }}
+        TSJSV_INSTANCES_INPUT: ${{ inputs.instances }}
+        TSJSV_MAX_PROBES_INPUT: ${{ inputs.max_probes }}
+        TSJSV_INT64_STRATEGY_INPUT: ${{ inputs.int64_strategy }}
+        TSJSV_SEAL_OBJECT_SCHEMAS_INPUT: ${{ inputs.seal_object_schemas }}
+        TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT: ${{ inputs.polymorphic_models_strategy }}
+        TSJSV_QUIET_INPUT: ${{ inputs.quiet }}
+      run: |
+        set -euo pipefail
+
+        args=(
+          check
+          "--typespec=${TSJSV_TYPESPEC_INPUT}"
+          "--schema=${TSJSV_SCHEMA_INPUT}"
+          "--report=${TSJSV_REPORT_INPUT}"
+          "--output-dir=${TSJSV_OUTPUT_DIR_INPUT}"
+          "--max-probes=${TSJSV_MAX_PROBES_INPUT}"
+          "--int64-strategy=${TSJSV_INT64_STRATEGY_INPUT}"
+          "--seal-object-schemas=${TSJSV_SEAL_OBJECT_SCHEMAS_INPUT}"
+          "--polymorphic-models-strategy=${TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT}"
+        )
+
+        if [[ -n "${TSJSV_SARIF_INPUT}" ]]; then
+          args+=("--sarif=${TSJSV_SARIF_INPUT}")
+        fi
+
+        if [[ -n "${TSJSV_CONTRACT_IR_INPUT}" ]]; then
+          args+=("--contract-ir=${TSJSV_CONTRACT_IR_INPUT}")
+        fi
+
+        if [[ -n "${TSJSV_MAPPING_INPUT}" ]]; then
+          args+=("--mapping=${TSJSV_MAPPING_INPUT}")
+        fi
+
+        if [[ -n "${TSJSV_INSTANCES_INPUT}" ]]; then
+          args+=("--instances=${TSJSV_INSTANCES_INPUT}")
+        fi
+
+        case "${TSJSV_QUIET_INPUT}" in
+          true) args+=("--quiet") ;;
+          false) ;;
+          *)
+            printf 'quiet must be true or false, got: %s\n' "${TSJSV_QUIET_INPUT}" >&2
+            exit 3
+            ;;
+        esac
+
+        node "${GITHUB_ACTION_PATH}/bin/typespec-json-schema-validator.mjs" "${args[@]}"

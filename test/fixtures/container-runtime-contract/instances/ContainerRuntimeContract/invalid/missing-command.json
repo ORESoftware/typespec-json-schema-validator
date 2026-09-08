@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "ores.container-runtime-contract/v1",
+  "serviceName": "broken-service",
+  "runtimeBase": "shell",
+  "entrypointMode": "exec_wrapper",
+  "entrypoint": ["/usr/local/bin/entrypoint.sh"],
+  "platforms": ["linux/amd64", "linux/arm64"],
+  "runsAsNonRoot": true,
+  "preservesPid1": true
+}

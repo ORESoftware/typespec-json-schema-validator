@@ -14,9 +14,20 @@
  */
 
 import { isPlainObject, escapeJsonPointerSegment, unescapeJsonPointerSegment } from './canonical.mjs';
+import { registerSchemaUri } from './schema-uri-index.mjs';
+export { SchemaIdentityError } from './schema-uri-index.mjs';
 
 /** Synthetic base authority used when a schema document declares no absolute `$id`. */
 const SYNTHETIC_BASE = 'https://tsjsv.invalid/';
+
+// Only these keyword positions contain schemas. Literal JSON inside annotations,
+// const/enum and extension values must never register resources or anchors.
+const SCHEMA_MAP_KEYS = new Set(['$defs', 'definitions', 'properties', 'patternProperties', 'dependentSchemas']);
+const SCHEMA_ARRAY_KEYS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
+const SCHEMA_SINGLE_KEYS = new Set([
+  'additionalProperties', 'unevaluatedProperties', 'propertyNames', 'contains',
+  'not', 'if', 'then', 'else', 'contentSchema', 'items', 'unevaluatedItems',
+]);
 
 /**
  * Keywords the validator evaluates. Anything outside this set and {@link ANNOTATION_KEYWORDS}
@@ -139,36 +150,47 @@ function pointerSegments(fragment) {
   if (fragment === '' || fragment === '#') {
     return [];
   }
-  const raw = fragment.startsWith('#') ? fragment.slice(1) : fragment;
+  let raw;
+  try {
+    // RFC 6901: decode the whole URI fragment before splitting its pointer.
+    raw = decodeURIComponent(fragment.startsWith('#') ? fragment.slice(1) : fragment);
+  } catch {
+    return undefined;
+  }
   if (raw === '') {
     return [];
   }
   if (!raw.startsWith('/')) {
     return undefined;
   }
-  return raw
-    .slice(1)
-    .split('/')
-    .map((segment) => unescapeJsonPointerSegment(decodeURIComponent(segment)));
+  const segments = raw.slice(1).split('/');
+  if (segments.some((segment) => /~(?:[^01]|$)/u.test(segment))) return undefined;
+  return segments.map(unescapeJsonPointerSegment);
 }
 
 function followPointer(root, segments) {
   let current = root;
+  let location = 'schema';
   for (const segment of segments) {
-    if (Array.isArray(current)) {
-      const index = Number(segment);
-      if (!Number.isInteger(index) || index < 0 || index >= current.length) {
-        return undefined;
-      }
-      current = current[index];
-      continue;
+    if (location === 'schema') {
+      if (SCHEMA_MAP_KEYS.has(segment)) location = 'map';
+      else if (SCHEMA_ARRAY_KEYS.has(segment)) location = 'array';
+      else if (SCHEMA_SINGLE_KEYS.has(segment)) location = 'schema';
+      else return undefined;
+    } else if (location === 'array') {
+      if (!Array.isArray(current) || !/^(?:0|[1-9][0-9]*)$/u.test(segment)) return undefined;
+      location = 'schema';
+    } else {
+      location = 'schema';
     }
-    if (!isPlainObject(current) || !(segment in current)) {
+    if (current === null || typeof current !== 'object' || !Object.hasOwn(current, segment)) {
       return undefined;
     }
     current = current[segment];
   }
-  return current;
+  // A map of declarations or literal JSON value is not itself a subschema.
+  return location === 'schema' && (isPlainObject(current) || typeof current === 'boolean')
+    ? current : undefined;
 }
 
 /**
@@ -195,14 +217,20 @@ export class SchemaResolver {
     const fallbackBase = `${SYNTHETIC_BASE}${index}/${encodeURIComponent(path ?? `document-${index}`)}`;
     const rootBase = declaredId ? resolveUri(declaredId, fallbackBase) ?? fallbackBase : fallbackBase;
     const record = { path, document, base: rootBase };
+    // A rejected bundle must not leave new resources, anchors or document slots.
+    const pending = new Map();
+    registerSchemaUri(pending, this.#byUri, rootBase.split('#')[0], {
+      schema: document, base: rootBase, record, pointer: '#',
+    });
+    this.#register(document, rootBase, rootBase, '#', record, pending);
+    for (const [uri, entry] of pending) this.#byUri.set(uri, entry);
     this.#documents.push(record);
-    this.#register(document, rootBase, rootBase, '#', record);
     return record;
   }
 
-  #register(node, base, rootBase, pointer, record) {
+  #register(node, base, rootBase, pointer, record, pending) {
     if (typeof node === 'boolean') {
-      this.#byUri.set(`${base}#${pointer === '#' ? '' : pointer.slice(1)}`, { schema: node, base, record });
+      registerSchemaUri(pending, this.#byUri, `${base}#${pointer === '#' ? '' : pointer.slice(1)}`, { schema: node, base, record, pointer });
       return;
     }
     if (!isPlainObject(node)) {
@@ -213,27 +241,27 @@ export class SchemaResolver {
       const resolved = resolveUri(node.$id, base);
       if (resolved) {
         currentBase = resolved.split('#')[0];
-        this.#byUri.set(currentBase, { schema: node, base: currentBase, record });
+        registerSchemaUri(pending, this.#byUri, currentBase, { schema: node, base: currentBase, record, pointer });
       }
     }
     const pointerUri = `${rootBase}#${pointer === '#' ? '' : pointer.slice(1)}`;
-    if (!this.#byUri.has(pointerUri)) {
-      this.#byUri.set(pointerUri, { schema: node, base: currentBase, record });
-    }
+    registerSchemaUri(pending, this.#byUri, pointerUri, { schema: node, base: currentBase, record, pointer });
     if (typeof node.$anchor === 'string') {
-      this.#byUri.set(`${currentBase}#${node.$anchor}`, { schema: node, base: currentBase, record });
+      registerSchemaUri(pending, this.#byUri, `${currentBase}#${node.$anchor}`, { schema: node, base: currentBase, record, pointer });
     }
 
     for (const [key, child] of Object.entries(node)) {
       const childPointer = `${pointer === '#' ? '#' : pointer}/${escapeJsonPointerSegment(key)}`;
-      if (Array.isArray(child)) {
-        for (let itemIndex = 0; itemIndex < child.length; itemIndex += 1) {
-          this.#register(child[itemIndex], currentBase, rootBase, `${childPointer}/${itemIndex}`, record);
+      if (SCHEMA_MAP_KEYS.has(key) && isPlainObject(child)) {
+        for (const [name, subschema] of Object.entries(child)) {
+          this.#register(subschema, currentBase, rootBase, `${childPointer}/${escapeJsonPointerSegment(name)}`, record, pending);
         }
-        continue;
-      }
-      if (isPlainObject(child) || typeof child === 'boolean') {
-        this.#register(child, currentBase, rootBase, childPointer, record);
+      } else if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(child)) {
+        for (let itemIndex = 0; itemIndex < child.length; itemIndex += 1) {
+          this.#register(child[itemIndex], currentBase, rootBase, `${childPointer}/${itemIndex}`, record, pending);
+        }
+      } else if (SCHEMA_SINGLE_KEYS.has(key)) {
+        this.#register(child, currentBase, rootBase, childPointer, record, pending);
       }
     }
   }
@@ -356,13 +384,14 @@ function compileRegExp(pattern, cache) {
 }
 
 function emptyAnnotations() {
-  return { properties: new Set(), items: 0, allItems: false };
+  return { properties: new Set(), items: 0, matchedItems: new Set(), allItems: false };
 }
 
 function mergeAnnotations(target, source) {
   for (const property of source.properties) {
     target.properties.add(property);
   }
+  for (const index of source.matchedItems) target.matchedItems.add(index);
   target.items = Math.max(target.items, source.items);
   target.allItems = target.allItems || source.allItems;
   return target;
@@ -534,6 +563,9 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
   // ---- object assertions and applicators -------------------------------------------
   if (isPlainObject(instance)) {
     const keys = Object.keys(instance);
+    // additionalProperties sees only sibling properties/patternProperties, not
+    // the annotations inherited from $ref or another in-place applicator.
+    const locallyDeclared = new Set();
     if (Array.isArray(schema.required)) {
       for (const property of schema.required) {
         if (!Object.hasOwn(instance, property)) {
@@ -565,6 +597,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
         if (!Object.hasOwn(instance, property)) {
           continue;
         }
+        locallyDeclared.add(property);
         const result = evaluate(
           subschema,
           instance[property],
@@ -592,6 +625,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
           if (!expression.test(property)) {
             continue;
           }
+          locallyDeclared.add(property);
           const result = evaluate(
             subschema,
             instance[property],
@@ -612,7 +646,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
 
     if (schema.additionalProperties !== undefined) {
       for (const property of keys) {
-        if (annotations.properties.has(property)) {
+        if (locallyDeclared.has(property)) {
           continue;
         }
         const result = evaluate(
@@ -754,7 +788,8 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
         );
         if (result.valid) {
           matches += 1;
-          annotations.items = Math.max(annotations.items, index + 1);
+          // contains evaluates a sparse set, not the entire preceding prefix.
+          annotations.matchedItems.add(index);
         }
       }
       const minContains = typeof schema.minContains === 'number' ? schema.minContains : 1;
@@ -921,6 +956,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
     const start = annotations.allItems ? instance.length : annotations.items;
     let allValid = true;
     for (let index = start; index < instance.length; index += 1) {
+      if (annotations.matchedItems.has(index)) continue;
       const result = evaluate(
         schema.unevaluatedItems,
         instance[index],

@@ -1,0 +1,153 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/runtime-conformance-report/v1",
+  "title": "TypeSpec JSON Schema validator runtime conformance report",
+  "description": "Deterministic admission decision for runtime-validator evidence bound to one freshly verified parity-approved Contract IR, retained parity receipt, and recorded instance corpus.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "zeroUnexplainedFindings",
+    "findings",
+    "findingCount",
+    "truncated",
+    "contractIrId",
+    "contractIrVerified",
+    "receiptRunId",
+    "receiptDigest",
+    "evidenceDigest",
+    "expectedCaseDigest",
+    "summary"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.runtime-conformance-report/v1"
+    },
+    "status": {
+      "enum": ["passed", "stopped_for_evaluation"]
+    },
+    "zeroUnexplainedFindings": {
+      "type": "boolean"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "findingCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "contractIrId": {
+      "$ref": "#/$defs/nullableSha256"
+    },
+    "contractIrVerified": {
+      "type": "boolean"
+    },
+    "receiptRunId": {
+      "$ref": "#/$defs/nullableSha256"
+    },
+    "receiptDigest": {
+      "$ref": "#/$defs/nullableSha256"
+    },
+    "evidenceDigest": {
+      "$ref": "#/$defs/nullableSha256"
+    },
+    "expectedCaseDigest": {
+      "$ref": "#/$defs/sha256"
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expectedCases",
+        "requiredAdapters",
+        "observedAdapters",
+        "passedAdapters"
+      ],
+      "properties": {
+        "expectedCases": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "requiredAdapters": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "observedAdapters": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "passedAdapters": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableSha256": {
+      "oneOf": [
+        { "$ref": "#/$defs/sha256" },
+        { "type": "null" }
+      ]
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleId",
+        "severity",
+        "resolutionState",
+        "comparison",
+        "message",
+        "fingerprint"
+      ],
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "severity": {
+          "const": "error"
+        },
+        "resolutionState": {
+          "const": "unexplained"
+        },
+        "comparison": {
+          "const": "runtime-conformance"
+        },
+        "declaration": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "pointer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "left": true,
+        "right": true,
+        "fingerprint": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

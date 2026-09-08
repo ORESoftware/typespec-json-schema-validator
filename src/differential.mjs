@@ -15,6 +15,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { basename, join, relative, resolve } from 'node:path';
 import { canonicalStringify, isPlainObject, stableFindingFingerprint } from './canonical.mjs';
+import { assertFindingLimit } from './finding-limit.mjs';
 import {
   SchemaResolver,
   SchemaResolutionError,
@@ -176,6 +177,7 @@ export function crossValidate({
   maxFindings = 250,
   formatAssertion = false,
 }) {
+  assertFindingLimit(maxFindings);
   const findings = [];
   const generatedLane = buildLaneResolver(generatedCollection);
   const authoredLane = buildLaneResolver(authoredCollection);
@@ -253,7 +255,12 @@ export function crossValidate({
 
     for (const probe of probes) {
       const encoding = canonicalStringify(probe.instance);
-      if (seen.has(encoding)) {
+      // Equal JSON values do not make independent expectations interchangeable.
+      // A synthetic probe may precede a contradictory fixture, and every corpus
+      // source must retain its own diagnostic even when another source is equal.
+      const carriesExpectation = probe.origin === 'corpus'
+        || probe.origin.startsWith('declared-example') || probe.origin === 'declared-default';
+      if (!carriesExpectation && seen.has(encoding)) {
         continue;
       }
       seen.add(encoding);

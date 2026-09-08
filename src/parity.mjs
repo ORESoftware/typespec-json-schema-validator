@@ -1,11 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { assertFindingLimit } from './finding-limit.mjs';
 import {
   canonicalStringify,
   deepDiff,
-  normalizeSchemaNode,
+  normalizeSchemaNodeForComparison,
   stableFindingFingerprint,
 } from './canonical.mjs';
+import {
+  auditMappingIntegrity,
+  validateAndNormalizeMapping,
+} from './mapping-integrity.mjs';
 import { declarationKindFamily } from './typespec-inventory.mjs';
 
 export const MAPPING_SCHEMA = 'ores.typespec-json-schema-validator.mapping/v1';
@@ -36,39 +41,12 @@ export async function loadMapping(path) {
   } catch (error) {
     throw new Error(`invalid mapping JSON in ${absolute}: ${error.message}`, { cause: error });
   }
-  if (value.schema !== MAPPING_SCHEMA) {
-    throw new Error(`mapping file ${absolute} must declare schema ${MAPPING_SCHEMA}`);
-  }
-  if (!Array.isArray(value.declarations)) {
-    throw new Error(`mapping file ${absolute} must contain a declarations array`);
-  }
-  for (const [index, declaration] of value.declarations.entries()) {
-    if (!declaration || typeof declaration !== 'object' || Array.isArray(declaration)) {
-      throw new Error(`mapping declaration ${index} must be an object`);
-    }
-    if (typeof declaration.typespec !== 'string' || declaration.typespec.length === 0) {
-      throw new Error(`mapping declaration ${index} must provide a non-empty typespec name`);
-    }
-    for (const key of ['generated', 'authored']) {
-      if (declaration[key] !== undefined && (typeof declaration[key] !== 'string' || declaration[key].length === 0)) {
-        throw new Error(`mapping declaration ${index}.${key} must be a non-empty string when present`);
-      }
-    }
-  }
-  const ignore = value.ignore ?? {};
-  for (const key of ['typespec', 'generated', 'authored']) {
-    if (ignore[key] !== undefined && (!Array.isArray(ignore[key]) || ignore[key].some((item) => typeof item !== 'string'))) {
-      throw new Error(`mapping ignore.${key} must be an array of strings`);
-    }
-  }
-  return {
+  const normalized = validateAndNormalizeMapping(value, {
     schema: MAPPING_SCHEMA,
-    declarations: value.declarations,
-    ignore: {
-      typespec: ignore.typespec ?? [],
-      generated: ignore.generated ?? [],
-      authored: ignore.authored ?? [],
-    },
+    source: `mapping file ${absolute}`,
+  });
+  return {
+    ...normalized,
     source: absolute,
   };
 }
@@ -244,8 +222,11 @@ function compareSemanticSchemas(generatedMap, authoredMap, expectedDeclarations,
     if (!generated || !authored) {
       continue;
     }
-    const left = normalizeSchemaNode(generated.schema);
-    const right = normalizeSchemaNode(authored.schema);
+    // Comparison normalization may erase non-assertion presentation metadata
+    // and unify declaration identities. The executable collections remain
+    // untouched so their $id resource graphs and probe annotations still work.
+    const left = normalizeSchemaNodeForComparison(generated.schema);
+    const right = normalizeSchemaNodeForComparison(authored.schema);
     const remaining = Math.max(1, maxFindings - findings.length);
     const { differences } = deepDiff(left, right, { maxFindings: remaining });
     for (const difference of differences) {
@@ -289,6 +270,7 @@ export function compareParity({
   mapping,
   maxFindings = 250,
 }) {
+  assertFindingLimit(maxFindings);
   const findings = [];
 
   for (const error of typespecInventory.errors) {
@@ -317,6 +299,14 @@ export function compareParity({
   }
   for (const structural of [...generatedCollection.findings, ...authoredCollection.findings]) {
     findings.push(makeFinding(structural));
+  }
+  for (const integrity of auditMappingIntegrity({
+    typespecInventory,
+    generatedCollection,
+    authoredCollection,
+    mapping,
+  })) {
+    findings.push(makeFinding(integrity));
   }
 
   const expected = buildExpectedDeclarations(typespecInventory, mapping, findings);

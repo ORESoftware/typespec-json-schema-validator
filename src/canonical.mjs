@@ -1,13 +1,48 @@
 import { createHash } from 'node:crypto';
+import { assertFindingLimit } from './finding-limit.mjs';
 
-const SET_LIKE_ARRAY_KEYS = new Set([
-  'allOf',
-  'anyOf',
-  'enum',
-  'oneOf',
-  'required',
-  'type',
+// Context is essential: keys inside properties/$defs name declarations, while
+// const/enum/default/examples contain JSON data, not nested schemas.
+const SCHEMA_MAP_KEYS = new Set([
+  '$defs', 'definitions', 'properties', 'patternProperties', 'dependentSchemas',
 ]);
+const SCHEMA_ARRAY_KEYS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
+const UNORDERED_SCHEMA_ARRAY_KEYS = new Set(['allOf', 'anyOf', 'oneOf']);
+const SCHEMA_SINGLE_KEYS = new Set([
+  'additionalProperties', 'unevaluatedProperties', 'propertyNames', 'contains',
+  'not', 'if', 'then', 'else', 'contentSchema', 'items', 'unevaluatedItems',
+  'additionalItems',
+]);
+const JSON_SCHEMA_TYPES = new Set([
+  'array', 'boolean', 'integer', 'null', 'number', 'object', 'string',
+]);
+
+// These keywords do not assert whether an instance is valid. They may still be
+// essential while executing a schema: $id builds the resource graph, examples
+// and defaults seed probes, and title can identify a root declaration. They are
+// therefore removed only by the comparison-specific normalizer below.
+const NON_ASSERTION_METADATA_KEYS = new Set([
+  '$comment',
+  '$id',
+  '$schema',
+  'default',
+  'deprecated',
+  'description',
+  'examples',
+  'readOnly',
+  'title',
+  'writeOnly',
+]);
+
+const EXECUTABLE_NORMALIZATION = Object.freeze({
+  stripMetadata: false,
+  normalizeReference: normalizeRef,
+});
+
+const COMPARISON_NORMALIZATION = Object.freeze({
+  stripMetadata: true,
+  normalizeReference: normalizeComparisonRef,
+});
 
 export function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -21,30 +56,19 @@ export function canonicalStringify(value, space = 0) {
   return JSON.stringify(canonicalizeJson(value), null, space);
 }
 
-export function canonicalizeJson(value, parentKey = '') {
+/** Sort object keys only. Literal array order and multiplicity bind digests. */
+export function canonicalizeJson(value) {
   if (Array.isArray(value)) {
-    const values = value.map((item) => canonicalizeJson(item, ''));
-    if (SET_LIKE_ARRAY_KEYS.has(parentKey)) {
-      const byEncoding = new Map();
-      for (const item of values) {
-        byEncoding.set(JSON.stringify(item), item);
-      }
-      return [...byEncoding.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([, item]) => item);
-    }
-    return values;
+    return value.map((item) => canonicalizeJson(item));
   }
-
   if (!isPlainObject(value)) {
     return value;
   }
-
-  const result = {};
-  for (const key of Object.keys(value).sort()) {
-    result[key] = canonicalizeJson(value[key], key);
-  }
-  return result;
+  // Object.fromEntries defines own data properties, including "__proto__".
+  // Assignment into {} would instead invoke the inherited prototype setter.
+  return Object.fromEntries(
+    Object.keys(value).sort().map((key) => [key, canonicalizeJson(value[key])]),
+  );
 }
 
 export function escapeJsonPointerSegment(value) {
@@ -55,12 +79,44 @@ export function unescapeJsonPointerSegment(value) {
   return String(value).replaceAll('~1', '/').replaceAll('~0', '~');
 }
 
+function declarationRef(name) {
+  return `urn:tsjsv:declaration:${name}`;
+}
+
+/**
+ * Normalize references without changing runtime resolution semantics.
+ */
 export function normalizeRef(reference) {
   if (typeof reference !== 'string') {
     return reference;
   }
   if (reference.startsWith('#/definitions/')) {
     return `#/$defs/${reference.slice('#/definitions/'.length)}`;
+  }
+  return reference;
+}
+
+/**
+ * Normalize only references that identify a mapped top-level declaration.
+ * This representation is for cross-authority comparison and must never be
+ * installed into a schema document that will be executed as a validator.
+ */
+export function normalizeComparisonRef(reference) {
+  if (typeof reference !== 'string') {
+    return reference;
+  }
+  const declaration = /^#\/(?:definitions|\$defs)\/([^/%]+)$/u.exec(reference);
+  if (declaration && !/~(?:[^01]|$)/u.test(declaration[1])) {
+    return declarationRef(declaration[1]);
+  }
+
+  // The official TypeSpec bundle emitter uses declaration-local files such as
+  // `User.json`, while independently authored bundles commonly use
+  // `#/$defs/User`. Paths, URLs, query strings, and nested fragments remain
+  // untouched because their resolution semantics may differ.
+  const localFile = /^(?:\.\/)?([^/#?]+)\.json$/.exec(reference);
+  if (localFile) {
+    return declarationRef(localFile[1]);
   }
   return reference;
 }
@@ -92,7 +148,7 @@ function canCollapseSimpleTypeUnion(value) {
     if (!isPlainObject(branch) || Object.keys(branch).length !== 1) {
       return null;
     }
-    if (typeof branch.type !== 'string') {
+    if (typeof branch.type !== 'string' || !JSON_SCHEMA_TYPES.has(branch.type)) {
       return null;
     }
     types.push(branch.type);
@@ -100,76 +156,129 @@ function canCollapseSimpleTypeUnion(value) {
   if (new Set(types).size !== types.length) {
     return null;
   }
+  // integer is a subset of number: an integer matches BOTH branches in oneOf,
+  // so replacing that XOR with an inclusive type array would accept more data.
+  if (unionKey === 'oneOf' && types.includes('number') && types.includes('integer')) {
+    return null;
+  }
   return { type: types.sort() };
 }
 
-export function normalizeSchemaNode(value, parentKey = '') {
-  if (value === true || value === false || value === null || typeof value !== 'object') {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    const normalized = value.map((item) => normalizeSchemaNode(item, ''));
-    if (SET_LIKE_ARRAY_KEYS.has(parentKey)) {
-      const byEncoding = new Map();
-      for (const item of normalized) {
-        byEncoding.set(JSON.stringify(canonicalizeJson(item)), item);
-      }
-      return [...byEncoding.entries()]
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([, item]) => item);
-    }
-    return normalized;
-  }
-
-  if (isAlwaysFalseSchema(value)) {
-    return false;
-  }
-
-  const result = {};
-  for (const key of Object.keys(value).sort()) {
-    let targetKey = key;
-    if (key === 'definitions') {
-      targetKey = '$defs';
-    }
-    let child = value[key];
-    if (targetKey === '$ref') {
-      child = normalizeRef(child);
-    }
-    result[targetKey] = normalizeSchemaNode(child, targetKey);
-  }
-
-  const collapsed = canCollapseSimpleTypeUnion(result);
-  return collapsed ?? result;
+function sortJsonValues(values) {
+  // Never deduplicate. In particular, repeated oneOf branches change validity.
+  // Use code-unit ordering, not a locale-dependent comparator, for digests.
+  return values.map((value) => [canonicalStringify(value), value])
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([, value]) => value);
 }
 
-export function normalizeSchemaDocument(document) {
-  if (!isPlainObject(document)) {
-    return normalizeSchemaNode(document);
+function normalizeSchemaMap(value, options) {
+  if (!isPlainObject(value)) return canonicalizeJson(value);
+  return Object.fromEntries(Object.keys(value).sort().map((name) => [
+    name, normalizeSchemaNodeWith(value[name], options),
+  ]));
+}
+
+function normalizeKeywordValue(key, value, options) {
+  if (SCHEMA_MAP_KEYS.has(key)) return normalizeSchemaMap(value, options);
+  if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(value)) {
+    const children = value.map((child) => normalizeSchemaNodeWith(child, options));
+    return UNORDERED_SCHEMA_ARRAY_KEYS.has(key) ? sortJsonValues(children) : children;
   }
-  if (document.$defs !== undefined && document.definitions !== undefined) {
-    const left = canonicalStringify(normalizeSchemaNode(document.$defs));
-    const right = canonicalStringify(normalizeSchemaNode(document.definitions));
+  if (SCHEMA_SINGLE_KEYS.has(key)) {
+    // Keep legacy tuple order; structural validation still decides dialect support.
+    return key === 'items' && Array.isArray(value)
+      ? value.map((child) => normalizeSchemaNodeWith(child, options))
+      : normalizeSchemaNodeWith(value, options);
+  }
+  if ((key === 'dependentRequired' || key === 'dependencies') && isPlainObject(value)) {
+    return Object.fromEntries(Object.keys(value).sort().map((name) => [name,
+      Array.isArray(value[name])
+        ? sortJsonValues(value[name].map((item) => canonicalizeJson(item)))
+        : key === 'dependencies'
+          ? normalizeSchemaNodeWith(value[name], options)
+          : canonicalizeJson(value[name]),
+    ]));
+  }
+  if (key === '$ref') return options.normalizeReference(value);
+  if (['enum', 'required', 'type'].includes(key) && Array.isArray(value)) {
+    // Enum members are literal JSON values, not schemas. Only the OUTER array
+    // is unordered; arrays anywhere inside a member retain their exact order.
+    return sortJsonValues(value.map((item) => canonicalizeJson(item)));
+  }
+  // const, defaults, examples, annotations, and unknown extension values are
+  // opaque JSON. Do not interpret keyword-looking keys nested inside them.
+  return canonicalizeJson(value);
+}
+
+function normalizeSchemaNodeWith(value, options) {
+  if (!isPlainObject(value)) return canonicalizeJson(value);
+  if (isAlwaysFalseSchema(value)) return false;
+
+  // Do this at EVERY schema node, not just at the document root, and compare
+  // declaration maps as maps (a declaration may legitimately be named title).
+  if (Object.hasOwn(value, '$defs') && Object.hasOwn(value, 'definitions')) {
+    const left = canonicalStringify(normalizeSchemaMap(value.$defs, options));
+    const right = canonicalStringify(normalizeSchemaMap(value.definitions, options));
     if (left !== right) {
       throw new Error('JSON Schema document contains conflicting $defs and definitions objects');
     }
   }
+  const entries = [];
+  for (const key of Object.keys(value).sort()) {
+    if (options.stripMetadata && NON_ASSERTION_METADATA_KEYS.has(key)) continue;
+    const targetKey = key === 'definitions' ? '$defs' : key;
+    entries.push([targetKey, normalizeKeywordValue(key, value[key], options)]);
+  }
+  const result = Object.fromEntries(entries);
+  return canCollapseSimpleTypeUnion(result) ?? result;
+}
+
+/**
+ * Normalize a schema while retaining every value needed for execution,
+ * resource resolution, declaration inference, and probe generation.
+ * parentKey explicitly identifies a keyword value when called on a subtree.
+ */
+export function normalizeSchemaNode(value, parentKey = '') {
+  return parentKey
+    ? normalizeKeywordValue(parentKey, value, EXECUTABLE_NORMALIZATION)
+    : normalizeSchemaNodeWith(value, EXECUTABLE_NORMALIZATION);
+}
+
+/** Normalize actual schema locations only for cross-authority comparison. */
+export function normalizeSchemaNodeForComparison(value, parentKey = '') {
+  return parentKey
+    ? normalizeKeywordValue(parentKey, value, COMPARISON_NORMALIZATION)
+    : normalizeSchemaNodeWith(value, COMPARISON_NORMALIZATION);
+}
+
+export function normalizeSchemaDocument(document) {
   return normalizeSchemaNode(document);
 }
 
+export function normalizeSchemaDocumentForComparison(document) {
+  return normalizeSchemaNodeForComparison(document);
+}
+
 export function resolveJsonPointer(document, pointer) {
-  if (pointer === '#') {
-    return document;
-  }
-  if (!pointer.startsWith('#/')) {
+  if (typeof pointer !== 'string' || !pointer.startsWith('#')) return undefined;
+  let decoded;
+  try {
+    // RFC 6901 section 6: decode the URI fragment before parsing pointer tokens.
+    decoded = decodeURIComponent(pointer.slice(1));
+  } catch {
     return undefined;
   }
+  if (decoded === '') return document;
+  if (!decoded.startsWith('/')) return undefined;
   let current = document;
-  for (const encoded of pointer.slice(2).split('/')) {
-    const segment = unescapeJsonPointerSegment(decodeURIComponent(encoded));
-    if (current === null || typeof current !== 'object' || !(segment in current)) {
+  for (const encoded of decoded.slice(1).split('/')) {
+    if (/~(?:[^01]|$)/u.test(encoded)) return undefined;
+    const segment = unescapeJsonPointerSegment(encoded);
+    if (current === null || typeof current !== 'object' || !Object.hasOwn(current, segment)) {
       return undefined;
     }
+    if (Array.isArray(current) && !/^(?:0|[1-9][0-9]*)$/u.test(segment)) return undefined;
     current = current[segment];
   }
   return current;
@@ -177,6 +286,7 @@ export function resolveJsonPointer(document, pointer) {
 
 export function deepDiff(left, right, options = {}) {
   const maxFindings = options.maxFindings ?? 250;
+  assertFindingLimit(maxFindings);
   const differences = [];
 
   function visit(a, b, pointer) {
@@ -209,9 +319,9 @@ export function deepDiff(left, right, options = {}) {
       const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])].sort();
       for (const key of keys) {
         const childPointer = `${pointer}/${escapeJsonPointerSegment(key)}`;
-        if (!(key in a)) {
+        if (!Object.hasOwn(a, key)) {
           differences.push({ pointer: childPointer, kind: 'missing-left', left: undefined, right: b[key] });
-        } else if (!(key in b)) {
+        } else if (!Object.hasOwn(b, key)) {
           differences.push({ pointer: childPointer, kind: 'missing-right', left: a[key], right: undefined });
         } else {
           visit(a[key], b[key], childPointer);
