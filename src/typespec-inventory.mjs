@@ -16,12 +16,48 @@ const EXCLUDED_DIRECTORIES = new Set([
   'tmp',
 ]);
 
-function isIdentifierStart(character) {
-  return /[A-Za-z_$]/u.test(character);
+// Mirror the official TypeSpec scanner's identifier profile: ASCII identifiers
+// use letters, `_`, and `$` (plus digits after the first character); every
+// assigned non-ASCII code point is accepted except controls, private-use and
+// surrogate code points, noncharacters, Pattern_White_Space, U+FFFD, and
+// unassigned code points. This is intentionally broader than JavaScript's
+// `ID_Start` / `ID_Continue` profile because TypeSpec also supports emoji and
+// other assigned Unicode code points.
+const DISALLOWED_NON_ASCII_IDENTIFIER =
+  /[\p{Control}\p{Private_Use}\p{Surrogate}\p{Noncharacter_Code_Point}\p{Pattern_White_Space}\p{Unassigned}]/u;
+
+function identifierCodePointLength(source, offset, allowAsciiDigit) {
+  const codePoint = source.codePointAt(offset);
+  if (codePoint === undefined) {
+    return 0;
+  }
+  if (codePoint <= 0x7f) {
+    const character = String.fromCodePoint(codePoint);
+    const valid = /[A-Za-z_$]/u.test(character) || (allowAsciiDigit && /[0-9]/u.test(character));
+    return valid ? 1 : 0;
+  }
+  if (codePoint === 0xfffd) {
+    return 0;
+  }
+  const character = String.fromCodePoint(codePoint);
+  return DISALLOWED_NON_ASCII_IDENTIFIER.test(character) ? 0 : character.length;
 }
 
-function isIdentifierContinue(character) {
-  return /[A-Za-z0-9_$]/u.test(character);
+function scanIdentifier(source, offset) {
+  let cursor = offset;
+  let width = identifierCodePointLength(source, cursor, false);
+  if (width === 0) {
+    return null;
+  }
+  cursor += width;
+  while (cursor < source.length) {
+    width = identifierCodePointLength(source, cursor, true);
+    if (width === 0) {
+      break;
+    }
+    cursor += width;
+  }
+  return source.slice(offset, cursor);
 }
 
 function decodeQuoted(raw, quote) {
@@ -198,15 +234,15 @@ export function lexTypeSpec(source, file = '<memory>') {
       continue;
     }
 
-    if (isIdentifierStart(character)) {
+    const identifier = scanIdentifier(source, index);
+    if (identifier !== null) {
       const startIndex = index;
       const startLine = line;
       const startColumn = column;
-      let value = advance();
-      while (index < source.length && isIdentifierContinue(source[index])) {
-        value += advance();
+      for (let offset = 0; offset < identifier.length; offset += 1) {
+        advance();
       }
-      push('identifier', value, startIndex, startLine, startColumn);
+      push('identifier', identifier, startIndex, startLine, startColumn);
       continue;
     }
 
@@ -225,8 +261,16 @@ export function lexTypeSpec(source, file = '<memory>') {
     const startIndex = index;
     const startLine = line;
     const startColumn = column;
+    const three = source.slice(index, index + 3);
+    if (three === '...') {
+      advance();
+      advance();
+      advance();
+      push('punctuation', three, startIndex, startLine, startColumn);
+      continue;
+    }
     const two = source.slice(index, index + 2);
-    if (['::', '=>', '&&', '||', '==', '!=', '<=', '>=', '@@', '...'].includes(two)) {
+    if (['::', '=>', '&&', '||', '==', '!=', '<=', '>=', '@@'].includes(two)) {
       advance();
       advance();
       push('punctuation', two, startIndex, startLine, startColumn);
