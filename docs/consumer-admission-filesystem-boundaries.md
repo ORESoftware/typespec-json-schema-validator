@@ -1,6 +1,6 @@
 # Consumer admission filesystem boundaries
 
-Tracking: DEN-3828; issue #20; PR #55. These are additional protections for the internal `actions/test-consumer-admission` entrypoint. They do not change the public CLI parser or the versioned verification receipt format.
+Tracking: DEN-3828; issue #20; PR #56. These are additional protections for the internal `actions/test-consumer-admission` entrypoint. They do not change the public CLI parser or the versioned verification receipt format.
 
 ## Failure evidence must not become a source write
 
