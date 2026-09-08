@@ -35,12 +35,21 @@ These rules make mappings and ignores auditable configuration, not a way to hide
 ## Draft 2020-12 structure
 
 - `json-schema-dialect`: the explicit dialect is absent or not Draft 2020-12.
-- `json-schema-unresolved-local-ref`: a local JSON Pointer does not resolve.
-- `json-schema-required-property-missing`: `required` names a property not present in `properties`.
-- `json-schema-duplicate-array-item`: a set-like keyword contains a duplicate.
+- `json-schema-unresolved-local-ref`: a local JSON Pointer does not resolve within the nearest schema resource. Anchor references are resolved by the resource graph rather than misread as pointers.
+- `json-schema-invalid-id`, `json-schema-invalid-schema-uri`, and `json-schema-invalid-ref`: an identifier, dialect URI, or reference is not a valid URI form for its keyword.
+- `json-schema-invalid-anchor`: `$anchor` or `$dynamicAnchor` violates the Draft 2020-12 anchor grammar.
+- `json-schema-invalid-vocabulary*`: `$vocabulary` is not an object mapping absolute vocabulary URIs to booleans.
+- `json-schema-invalid-regex`: `pattern` or a `patternProperties` key is not a valid ECMA-262 Unicode regular expression.
+- `json-schema-empty-array`, `json-schema-invalid-array`, `json-schema-invalid-array-item`, and `json-schema-duplicate-array-item`: an array-valued keyword violates its Draft 2020-12 shape or uniqueness rule.
+- `json-schema-invalid-schema-map` and `json-schema-invalid-child-schema`: a schema-bearing keyword has the wrong immediate shape.
+- `json-schema-invalid-type`, `json-schema-duplicate-type`, and `json-schema-empty-type`: `type` is outside the seven JSON Schema primitive names or has invalid array semantics.
+- `json-schema-invalid-number`, `json-schema-invalid-cardinality`, and `json-schema-invalid-multiple-of`: a numeric validation keyword has an invalid value.
+- `json-schema-invalid-string`, `json-schema-invalid-boolean`, and `json-schema-invalid-json-value`: a metadata or validation keyword has the wrong JSON type.
 - `json-schema-openapi-nullable-keyword`: OpenAPI `nullable` appears in the JSON Schema authority.
 - `json-schema-impossible-range`: a lower bound exceeds its upper bound.
-- `json-schema-invalid-*`: a keyword has a value of the wrong shape.
+- `json-schema-invalid-*`: another recognized keyword has a value of the wrong shape.
+
+`required` is not required to repeat names from `properties`. Draft 2020-12 permits a schema to require a property while leaving its value unconstrained, including when no `properties` keyword is present.
 
 ## Differential instance validation
 
