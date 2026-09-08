@@ -5,6 +5,13 @@ import { canonicalStringify, sha256 } from './canonical.mjs';
 
 const HEX_256 = /^[a-f0-9]{64}$/u;
 const FAILURE_CODES = new Set(['consumer-verification-failed']);
+// Closed versioned envelope: a recomputed digest must not turn unrelated data
+// into validator-owned evidence that this writer is allowed to replace.
+const RECEIPT_KEYS = new Set([
+  'schema', 'verificationId', 'status', 'admissible', 'suppliedIrId',
+  'computedIrId', 'expectedIrId', 'receiptRunId', 'declarationIds', 'failureCode',
+]);
+const MAX_DECLARATION_ID_CHARACTERS = 512;
 
 export class UnsafeConsumerVerificationReceiptDestinationError extends Error {
   constructor(reason) {
@@ -21,9 +28,21 @@ function isNullableDigest(value) {
   return value === null || (typeof value === 'string' && HEX_256.test(value));
 }
 
+function validDeclarationId(value) {
+  if (typeof value !== 'string' || value === '' || value.trim() !== value) return false;
+  // JSON Schema maxLength counts Unicode characters, not UTF-16 code units.
+  // Iterate with an early bound instead of allocating an unbounded array.
+  let characters = 0;
+  for (const _character of value) {
+    characters += 1;
+    if (characters > MAX_DECLARATION_ID_CHARACTERS) return false;
+  }
+  return true;
+}
+
 function identitiesAreNormalized(values) {
   return Array.isArray(values)
-    && values.every((value) => typeof value === 'string' && value !== '' && value.trim() === value)
+    && values.every(validDeclarationId)
     && values.every((value, index) => index === 0 || values[index - 1] < value);
 }
 
@@ -37,6 +56,8 @@ function isSelfConsistent(value) {
 function isReceipt(value, schema) {
   const passed = value?.status === 'passed';
   return isObject(value)
+    && Object.keys(value).length === RECEIPT_KEYS.size
+    && Object.keys(value).every((key) => RECEIPT_KEYS.has(key))
     && value.schema === schema
     && typeof value.verificationId === 'string'
     && HEX_256.test(value.verificationId)
