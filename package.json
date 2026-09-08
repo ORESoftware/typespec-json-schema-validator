@@ -22,12 +22,15 @@
       "import": "./src/projection-verification/index.mjs",
       "types": "./src/projection-verification/index.d.mts"
     },
-    "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
-    "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
+    "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
+    "./schema/contract-ir": "./schema/contract-ir.schema.json",
+    "./schema/mapping": "./schema/mapping.schema.json",
     "./schema/projection-manifest": "./schema/projection-manifest.schema.json",
     "./schema/projection-verification-policy": "./schema/projection-verification-policy.schema.json",
     "./schema/projection-verification-receipt": "./schema/projection-verification-receipt.schema.json",
-    "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
+    "./schema/report": "./schema/report.schema.json",
+    "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
+    "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./src/index.d.ts",
