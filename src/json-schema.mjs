@@ -9,12 +9,13 @@ import {
   resolveJsonPointer,
   sha256,
 } from './canonical.mjs';
+import { validateSchemaNodeSyntax } from './schema-syntax.mjs';
 
 export const JSON_SCHEMA_DRAFT_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
-const VALID_TYPES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
 const SCHEMA_ARRAY_KEYWORDS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
 const SCHEMA_MAP_KEYWORDS = new Set(['$defs', 'definitions', 'dependentSchemas', 'patternProperties', 'properties']);
 const SCHEMA_SINGLE_KEYWORDS = new Set([
+  'additionalItems',
   'additionalProperties',
   'contains',
   'contentSchema',
@@ -44,16 +45,16 @@ function isSchema(value) {
   return typeof value === 'boolean' || isPlainObject(value);
 }
 
-function validateNumberPair(node, minimumKey, maximumKey, pointer, source, findings) {
+function validateOrderedPair(node, minimumKey, maximumKey, pointer, source, findings) {
   const minimum = node[minimumKey];
   const maximum = node[maximumKey];
-  if (minimum !== undefined && (typeof minimum !== 'number' || !Number.isFinite(minimum))) {
-    findings.push(finding('json-schema-invalid-number', `${minimumKey} must be a finite number`, `${pointer}/${minimumKey}`, source));
-  }
-  if (maximum !== undefined && (typeof maximum !== 'number' || !Number.isFinite(maximum))) {
-    findings.push(finding('json-schema-invalid-number', `${maximumKey} must be a finite number`, `${pointer}/${maximumKey}`, source));
-  }
-  if (typeof minimum === 'number' && typeof maximum === 'number' && minimum > maximum) {
+  if (
+    typeof minimum === 'number' &&
+    Number.isFinite(minimum) &&
+    typeof maximum === 'number' &&
+    Number.isFinite(maximum) &&
+    minimum > maximum
+  ) {
     findings.push(
       finding(
         'json-schema-impossible-range',
@@ -65,51 +66,41 @@ function validateNumberPair(node, minimumKey, maximumKey, pointer, source, findi
   }
 }
 
-function validateNonNegativeInteger(node, key, pointer, source, findings) {
-  if (node[key] === undefined) {
-    return;
+function localJsonPointer(reference) {
+  if (reference === '#') {
+    return '#';
   }
-  if (!Number.isInteger(node[key]) || node[key] < 0) {
-    findings.push(
-      finding('json-schema-invalid-cardinality', `${key} must be a non-negative integer`, `${pointer}/${key}`, source),
-    );
+  if (!reference.startsWith('#/')) {
+    return null;
   }
-}
-
-function validateUniqueArray(node, key, pointer, source, findings, itemType) {
-  const value = node[key];
-  if (value === undefined) {
-    return;
-  }
-  if (!Array.isArray(value)) {
-    findings.push(finding('json-schema-invalid-array', `${key} must be an array`, `${pointer}/${key}`, source));
-    return;
-  }
-  const seen = new Set();
-  for (let index = 0; index < value.length; index += 1) {
-    const item = value[index];
-    if (itemType && typeof item !== itemType) {
-      findings.push(
-        finding(
-          'json-schema-invalid-array-item',
-          `${key}[${index}] must be a ${itemType}`,
-          `${pointer}/${key}/${index}`,
-          source,
-        ),
-      );
-      continue;
-    }
-    const encoded = canonicalStringify(item);
-    if (seen.has(encoded)) {
-      findings.push(
-        finding('json-schema-duplicate-array-item', `${key} contains a duplicate item`, `${pointer}/${key}/${index}`, source),
-      );
-    }
-    seen.add(encoded);
+  try {
+    return `#${decodeURIComponent(reference.slice(1))}`;
+  } catch {
+    // Invalid percent escapes are reported by the shared URI syntax guard.
+    return null;
   }
 }
 
-function walkSchema(node, pointer, document, source, findings, visited) {
+function walkLegacyDependencies(node, pointer, document, resourceRoot, source, findings, visited) {
+  if (!isPlainObject(node.dependencies)) {
+    return;
+  }
+  for (const [name, dependency] of Object.entries(node.dependencies)) {
+    if (isSchema(dependency)) {
+      walkSchema(
+        dependency,
+        `${pointer}/dependencies/${escapeJsonPointerSegment(name)}`,
+        document,
+        resourceRoot,
+        source,
+        findings,
+        visited,
+      );
+    }
+  }
+}
+
+function walkSchema(node, pointer, document, resourceRoot, source, findings, visited) {
   if (typeof node === 'boolean') {
     return;
   }
@@ -122,6 +113,9 @@ function walkSchema(node, pointer, document, source, findings, visited) {
   }
   visited.add(node);
 
+  findings.push(...validateSchemaNodeSyntax(node, { pointer, source }));
+  const activeResourceRoot = typeof node.$id === 'string' ? node : resourceRoot;
+
   if ('nullable' in node) {
     findings.push(
       finding(
@@ -133,114 +127,83 @@ function walkSchema(node, pointer, document, source, findings, visited) {
     );
   }
 
-  if (node.$ref !== undefined) {
-    if (typeof node.$ref !== 'string') {
-      findings.push(finding('json-schema-invalid-ref', '$ref must be a string', `${pointer}/$ref`, source));
-    } else if (node.$ref.startsWith('#') && resolveJsonPointer(document, node.$ref) === undefined) {
+  if (typeof node.$ref === 'string') {
+    const localPointer = localJsonPointer(node.$ref);
+    if (localPointer !== null && resolveJsonPointer(activeResourceRoot, localPointer) === undefined) {
       findings.push(
-        finding('json-schema-unresolved-local-ref', `local $ref does not resolve: ${node.$ref}`, `${pointer}/$ref`, source),
+        finding(
+          'json-schema-unresolved-local-ref',
+          'local JSON Pointer reference does not resolve within its schema resource',
+          `${pointer}/$ref`,
+          source,
+        ),
       );
     }
   }
 
-  if (node.type !== undefined) {
-    const values = Array.isArray(node.type) ? node.type : [node.type];
-    if (values.length === 0) {
-      findings.push(finding('json-schema-empty-type', 'type array must not be empty', `${pointer}/type`, source));
-    }
-    const seen = new Set();
-    for (let index = 0; index < values.length; index += 1) {
-      const type = values[index];
-      if (typeof type !== 'string' || !VALID_TYPES.has(type)) {
-        findings.push(
-          finding('json-schema-invalid-type', `unsupported JSON Schema type: ${String(type)}`, `${pointer}/type/${index}`, source),
-        );
-      }
-      if (seen.has(type)) {
-        findings.push(finding('json-schema-duplicate-type', `duplicate JSON Schema type: ${type}`, `${pointer}/type/${index}`, source));
-      }
-      seen.add(type);
-    }
-  }
-
-  validateUniqueArray(node, 'required', pointer, source, findings, 'string');
-  validateUniqueArray(node, 'enum', pointer, source, findings);
-
-  if (Array.isArray(node.required)) {
-    const properties = isPlainObject(node.properties) ? node.properties : {};
-    for (let index = 0; index < node.required.length; index += 1) {
-      const property = node.required[index];
-      if (typeof property === 'string' && !(property in properties)) {
-        findings.push(
-          finding(
-            'json-schema-required-property-missing',
-            `required property is not declared in properties: ${property}`,
-            `${pointer}/required/${index}`,
-            source,
-          ),
-        );
-      }
-    }
-  }
-
-  if (node.enum !== undefined && (!Array.isArray(node.enum) || node.enum.length === 0)) {
-    findings.push(finding('json-schema-empty-enum', 'enum must be a non-empty array', `${pointer}/enum`, source));
-  }
-
-  for (const key of ['minLength', 'maxLength', 'minItems', 'maxItems', 'minProperties', 'maxProperties', 'minContains', 'maxContains']) {
-    validateNonNegativeInteger(node, key, pointer, source, findings);
-  }
-  validateNumberPair(node, 'minimum', 'maximum', pointer, source, findings);
-  validateNumberPair(node, 'exclusiveMinimum', 'exclusiveMaximum', pointer, source, findings);
-  validateNumberPair(node, 'minLength', 'maxLength', pointer, source, findings);
-  validateNumberPair(node, 'minItems', 'maxItems', pointer, source, findings);
-  validateNumberPair(node, 'minProperties', 'maxProperties', pointer, source, findings);
-  validateNumberPair(node, 'minContains', 'maxContains', pointer, source, findings);
-
-  if (node.multipleOf !== undefined && (typeof node.multipleOf !== 'number' || node.multipleOf <= 0)) {
-    findings.push(
-      finding('json-schema-invalid-multiple-of', 'multipleOf must be a number greater than zero', `${pointer}/multipleOf`, source),
-    );
-  }
+  // `required` is intentionally not cross-checked against `properties`.
+  // Draft 2020-12 permits requiring a named property while leaving its value
+  // unconstrained, including when no `properties` keyword is present.
+  validateOrderedPair(node, 'minimum', 'maximum', pointer, source, findings);
+  validateOrderedPair(node, 'exclusiveMinimum', 'exclusiveMaximum', pointer, source, findings);
+  validateOrderedPair(node, 'minLength', 'maxLength', pointer, source, findings);
+  validateOrderedPair(node, 'minItems', 'maxItems', pointer, source, findings);
+  validateOrderedPair(node, 'minProperties', 'maxProperties', pointer, source, findings);
+  validateOrderedPair(node, 'minContains', 'maxContains', pointer, source, findings);
 
   for (const key of SCHEMA_ARRAY_KEYWORDS) {
-    if (node[key] === undefined) {
-      continue;
-    }
-    if (!Array.isArray(node[key]) || node[key].length === 0) {
-      findings.push(
-        finding('json-schema-invalid-schema-array', `${key} must be a non-empty array of schemas`, `${pointer}/${key}`, source),
-      );
+    if (!Array.isArray(node[key])) {
       continue;
     }
     for (let index = 0; index < node[key].length; index += 1) {
-      walkSchema(node[key][index], `${pointer}/${key}/${index}`, document, source, findings, visited);
+      if (isSchema(node[key][index])) {
+        walkSchema(
+          node[key][index],
+          `${pointer}/${key}/${index}`,
+          document,
+          activeResourceRoot,
+          source,
+          findings,
+          visited,
+        );
+      }
     }
   }
 
   for (const key of SCHEMA_MAP_KEYWORDS) {
-    if (node[key] === undefined) {
-      continue;
-    }
     if (!isPlainObject(node[key])) {
-      findings.push(finding('json-schema-invalid-schema-map', `${key} must be an object of schemas`, `${pointer}/${key}`, source));
       continue;
     }
     for (const [name, child] of Object.entries(node[key])) {
-      walkSchema(child, `${pointer}/${key}/${escapeJsonPointerSegment(name)}`, document, source, findings, visited);
+      if (isSchema(child)) {
+        walkSchema(
+          child,
+          `${pointer}/${key}/${escapeJsonPointerSegment(name)}`,
+          document,
+          activeResourceRoot,
+          source,
+          findings,
+          visited,
+        );
+      }
     }
   }
 
   for (const key of SCHEMA_SINGLE_KEYWORDS) {
-    if (node[key] === undefined) {
-      continue;
+    if (isSchema(node[key])) {
+      walkSchema(
+        node[key],
+        `${pointer}/${key}`,
+        document,
+        activeResourceRoot,
+        source,
+        findings,
+        visited,
+      );
     }
-    if (!isSchema(node[key])) {
-      findings.push(finding('json-schema-invalid-child-schema', `${key} must be an object or boolean schema`, `${pointer}/${key}`, source));
-      continue;
-    }
-    walkSchema(node[key], `${pointer}/${key}`, document, source, findings, visited);
   }
+
+  walkLegacyDependencies(node, pointer, document, activeResourceRoot, source, findings, visited);
 }
 
 export function validateJsonSchemaDocument(document, source = '<memory>', options = {}) {
@@ -277,7 +240,7 @@ export function validateJsonSchemaDocument(document, source = '<memory>', option
       }
     }
   }
-  walkSchema(document, '#', document, source, findings, new WeakSet());
+  walkSchema(document, '#', document, document, source, findings, new WeakSet());
   return findings;
 }
 
