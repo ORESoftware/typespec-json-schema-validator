@@ -1,0 +1,44 @@
+name: Test exact-evidence consumer admission
+description: Verify current Contract IR and prove seven altered-evidence or incomplete-scope cases are refused. Run fresh compiler-backed parity first.
+inputs:
+  contract_ir:
+    description: Current parity-approved Contract IR file.
+    required: true
+  report:
+    description: Exact retained parity receipt.
+    required: true
+  typespec:
+    description: Caller-owned TypeSpec input path.
+    required: true
+  schema:
+    description: Independently authored Draft 2020-12 input path.
+    required: true
+  generated_schema:
+    description: Fresh TypeSpec-generated comparison witness.
+    required: true
+  expected_declarations:
+    description: Complete nonempty JSON array of qualified declaration identities.
+    required: true
+  verification:
+    description: Canonical consumer verification receipt; replaced by failed evidence if a regression fails.
+    default: .typespec-json-schema-validator/regression-verification.json
+runs:
+  using: composite
+  steps:
+    - name: Install lockfile-pinned verifier dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../..
+      run: npm ci --omit=dev
+    - name: Require positive admission and rejection regressions
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        ACTION_DIRECTORY: ${{ github.action_path }}
+        TSJSV_VERIFY_IR: ${{ inputs.contract_ir }}
+        TSJSV_VERIFY_REPORT: ${{ inputs.report }}
+        TSJSV_VERIFY_TYPESPEC: ${{ inputs.typespec }}
+        TSJSV_VERIFY_AUTHORED: ${{ inputs.schema }}
+        TSJSV_VERIFY_GENERATED: ${{ inputs.generated_schema }}
+        TSJSV_VERIFY_DECLARATIONS: ${{ inputs.expected_declarations }}
+        TSJSV_VERIFY_VERIFICATION: ${{ inputs.verification }}
+      run: node "${ACTION_DIRECTORY}/../../scripts/test-consumer-admission.mjs"
