@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { link, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,7 +8,9 @@ import { fileLimit, readProjectionFile } from '../../src/projection-admission/sa
 import { hashProjectionFiles, loadProjectionManifest } from '../../src/projection-admission/io.mjs';
 
 async function fixture(t) {
-  const root = await mkdtemp(join(tmpdir(), 'tsjsv-safe-file-'));
+  // Canonicalize only our fixture: macOS temp paths can start with /var -> /private/var.
+  // The production reader must still reject symlinks supplied as evidence paths.
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-safe-file-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(join(root, 'nested'));
   const file = join(root, 'nested/evidence.json');

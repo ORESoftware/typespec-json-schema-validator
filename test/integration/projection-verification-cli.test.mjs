@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, relative, resolve } from 'node:path';
 import { test } from 'node:test';
@@ -22,7 +22,7 @@ async function writeJson(path, value) {
 }
 
 async function fixture() {
-  const root = await mkdtemp(resolve(tmpdir(), 'tsjsv-projection-cli-'));
+  const root = await realpath(await mkdtemp(resolve(tmpdir(), 'tsjsv-projection-cli-')));
   const typespec = resolve(root, 'sources/main.tsp');
   const authoredSchema = resolve(root, 'sources/authored.schema.json');
   await mkdir(dirname(typespec), { recursive: true });
