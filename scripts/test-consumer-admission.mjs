@@ -2,6 +2,7 @@
 import { lstat, mkdir, readFile, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { testConsumerAdmission } from '../src/consumer-admission-regressions.mjs';
+import { preflightAdmissionOutput } from '../src/consumer-admission-paths.mjs';
 import {
   createConsumerVerificationReceipt,
   failedConsumerVerificationReceipt,
@@ -9,7 +10,6 @@ import {
 } from '../src/consumer-verification-receipt.mjs';
 
 async function main() {
-  if (process.argv.length !== 2) throw new Error('no command-line arguments are accepted');
   const workspace = await realpath(process.env.GITHUB_WORKSPACE || process.cwd());
   function contained(value) {
     if (typeof value !== 'string' || value.trim() === '') throw new Error('missing action input');
@@ -27,8 +27,7 @@ async function main() {
       if ((await lstat(current)).isSymbolicLink()) throw new Error('symbolic links are not admitted');
     }
   }
-  async function input(name, fileOnly = false) {
-    const path = contained(process.env[name]);
+  async function input(path, fileOnly = false) {
     await noLinks(path);
     const info = await lstat(path);
     if ((!info.isFile() && !info.isDirectory()) ||
@@ -37,9 +36,19 @@ async function main() {
     }
     return path;
   }
+  // Snapshot every nominated input before side effects. Do not infer an input's
+  // ownership from its bytes, and do not put preflight inside tombstone cleanup.
+  const configured = Object.freeze({
+    ir: contained(process.env.TSJSV_VERIFY_IR),
+    report: contained(process.env.TSJSV_VERIFY_REPORT),
+    typespec: contained(process.env.TSJSV_VERIFY_TYPESPEC),
+    generatedSchema: contained(process.env.TSJSV_VERIFY_GENERATED),
+    authoredSchema: contained(process.env.TSJSV_VERIFY_AUTHORED),
+  });
   const output = contained(process.env.TSJSV_VERIFY_VERIFICATION ||
     '.typespec-json-schema-validator/regression-verification.json');
-  // Create output parents one component at a time without traversing symlinks.
+  await preflightAdmissionOutput(workspace, output, Object.values(configured));
+  // Create output parents only after proving separation from input subtrees.
   let parent = workspace;
   for (const segment of relative(workspace, dirname(output)).split(sep).filter(Boolean)) {
     parent = resolve(parent, segment);
@@ -51,14 +60,14 @@ async function main() {
   let report = null;
   let expectedDeclarations = null;
   try {
-    const ir = await input('TSJSV_VERIFY_IR', true);
-    const receipt = await input('TSJSV_VERIFY_REPORT', true);
-    const typespec = await input('TSJSV_VERIFY_TYPESPEC');
-    const generatedSchema = await input('TSJSV_VERIFY_GENERATED');
-    const authoredSchema = await input('TSJSV_VERIFY_AUTHORED');
-    if ([ir, receipt, typespec, generatedSchema, authoredSchema].includes(output)) {
-      throw new Error('verification output aliases an input');
-    }
+    // A malformed invocation must invalidate old success, but only at an
+    // independent, safe, validator-owned destination established above.
+    if (process.argv.length !== 2) throw new Error('no command-line arguments are accepted');
+    const ir = await input(configured.ir, true);
+    const receipt = await input(configured.report, true);
+    const typespec = await input(configured.typespec);
+    const generatedSchema = await input(configured.generatedSchema);
+    const authoredSchema = await input(configured.authoredSchema);
     contractIr = JSON.parse(await readFile(ir, 'utf8'));
     report = JSON.parse(await readFile(receipt, 'utf8'));
     expectedDeclarations = JSON.parse(process.env.TSJSV_VERIFY_DECLARATIONS || 'null');
