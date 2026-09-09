@@ -13,4 +13,6 @@ This is not a claim that the advisory is fixed. The exception exists only becaus
 
 `scripts/check-production-audit.mjs` is the fail-closed policy. Until expiry it permits only the exact GHSA, exact compiler version 1.15.0, and the three expected affected npm entries. Any critical vulnerability, any other high advisory, compiler-version drift, OpenAPI3 entering the production graph, malformed/unavailable npm audit output, or expiry fails CI. If the advisory disappears, CI also fails so the exception is reviewed and removed rather than becoming permanent dead policy.
 
+Merge or release evidence for this exception must name the exact tested commit SHA and a completed hosted CI run for that SHA. A green run from an earlier tree, a local-only test, or a ref move without a corresponding hosted run is insufficient.
+
 Before expiry, re-check upstream for a fixed compatible TypeSpec/compiler + JSON Schema emitter release. Prefer upgrading to a fixed version and deleting this exception. Do not extend the date merely to make CI green; an extension requires a new reachability review and recorded rationale.
