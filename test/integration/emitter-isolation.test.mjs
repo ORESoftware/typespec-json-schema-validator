@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { copyFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
@@ -25,8 +24,12 @@ function run(args) {
   });
 }
 
-test('explicit JSON Schema emitter excludes project-configured OpenAPI emitters', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'tjsv-emitter-isolation-'));
+test('explicit JSON Schema emitter excludes project-configured OpenAPI emitters', async (t) => {
+  // Keep the fixture below packageRoot so the normal tsp subprocess can resolve
+  // the lockfile-pinned TypeSpec libraries by walking up to packageRoot/node_modules.
+  // A system tmp directory would exercise TJSV's pinned-compiler fallback instead.
+  const temp = await mkdtemp(join(packageRoot, 'test', 'tmp-emitter-isolation-'));
+  t.after(() => rm(temp, { recursive: true, force: true }));
   const typespec = join(temp, 'main.tsp');
   const authored = join(temp, 'authored.schema.json');
   const report = join(temp, 'report.json');
