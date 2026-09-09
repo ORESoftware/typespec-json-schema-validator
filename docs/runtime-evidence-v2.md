@@ -17,23 +17,33 @@ Accepted values never appear in the evidence file itself. Only their canonical d
 
 A stable validation error contains `{ path, code, params }`. `path` is an RFC 6901 JSON Pointer. `code` and parameter names are bounded lowercase identifiers. Parameter values are limited to null, booleans, finite JSON numbers, or bounded identifier strings so adapters can report rule metadata such as `minimum`, `maximum`, or `format` without retaining the rejected value or library-specific prose.
 
+## Trusted case binding
+
+For v2 admission, every trusted `expectedCases` entry must also carry the SHA-256 digest of its canonical input. TJSV compares each adapter result directly with that trusted digest. Agreement between adapters is not sufficient: two adapters that report the same wrong or fabricated digest still fail with `runtime-case-input-digest-mismatch`.
+
+The trusted corpus loader computes these digests from the exact canonical fixtures before invoking the adapters. The loader also computes `expectedCorpusDigest` over the complete recorded corpus. Adapters consume those fixtures and report observations; they do not author their own expectations or trusted input identities.
+
+This binding is required whenever v2 evidence is presented or `requiredEvidenceSchema` explicitly requires v2. Legacy v1 admission continues to accept expectation-only case metadata.
+
 ## Cross-adapter decision rules
 
-For v2 evidence TJSV keeps the existing trusted verdict checks and additionally stops evaluation when adapters disagree on:
+For v2 evidence TJSV keeps the existing trusted verdict checks and additionally stops evaluation when:
 
-- the per-case trusted input digest;
-- canonical admitted output digest for an accepted case;
-- canonicalized stable error evidence for a rejected case.
+- an adapter's per-case input digest differs from the trusted case digest;
+- adapters disagree with one another on the per-case input digest;
+- adapters disagree on canonical admitted output digest for an accepted case; or
+- adapters disagree on canonicalized stable error evidence for a rejected case.
 
-Therefore a trimming/coercing/default-inserting adapter cannot hide behind the same `accepted` verdict when another adapter preserves a different admitted value.
+Therefore a trimming/coercing/default-inserting adapter cannot hide behind the same `accepted` verdict when another adapter preserves a different admitted value, and mutually consistent adapters cannot substitute an untrusted input.
 
 `requiredEvidenceSchema` may be supplied to `compareRuntimeEvidence()` or `verifyRuntimeEvidenceAgainstCurrentInputs()` when an assurance profile requires v2. If it is omitted, both the legacy v1 and semantic v2 envelopes are accepted for backward compatibility. A v1 receipt never acquires v2 semantics by inference.
 
 ## Migration
 
 1. Existing consumers may continue emitting `RUNTIME_EVIDENCE_SCHEMA` / v1 unchanged.
-2. Stronger consumers explicitly emit `RUNTIME_EVIDENCE_SCHEMA_V2` and populate semantic fields for every result.
+2. Stronger consumers explicitly emit `RUNTIME_EVIDENCE_SCHEMA_V2`, populate semantic fields for every result, and supply trusted per-case `inputDigest` values in `expectedCases`.
 3. Promotion policies that require semantic evidence pass `requiredEvidenceSchema: RUNTIME_EVIDENCE_SCHEMA_V2`.
-4. Test-org canaries should mutate admitted output and stable error evidence independently of verdicts and require `stopped_for_evaluation`.
+4. Test-org canaries mutate the trusted input digest, admitted output, and stable error evidence independently of verdicts and require `stopped_for_evaluation`.
+5. Consumers must include a collusion negative control in which all adapters report the same wrong input digest; peer agreement alone must never pass.
 
 Finite runtime cases remain regression evidence, not universal equivalence proof. Unsupported required semantics remain fail-closed.

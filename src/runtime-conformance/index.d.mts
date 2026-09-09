@@ -47,6 +47,11 @@ export interface ExpectedRuntimeCase {
   id: string;
   declaration: string;
   expectation: RuntimeCaseExpectation;
+  /**
+   * SHA-256 of the canonical trusted case input. Required whenever v2 evidence
+   * is presented or required; ignored for legacy v1-only admission.
+   */
+  inputDigest?: string;
 }
 
 export interface RequiredRuntimeAdapter {
