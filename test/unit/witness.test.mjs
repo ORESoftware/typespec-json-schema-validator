@@ -62,6 +62,35 @@ test('synthesis honours constraints on numbers and arrays', () => {
   assert.equal(instance.tags.length, 2);
 });
 
+test('conditional allOf branches cannot erase a constructible sibling object witness', () => {
+  const schema = {
+    allOf: [
+      {
+        if: { properties: { opcode: { const: 'report' } }, required: ['opcode'] },
+        then: { properties: { effects: { contains: { const: 'emit' } } } },
+      },
+      {
+        type: 'object',
+        properties: {
+          opcode: { type: 'string', enum: ['report', 'other'] },
+          effects: { type: 'array', items: { type: 'string', enum: ['emit', 'other'] }, minItems: 1 },
+        },
+        required: ['opcode', 'effects'],
+      },
+    ],
+  };
+  const resolver = new SchemaResolver();
+  const record = resolver.addDocument(schema, 'conditional.json');
+  const synthesized = synthesizeInstance({ schema, base: record.base, resolver });
+  assert.ok(synthesized.instance && typeof synthesized.instance === 'object' && !Array.isArray(synthesized.instance));
+  assert.deepEqual(synthesized.instance.effects, ['emit']);
+  const result = validateInstance({ schema, instance: synthesized.instance, resolver, base: record.base });
+  assert.equal(result.valid, true, canonicalStringify(result.errors));
+  const probes = buildProbes({ schema, base: record.base, resolver, lane: 'authored', declaration: 'Conditional', maxProbes: 64 });
+  assert.ok(probes.length > 0);
+  assert.ok(probes.some((probe) => probe.origin === 'domain-member' && probe.pointer === '/effects/0'));
+});
+
 test('synthesis is deterministic', () => {
   const first = (() => {
     const { resolver, base } = lane();
