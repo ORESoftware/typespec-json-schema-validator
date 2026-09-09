@@ -136,8 +136,11 @@ const manifestMutations = [
   ['target boolean string', (value) => { value.manifest.targets[0].required = 'true'; }],
   ['unknown target property', (value) => { value.manifest.targets[0].extra = true; }],
   ['leading target whitespace', (value) => { value.manifest.targets[0].language = ' rust'; }],
-  ['embedded target control', (value) => { value.manifest.targets[0].language = 'ru\u0000st'; }],
+  ['embedded target C0 control', (value) => { value.manifest.targets[0].language = 'ru\u0000st'; }],
+  ['embedded target C1 control', (value) => { value.manifest.targets[0].language = 'ru\u0085st'; }],
+  ['embedded target line separator', (value) => { value.manifest.targets[0].language = 'ru\u2028st'; }],
   ['target token over 256 characters', (value) => { value.manifest.targets[0].runtime = 'r'.repeat(257); }],
+  ['astral target token over 256 characters', (value) => { value.manifest.targets[0].runtime = '😀'.repeat(257); }],
   ['absolute evidence path', (value) => { value.manifest.targets[0].evidence = '/rust/native.json'; }],
   ['backslash evidence path', (value) => { value.manifest.targets[0].evidence = 'rust\\native.json'; }],
   ['dot evidence path', (value) => { value.manifest.targets[0].evidence = './rust.json'; }],
@@ -146,8 +149,11 @@ const manifestMutations = [
   ['trailing slash evidence path', (value) => { value.manifest.targets[0].evidence = 'rust/native/'; }],
   ['leading path whitespace', (value) => { value.manifest.targets[0].evidence = ' rust/native.json'; }],
   ['trailing path whitespace', (value) => { value.manifest.targets[0].evidence = 'rust/native.json '; }],
-  ['embedded path control', (value) => { value.manifest.targets[0].evidence = 'rust/na\u0000tive.json'; }],
+  ['embedded path C0 control', (value) => { value.manifest.targets[0].evidence = 'rust/na\u0000tive.json'; }],
+  ['embedded path C1 control', (value) => { value.manifest.targets[0].evidence = 'rust/na\u0085tive.json'; }],
+  ['embedded path line separator', (value) => { value.manifest.targets[0].evidence = 'rust/na\u2028tive.json'; }],
   ['path over 2048 characters', (value) => { value.manifest.targets[0].evidence = 'p'.repeat(2049); }],
+  ['astral path over 2048 characters', (value) => { value.manifest.targets[0].evidence = '😀'.repeat(2049); }],
 ];
 
 const evidenceMutations = [
@@ -155,7 +161,9 @@ const evidenceMutations = [
   ['schema identity drift', (value) => { firstEvidence(value).schema = 'other/v1'; }],
   ['unknown status', (value) => { firstEvidence(value).status = 'ok'; }],
   ['leading language whitespace', (value) => { firstEvidence(value).language = ' rust'; }],
-  ['embedded runtime control', (value) => { firstEvidence(value).runtime = 'na\u0000tive'; }],
+  ['embedded runtime C0 control', (value) => { firstEvidence(value).runtime = 'na\u0000tive'; }],
+  ['embedded runtime C1 control', (value) => { firstEvidence(value).runtime = 'na\u0085tive'; }],
+  ['embedded runtime line separator', (value) => { firstEvidence(value).runtime = 'na\u2028tive'; }],
   ['source revision symbolic', (value) => { firstEvidence(value).sourceRevision = 'main'; }],
   ['source revision uppercase', (value) => { firstEvidence(value).sourceRevision = 'A'.repeat(40); }],
   ['artifact digest missing prefix', (value) => { firstEvidence(value).artifactDigest = '4'.repeat(64); }],
@@ -165,7 +173,9 @@ const evidenceMutations = [
   ['Contract IR digest short', (value) => { firstEvidence(value).contractIrId = '2'.repeat(63); }],
   ['unknown toolchain property', (value) => { firstEvidence(value).toolchain.extra = true; }],
   ['blank toolchain name', (value) => { firstEvidence(value).toolchain.name = ' '; }],
-  ['toolchain control character', (value) => { firstEvidence(value).toolchain.version = '1.0\u0000'; }],
+  ['toolchain C0 control character', (value) => { firstEvidence(value).toolchain.version = '1.0\u0000'; }],
+  ['toolchain C1 control character', (value) => { firstEvidence(value).toolchain.version = '1.0\u0085'; }],
+  ['toolchain line separator', (value) => { firstEvidence(value).toolchain.version = '1.0\u2028x'; }],
   ['unknown generator property', (value) => { firstEvidence(value).generator.extra = true; }],
   ['unknown validation property', (value) => { firstEvidence(value).validation.extra = true; }],
   ['missing validation field', (value) => { delete firstEvidence(value).validation.egress; }],
@@ -182,11 +192,24 @@ test('Ajv Draft 2020-12 independently validates every public language-boundary s
   }
 });
 
-test('schema-valid 2048-character evidence-path contract is not narrowed to token length at runtime', async () => {
+test('schema-valid Unicode token bounds use JSON characters rather than UTF-16 code units', async () => {
+  const validators = await independentValidators();
+  const value = input();
+  const unicodeToken = '😀'.repeat(256);
+  value.manifest.targets[0].language = unicodeToken;
+  firstEvidence(value).language = unicodeToken;
+
+  assert.equal(validators.manifest(value.manifest), true, JSON.stringify(validators.manifest.errors));
+  assert.equal(validators.evidence(firstEvidence(value)), true, JSON.stringify(validators.evidence.errors));
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'passed');
+});
+
+test('schema-valid 2048-character evidence-path contract is not narrowed to token length or UTF-16 units', async () => {
   const validators = await independentValidators();
   const value = input();
   const previous = value.manifest.targets[0].evidence;
-  const longPath = 'p'.repeat(2048);
+  const longPath = '😀'.repeat(2048);
   const record = value.evidenceByPath.get(previous);
   value.evidenceByPath.delete(previous);
   value.manifest.targets[0].evidence = longPath;
