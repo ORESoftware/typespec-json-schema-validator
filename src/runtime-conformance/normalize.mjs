@@ -5,15 +5,18 @@ import {
   positiveSafeInteger,
 } from './constants.mjs';
 import { normalizeAdapter } from './adapter.mjs';
+import { readRuntimeEnvelope } from './envelope.mjs';
 import { makeRuntimeFinding, sortRuntimeFindings } from './findings.mjs';
 
 function validateDigest(value, pointer, label, findings) {
-  if (!DIGEST_PATTERN.test(value ?? '')) {
+  if (typeof value !== 'string' || !DIGEST_PATTERN.test(value)) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-evidence-invalid-digest',
       pointer,
       message: `${label} must be a lowercase SHA-256 digest`,
-      left: value,
+      left: typeof value === 'string' ? value : {
+        type: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value,
+      },
       right: '64 lowercase hexadecimal characters',
     }));
     return null;
@@ -43,6 +46,10 @@ export function validateRuntimeEvidence(value, options = {}) {
     });
     return { normalized: null, findings: [finding] };
   }
+
+  value = readRuntimeEnvelope(value,
+    ['schema', 'contractIrId', 'inputDigest', 'corpusDigest', 'adapters'],
+    '#', 'evidence', findings);
 
   if (value.schema !== RUNTIME_EVIDENCE_SCHEMA) {
     findings.push(makeRuntimeFinding({

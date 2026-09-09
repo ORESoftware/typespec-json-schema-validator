@@ -6,6 +6,7 @@ import {
   validBoundedText,
 } from './constants.mjs';
 import { makeRuntimeFinding } from './findings.mjs';
+import { readRuntimeEnvelope } from './envelope.mjs';
 
 export function normalizeAdapterMetadata(value, index, findings) {
   const pointer = `#/adapters/${index}`;
@@ -19,6 +20,10 @@ export function normalizeAdapterMetadata(value, index, findings) {
     }));
     return null;
   }
+
+  value = readRuntimeEnvelope(value,
+    ['id', 'language', 'runtime', 'validator', 'toolchain', 'status', 'results'],
+    pointer, 'adapter', findings);
 
   const id = normalizedText(value.id);
   if (!validBoundedText(id) || !IDENTIFIER_PATTERN.test(id)) {
@@ -62,6 +67,7 @@ export function normalizeAdapterMetadata(value, index, findings) {
     id,
     pointer,
     status: value.status,
+    results: value.results,
     textFields: Object.freeze(textFields),
   });
 }
