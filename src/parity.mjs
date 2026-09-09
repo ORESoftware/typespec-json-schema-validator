@@ -225,19 +225,53 @@ function normalizedDeclarationRef(name) {
   return normalizeComparisonRef(`#/$defs/${escapeJsonPointerSegment(name)}`);
 }
 
-function buildReferenceAliases(expectedDeclarations, lane) {
+function addReferenceAlias(aliases, ambiguous, source, target) {
+  if (typeof source !== 'string' || source.length === 0) return;
+  const normalizedSource = normalizeComparisonRef(source);
+  if (ambiguous.has(normalizedSource)) return;
+  const previous = aliases.get(normalizedSource);
+  if (previous !== undefined && previous !== target) {
+    aliases.delete(normalizedSource);
+    ambiguous.add(normalizedSource);
+    return;
+  }
+  aliases.set(normalizedSource, target);
+}
+
+function absoluteResourceDeclarationRef(document, pointer) {
+  const id = document?.$id;
+  if (typeof id !== 'string' || !pointer.startsWith('#/')) return undefined;
+  let resource;
+  try {
+    resource = new URL(id);
+  } catch {
+    return undefined;
+  }
+  resource.hash = '';
+  return `${resource.href}${pointer}`;
+}
+
+function buildReferenceAliases(expectedDeclarations, lane, collection, schemaMap) {
   const aliases = new Map();
   const ambiguous = new Set();
+  const documentsByPath = new Map(
+    (collection?.documents ?? []).map((document) => [document.path, document]),
+  );
   for (const expected of expectedDeclarations.values()) {
     const name = lane === 'generated' ? expected.generatedName : expected.authoredName;
-    const source = normalizedDeclarationRef(name);
     const target = normalizedDeclarationRef(expected.declaration.qualifiedName);
-    if (aliases.has(source) && aliases.get(source) !== target) {
-      aliases.delete(source);
-      ambiguous.add(source);
-    } else if (!ambiguous.has(source)) {
-      aliases.set(source, target);
-    }
+    addReferenceAlias(aliases, ambiguous, normalizedDeclarationRef(name), target);
+
+    // A loaded multi-file authority can refer to another declaration by the
+    // containing document's canonical $id plus that declaration's JSON Pointer.
+    // Only aliases proven by this collection's own resource graph are admitted;
+    // unknown external URLs remain literal and therefore fail closed.
+    const declaration = schemaMap.get(name);
+    const document = declaration ? documentsByPath.get(declaration.source) : undefined;
+    const resourceReference = declaration && document
+      ? absoluteResourceDeclarationRef(document.document, declaration.pointer)
+      : undefined;
+    addReferenceAlias(aliases, ambiguous, resourceReference, target);
   }
   return aliases;
 }
@@ -276,12 +310,30 @@ function aliasMappedDeclarationRefs(value, aliases) {
   }));
 }
 
-function compareSemanticSchemas(generatedMap, authoredMap, expectedDeclarations, maxFindings, findings) {
+function compareSemanticSchemas(
+  generatedMap,
+  authoredMap,
+  expectedDeclarations,
+  generatedCollection,
+  authoredCollection,
+  maxFindings,
+  findings,
+) {
   const expected = [...expectedDeclarations.values()].sort((left, right) =>
     left.declaration.qualifiedName.localeCompare(right.declaration.qualifiedName),
   );
-  const generatedAliases = buildReferenceAliases(expectedDeclarations, 'generated');
-  const authoredAliases = buildReferenceAliases(expectedDeclarations, 'authored');
+  const generatedAliases = buildReferenceAliases(
+    expectedDeclarations,
+    'generated',
+    generatedCollection,
+    generatedMap,
+  );
+  const authoredAliases = buildReferenceAliases(
+    expectedDeclarations,
+    'authored',
+    authoredCollection,
+    authoredMap,
+  );
   for (const pair of expected) {
     if (findings.length >= maxFindings) {
       break;
@@ -393,7 +445,15 @@ export function compareParity({
   compareExpectedToSchema(expected, generatedMap, 'generated', findings);
   compareExpectedToSchema(expected, authoredMap, 'authored', findings);
   compareSchemaInventories(generatedMap, authoredMap, expected, findings);
-  compareSemanticSchemas(generatedMap, authoredMap, expected, maxFindings, findings);
+  compareSemanticSchemas(
+    generatedMap,
+    authoredMap,
+    expected,
+    generatedCollection,
+    authoredCollection,
+    maxFindings,
+    findings,
+  );
 
   const sorted = sortFindings(findings.slice(0, maxFindings));
 
