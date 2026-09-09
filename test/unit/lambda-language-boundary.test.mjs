@@ -114,6 +114,35 @@ test('stale TypeScript/Node lambda evidence cannot claim the current Contract IR
   assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-evidence-contract-ir-mismatch'));
 });
 
+test('lambda promotion rejects an incomplete differential receipt even when status says passed', () => {
+  const value = input();
+  delete value.report.coverage;
+  delete value.report.differential.summary.probesEvaluated;
+  delete value.report.differential.summary.refusals;
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-differential-evidence-incomplete'));
+  assert.equal(result.counts.admittedEvidence, 0);
+});
+
+test('lambda promotion rejects incomplete Contract IR declaration scope', () => {
+  const value = input();
+  delete value.contractIr.excludedDeclarations;
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-contract-ir-scope-incomplete'));
+  assert.equal(result.counts.admittedEvidence, 0);
+});
+
+test('lambda promotion rejects a passing parity receipt that retains findings', () => {
+  const value = input();
+  value.report.findings.push({ ruleId: 'synthetic-stale-finding' });
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-parity-findings-incomplete'));
+  assert.equal(result.counts.admittedEvidence, 0);
+});
+
 test('required Lambda runtime evidence from different source revisions cannot be combined', () => {
   const value = input();
   value.evidenceByPath.get('dart/flutter.json').sourceRevision = '6'.repeat(40);
