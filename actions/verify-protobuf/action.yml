@@ -55,13 +55,20 @@ runs:
         TSJSV_MAX_FINDINGS: ${{ inputs.max_findings }}
         TSJSV_QUIET: ${{ inputs.quiet }}
       run: |
-        set -euo pipefail
+        set -uo pipefail
+        set +e
         node "${GITHUB_ACTION_PATH}/../../scripts/verify-protobuf.mjs"
+        verify_code="$?"
+        set -e
+
         receipt_path="${TSJSV_PROTOBUF_ROOT%/}/${TSJSV_PROTOBUF_VERIFICATION}"
-        status="$(node -e '
-          const fs = require("node:fs");
-          const receipt = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
-          process.stdout.write(receipt.status);
-        ' "${receipt_path}")"
-        printf 'verification=%s\n' "${receipt_path}" >> "${GITHUB_OUTPUT}"
-        printf 'status=%s\n' "${status}" >> "${GITHUB_OUTPUT}"
+        if [[ -f "${receipt_path}" ]]; then
+          status="$(node -e '
+            const fs = require("node:fs");
+            const receipt = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            process.stdout.write(receipt.status);
+          ' "${receipt_path}")"
+          printf 'verification=%s\n' "${receipt_path}" >> "${GITHUB_OUTPUT}"
+          printf 'status=%s\n' "${status}" >> "${GITHUB_OUTPUT}"
+        fi
+        exit "${verify_code}"
