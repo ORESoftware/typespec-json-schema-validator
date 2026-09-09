@@ -51,6 +51,24 @@ Likewise, the evidence schema permits explicit `failed` and `stopped_for_evaluat
 
 Filesystem/compiler/schema failures are collapsed to deterministic public-safe rule IDs. Source values, exception text, paths, environment values, and credentials are not reflected into the verification receipt.
 
+## Configuration and encrypted-environment boundary
+
+The current `TSJSV_*` environment surface is configuration, not secret material. It carries command selection, input/output paths, limits, GitHub workspace paths, and composite-action inputs. These values remain under `.cli-flags.toml`, action inputs, workflow-local environment variables, or caller-provided process configuration; they must not be moved into encrypted dotenv merely because they are expressed through environment variables.
+
+This repository currently has no secret-bearing variable required by language/runtime-boundary verification, current-input admission, package preflight, or the independent schema-lockstep tests. Therefore it intentionally does **not** create placeholder `env/enc/*.env.enc` files or synthetic credentials.
+
+If a future TJSV workflow introduces a genuine secret-bearing runtime variable, adopt the canonical `ORESoftware/ores-sops` v0.4 consumer contract at that point:
+
+- use only exact `dev` and `prod` environments, plus optional exact `stage` when explicitly configured;
+- commit only SOPS/Age ciphertext under canonical `env/enc/<environment>.env.enc` paths;
+- never track decrypted `env/dec` material or private Age identities;
+- commit only approved public Age recipients in `.sops.yaml` and treat recipient changes as access-control changes;
+- run the `ores-sops` tree/path guard before environment lifecycle operations and verify the repository with the applicable `ores-sops`/access-audit checks;
+- keep ciphertext and private-key material out of Docker build contexts;
+- never use encrypted dotenv as a substitute for GitHub Actions secret stores, workload identities, or another runtime secret manager when those systems own the deployment credential.
+
+No GitHub PAT, Linear token, or other operator credential belongs in this repository's source tree or test fixtures.
+
 ## Fail-closed cases
 
 Admission stops for malformed or stale parity/IR evidence, incorrect authority roles, disabled differential validation, noncanonical identities or paths, prototype-inherited evidence, duplicate target identities, evidence reuse across targets, symbolic or abbreviated source revisions, noncanonical artifact digests, missing required evidence, target/evidence runtime mismatches, stale receipt or IR IDs, blank generator/toolchain identities, non-passed ingress/egress results, unknown fields in closed boundary envelopes, or failure to freshly verify the retained Contract IR against current inputs.
