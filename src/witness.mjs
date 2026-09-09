@@ -183,12 +183,17 @@ export function synthesizeInstance({ schema, base, resolver, mode = 'full', maxD
         if (Array.isArray(schemaNode[key]) && schemaNode[key].length > 0) {
           if (key === 'allOf') {
             const parts = schemaNode[key].map((branch) => build(branch, resolved.base, depth + 1));
-            const merged = parts.reduce(
-              (accumulator, part) => (isPlainObject(accumulator) && isPlainObject(part) ? { ...accumulator, ...part } : accumulator),
-              isPlainObject(parts[0]) ? {} : parts[0],
-            );
-            const own = chooseType(schemaNode) === 'object' ? build({ ...schemaNode, allOf: undefined }, resolved.base, depth + 1) : undefined;
-            return isPlainObject(merged) && isPlainObject(own) ? { ...merged, ...own } : merged;
+            const own = chooseType(schemaNode) === 'object'
+              ? build({ ...schemaNode, allOf: undefined }, resolved.base, depth + 1)
+              : undefined;
+            const objectParts = parts.filter(isPlainObject);
+            if (isPlainObject(own)) {
+              return Object.assign({}, ...objectParts, own);
+            }
+            if (objectParts.length > 0) {
+              return Object.assign({}, ...objectParts);
+            }
+            return parts[0];
           }
           return build(schemaNode[key][0], resolved.base, depth + 1);
         }
@@ -352,6 +357,9 @@ function setAtPointer(root, pointer, value) {
   const segments = pointer.slice(1).split('/');
   let current = clone;
   for (let index = 0; index < segments.length - 1; index += 1) {
+    if (current === null || typeof current !== 'object') {
+      return clone;
+    }
     const segment = segments[index].replaceAll('~1', '/').replaceAll('~0', '~');
     current = Array.isArray(current) ? current[Number(segment)] : current[segment];
     if (current === undefined || current === null) {
@@ -375,6 +383,9 @@ function deleteAtPointer(root, pointer) {
   const segments = pointer.slice(1).split('/');
   let current = clone;
   for (let index = 0; index < segments.length - 1; index += 1) {
+    if (current === null || typeof current !== 'object') {
+      return clone;
+    }
     const segment = segments[index].replaceAll('~1', '/').replaceAll('~0', '~');
     current = Array.isArray(current) ? current[Number(segment)] : current[segment];
     if (current === undefined || current === null) {
