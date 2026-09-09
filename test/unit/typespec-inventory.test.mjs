@@ -47,6 +47,54 @@ test('inventory separates JSON-Schema data declarations from operations', () => 
   assert.deepEqual(inventory.outOfScopeDeclarations.map((item) => item.qualifiedName), ['Demo.Api']);
 });
 
+test('qualified nested namespaces preserve absolute identity while relative namespaces extend the parent', () => {
+  const source = `
+    namespace Demo {
+      model OuterModel {}
+      namespace Demo.Inner {
+        model WeatherReading {}
+      }
+      namespace Relative {
+        model LocalReading {}
+      }
+    }
+  `;
+  const inventory = inventoryTypeSpecSource(source, 'nested.tsp');
+  assert.deepEqual(inventory.errors, []);
+  assert.deepEqual(
+    inventory.declarations.map((item) => item.qualifiedName),
+    ['Demo.OuterModel', 'Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
+  );
+});
+
+test('qualified nested namespace detection is segment-aware and stable at multiple depths', () => {
+  const source = `
+    namespace Demo {
+      namespace Demo2 {
+        model PrefixCollision {}
+      }
+      namespace Demo.Inner {
+        namespace Demo.Inner.Deep {
+          model FullyQualifiedDeep {}
+        }
+        namespace Innerish {
+          model RelativeDeep {}
+        }
+      }
+    }
+  `;
+  const inventory = inventoryTypeSpecSource(source, 'nested-segments.tsp');
+  assert.deepEqual(inventory.errors, []);
+  assert.deepEqual(
+    inventory.declarations.map((item) => item.qualifiedName),
+    [
+      'Demo.Demo2.PrefixCollision',
+      'Demo.Inner.Deep.FullyQualifiedDeep',
+      'Demo.Inner.Innerish.RelativeDeep',
+    ],
+  );
+});
+
 test('file inventory follows local imports but excludes package imports', async () => {
   const root = await mkdtemp(join(tmpdir(), 'tsjsv-inventory-'));
   await writeFile(
