@@ -3,12 +3,18 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { compile, NodeHost } from '@typespec/compiler';
+import { compile, getNamespaceFullName, NodeHost } from '@typespec/compiler';
 import {
   inventoryTypeSpec,
   inventoryTypeSpecSource,
   lexTypeSpec,
 } from '../../src/typespec-inventory.mjs';
+
+function diagnosticText(diagnostics) {
+  return diagnostics
+    .map((diagnostic) => `${diagnostic.code}: ${String(diagnostic.message)}`)
+    .join('\n');
+}
 
 async function compileTypeSpecSource(source, filename) {
   const root = await mkdtemp(join(tmpdir(), 'tjsv-namespace-compiler-'));
@@ -18,18 +24,29 @@ async function compileTypeSpecSource(source, filename) {
     noEmit: true,
     warningAsError: true,
   });
-  assert.equal(
-    program.hasError(),
-    false,
-    program.diagnostics.map((diagnostic) => String(diagnostic.message)).join('\n'),
-  );
-  return program.getGlobalNamespaceType();
+  assert.equal(program.hasError(), false, diagnosticText(program.diagnostics));
+  return program;
 }
 
-function requireNamespace(parent, name, label) {
-  const namespace = parent.namespaces.get(name);
-  assert.ok(namespace, `official TypeSpec compiler must resolve ${label}`);
-  return namespace;
+function requireCompilerModel(program, reference) {
+  const [type, diagnostics] = program.resolveTypeReference(reference);
+  assert.deepEqual(diagnostics, [], diagnosticText(diagnostics));
+  assert.ok(type, `official TypeSpec compiler must resolve ${reference}`);
+  assert.equal(type.kind, 'Model', `${reference} must resolve to a model`);
+
+  const separator = reference.lastIndexOf('.');
+  const expectedNamespace = reference.slice(0, separator);
+  const expectedName = reference.slice(separator + 1);
+  assert.equal(type.name, expectedName);
+  assert.ok(type.namespace, `${reference} must retain a namespace`);
+  assert.equal(getNamespaceFullName(type.namespace), expectedNamespace);
+  return type;
+}
+
+function requireCompilerReferenceAbsent(program, reference) {
+  const [type, diagnostics] = program.resolveTypeReference(reference);
+  assert.equal(type, undefined, `${reference} must not resolve in the official compiler`);
+  assert.ok(diagnostics.length > 0, `${reference} must produce an unresolved-reference diagnostic`);
 }
 
 test('lexer ignores declaration-looking text inside comments and strings', () => {
@@ -131,14 +148,16 @@ test('official TypeSpec compiler and TJSV inventory agree on qualified nested na
     }
   `;
   const basicInventory = inventoryTypeSpecSource(basicSource, 'compiler-basic.tsp');
-  const basicGlobal = await compileTypeSpecSource(basicSource, 'compiler-basic.tsp');
-  const basicDemo = requireNamespace(basicGlobal, 'Demo', 'Demo');
-  const basicInner = requireNamespace(basicDemo, 'Inner', 'Demo.Inner');
-  const basicRelative = requireNamespace(basicDemo, 'Relative', 'Demo.Relative');
-  assert.ok(basicDemo.models.has('OuterModel'));
-  assert.ok(basicInner.models.has('WeatherReading'));
-  assert.ok(basicRelative.models.has('LocalReading'));
-  assert.equal(basicDemo.namespaces.has('Demo'), false, 'qualified child must not duplicate its parent');
+  const basicProgram = await compileTypeSpecSource(basicSource, 'compiler-basic.tsp');
+  for (const reference of [
+    'Demo.OuterModel',
+    'Demo.Inner.WeatherReading',
+    'Demo.Relative.LocalReading',
+  ]) {
+    requireCompilerModel(basicProgram, reference);
+  }
+  requireCompilerReferenceAbsent(basicProgram, 'Demo.Demo.Inner.WeatherReading');
+  requireCompilerReferenceAbsent(basicProgram, 'Demo.Demo.Relative.LocalReading');
   assert.deepEqual(
     basicInventory.declarations.map((item) => item.qualifiedName),
     ['Demo.OuterModel', 'Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
@@ -160,16 +179,17 @@ test('official TypeSpec compiler and TJSV inventory agree on qualified nested na
     }
   `;
   const deepInventory = inventoryTypeSpecSource(deepSource, 'compiler-deep.tsp');
-  const deepGlobal = await compileTypeSpecSource(deepSource, 'compiler-deep.tsp');
-  const deepDemo = requireNamespace(deepGlobal, 'Demo', 'Demo');
-  const demo2 = requireNamespace(deepDemo, 'Demo2', 'Demo.Demo2');
-  const deepInner = requireNamespace(deepDemo, 'Inner', 'Demo.Inner');
-  const deep = requireNamespace(deepInner, 'Deep', 'Demo.Inner.Deep');
-  const innerish = requireNamespace(deepInner, 'Innerish', 'Demo.Inner.Innerish');
-  assert.ok(demo2.models.has('PrefixCollision'));
-  assert.ok(deep.models.has('FullyQualifiedDeep'));
-  assert.ok(innerish.models.has('RelativeDeep'));
-  assert.equal(deepInner.namespaces.has('Demo'), false, 'deep qualified child must not repeat its root');
+  const deepProgram = await compileTypeSpecSource(deepSource, 'compiler-deep.tsp');
+  for (const reference of [
+    'Demo.Demo2.PrefixCollision',
+    'Demo.Inner.Deep.FullyQualifiedDeep',
+    'Demo.Inner.Innerish.RelativeDeep',
+  ]) {
+    requireCompilerModel(deepProgram, reference);
+  }
+  requireCompilerReferenceAbsent(deepProgram, 'Demo2.PrefixCollision');
+  requireCompilerReferenceAbsent(deepProgram, 'Demo.Inner.Demo.Inner.Deep.FullyQualifiedDeep');
+  requireCompilerReferenceAbsent(deepProgram, 'Demo.Innerish.RelativeDeep');
   assert.deepEqual(
     deepInventory.declarations.map((item) => item.qualifiedName),
     [
