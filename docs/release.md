@@ -41,16 +41,20 @@ npm run release:preflight
   private-key formats, lockfiles, tests, temporary output, and release scripts;
 - recomputes and verifies npm's SHA-1 and SHA-512 tarball metadata and records a
   SHA-256 plus a deterministic file-manifest digest;
-- installs the tarball into a clean temporary consumer with lifecycle scripts
-  disabled;
+- installs the tarball into a clean temporary consumer while blocking all
+  implicit lifecycle scripts;
+- explicitly rebuilds only the reviewed native parser package
+  `@oresoftware/f2e`, matching the checked-in Zed package contract, rather than
+  enabling unrelated transitive install scripts;
 - imports the root and three public subpath APIs; and
 - runs `doctor --quiet` through `tjsv` and both compatibility aliases.
 
 The command writes a mode-`0600` ignored receipt under
 `tmp/release-preflight/<commit>/` and emits the same secret-free receipt to
-stdout. Its schema is `ores.tjsv-release-preflight/v1`. A preflight receipt is
-candidate evidence only; it is not proof that a registry publication or
-provenance attestation exists.
+stdout. Its schema is `ores.tjsv-release-preflight/v1`. The receipt records the
+blocked implicit lifecycle policy and the complete allowlist of explicit
+rebuilds. A preflight receipt is candidate evidence only; it is not proof that
+a registry publication or provenance attestation exists.
 
 ## Publication
 
