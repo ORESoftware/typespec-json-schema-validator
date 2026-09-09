@@ -3,6 +3,7 @@ import {
   IDENTIFIER_PATTERN,
   isPlainObject,
   normalizedText,
+  runtimeValueShape,
   validBoundedText,
 } from './constants.mjs';
 import { makeRuntimeFinding } from './findings.mjs';
@@ -15,7 +16,7 @@ export function normalizeAdapterMetadata(value, index, findings) {
       ruleId: 'runtime-adapter-invalid',
       pointer,
       message: 'runtime adapter evidence must be an object',
-      left: value,
+      left: runtimeValueShape(value),
       right: 'object',
     }));
     return null;
@@ -31,7 +32,7 @@ export function normalizeAdapterMetadata(value, index, findings) {
       ruleId: 'runtime-adapter-id-invalid',
       pointer: `${pointer}/id`,
       message: 'runtime adapter id must be a bounded lowercase identifier',
-      left: value.id,
+      left: runtimeValueShape(value.id),
       right: 'lowercase letters, digits, dot, underscore, or hyphen',
     }));
     return null;
@@ -45,7 +46,7 @@ export function normalizeAdapterMetadata(value, index, findings) {
         ruleId: 'runtime-adapter-metadata-invalid',
         pointer: `${pointer}/${field}`,
         message: `adapter ${id} must declare bounded ${field} metadata`,
-        left: value[field],
+        left: runtimeValueShape(value[field]),
         right: 'non-empty text without control characters',
       }));
     } else {
@@ -58,7 +59,7 @@ export function normalizeAdapterMetadata(value, index, findings) {
       ruleId: 'runtime-adapter-status-invalid',
       pointer: `${pointer}/status`,
       message: `adapter ${id} has an invalid status`,
-      left: value.status,
+      left: runtimeValueShape(value.status),
       right: [...ADAPTER_STATUSES].sort(),
     }));
   }

@@ -2,7 +2,7 @@ import { makeRuntimeFinding } from './findings.mjs';
 import { normalizeAdapterMetadata } from './adapter-metadata.mjs';
 import { normalizeResult } from './result.mjs';
 
-export function normalizeAdapter(value, index, findings, maxResultsPerAdapter) {
+export function normalizeAdapter(value, index, findings, maxResultsPerAdapter, evidenceSchema) {
   const metadata = normalizeAdapterMetadata(value, index, findings);
   if (!metadata) return null;
   const { id, pointer, status, textFields, results: rawResults } = metadata;
@@ -31,7 +31,7 @@ export function normalizeAdapter(value, index, findings, maxResultsPerAdapter) {
   const results = [];
   const seen = new Set();
   for (let resultIndex = 0; resultIndex < Math.min(rawResults.length, maxResultsPerAdapter); resultIndex += 1) {
-    const result = normalizeResult(rawResults[resultIndex], id, resultIndex, findings);
+    const result = normalizeResult(rawResults[resultIndex], id, resultIndex, findings, evidenceSchema);
     if (!result) continue;
     if (seen.has(result.caseId)) {
       findings.push(makeRuntimeFinding({
