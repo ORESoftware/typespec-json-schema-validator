@@ -41,6 +41,12 @@ export {
   UnsupportedKeywordError,
   validateInstance,
 } from './instance-validator.mjs';
+export {
+  LANGUAGE_BOUNDARY_EVIDENCE_SCHEMA,
+  LANGUAGE_BOUNDARY_MANIFEST_SCHEMA,
+  LANGUAGE_BOUNDARY_VERIFICATION_SCHEMA,
+  verifyLanguageBoundaries,
+} from './language-boundary-verification.mjs';
 export { compareParity, loadMapping, MAPPING_SCHEMA, sortFindings } from './parity.mjs';
 export {
   EXIT_CODES,
