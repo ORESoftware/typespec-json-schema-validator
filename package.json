@@ -30,10 +30,6 @@
       "import": "./src/language-boundary-verification.mjs",
       "types": "./src/language-boundary-verification.d.mts"
     },
-    "./language-boundary-current-inputs": {
-      "import": "./src/language-boundary-current-inputs.mjs",
-      "types": "./src/language-boundary-current-inputs.d.mts"
-    },
     "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
     "./schema/contract-ir": "./schema/contract-ir.schema.json",
     "./schema/language-boundaries": "./schema/language-boundaries.schema.json",
@@ -70,7 +66,7 @@
     "audit:prod": "node ./scripts/npm-audit-gate.mjs",
     "check": "node ./scripts/check.mjs",
     "flags:audit": "f2e audit ./.cli-flags.toml",
-    "release:preflight": "node ./scripts/release-preflight.mjs",
+    "release:preflight": "node ./scripts/release-preflight.mjs && node ./scripts/release-language-boundary-preflight.mjs",
     "test": "node --test ./test/unit/*.test.mjs",
     "test:integration": "node --test ./test/integration/*.test.mjs",
     "test:all": "npm run check && npm run flags:audit && npm test && npm run test:integration"

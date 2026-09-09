@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "ores.lambda-command/v1",
+  "provider": "cloudflare-workers",
+  "operation": "health",
+  "requestId": "lambda-fixture-cloudflare-1"
+}
