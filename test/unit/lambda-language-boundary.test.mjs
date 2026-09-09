@@ -46,7 +46,11 @@ function input() {
       runId,
       status: 'passed',
       zeroUnexplainedFindings: true,
-      differential: { summary: { divergences: 0 } },
+      findings: [],
+      coverage: { differentialInstanceValidation: true },
+      differential: {
+        summary: { probesEvaluated: 2, divergences: 0, refusals: 0 },
+      },
     },
     contractIr: {
       schema: 'ores.typespec-json-schema-validator.contract-ir/v1',
@@ -61,6 +65,13 @@ function input() {
         generatedJsonSchema: 'comparison-evidence-only',
         precedence: 'none',
       },
+      declarations: [
+        { id: 'Ores.LambdaRuntimeFixture.Provider' },
+        { id: 'Ores.LambdaRuntimeFixture.Operation' },
+        { id: 'Ores.LambdaRuntimeFixture.LambdaCommand' },
+      ],
+      excludedDeclarations: [],
+      outOfScopeDeclarations: [],
       admission: {
         receipt: { runId },
         requirements: { differentialInstanceValidation: true },
@@ -101,4 +112,33 @@ test('stale TypeScript/Node lambda evidence cannot claim the current Contract IR
   const result = verifyLanguageBoundaries(value);
   assert.equal(result.status, 'stopped_for_evaluation');
   assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-evidence-contract-ir-mismatch'));
+});
+
+test('lambda promotion rejects an incomplete differential receipt even when status says passed', () => {
+  const value = input();
+  delete value.report.coverage;
+  delete value.report.differential.summary.probesEvaluated;
+  delete value.report.differential.summary.refusals;
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-differential-evidence-incomplete'));
+  assert.equal(result.counts.admittedEvidence, 0);
+});
+
+test('lambda promotion rejects incomplete Contract IR declaration scope', () => {
+  const value = input();
+  delete value.contractIr.excludedDeclarations;
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-contract-ir-scope-incomplete'));
+  assert.equal(result.counts.admittedEvidence, 0);
+});
+
+test('lambda promotion rejects a passing parity receipt that retains findings', () => {
+  const value = input();
+  value.report.findings.push({ ruleId: 'synthetic-stale-finding' });
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-parity-findings-incomplete'));
+  assert.equal(result.counts.admittedEvidence, 0);
 });
