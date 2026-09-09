@@ -44,6 +44,20 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Audit pinned production dependency closure
+        run: npm run audit:prod
+        env:
+          TSJSV_NPM_AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+
+      - name: Retain production dependency audit receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tjsv-npm-production-audit-${{ matrix.os }}
+          path: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Install pinned dependencies
         run: npm ci
 

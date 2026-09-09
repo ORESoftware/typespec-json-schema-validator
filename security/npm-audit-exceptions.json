@@ -1,0 +1,29 @@
+{
+  "schema": "tjsv-npm-audit-exceptions/v1",
+  "exceptions": [
+    {
+      "advisoryId": "npm:1193788",
+      "package": "@typespec/compiler",
+      "owner": "ORESoftware",
+      "rationale": "GHSA-2q42-4q24-7rgv has no patched npm release as of 2026-09-09. TJSV requires the compiler for TypeSpec-to-JSON-Schema comparison evidence, but the published exploit requires the separately packaged OpenAPI3 emitter.",
+      "reachabilityEvidence": "TJSV package.json and package-lock install @typespec/compiler plus @typespec/json-schema but not @typespec/openapi3. src/emitter.mjs resolves @typespec/json-schema as the sole emitter and its pinned-compiler path sets emit to exactly [emitterPath]. test/unit/npm-advisory-boundary.test.mjs locks those facts.",
+      "expiresAt": "2026-09-16T04:00:00.000Z"
+    },
+    {
+      "advisoryId": "npm:1193788",
+      "package": "@typespec/json-schema",
+      "owner": "ORESoftware",
+      "rationale": "npm propagates GHSA-2q42-4q24-7rgv through this direct emitter dependency because it depends on the affected compiler; the advisory identifies no JSON Schema emitter path and publishes no patched release.",
+      "reachabilityEvidence": "TJSV invokes @typespec/json-schema intentionally and does not install @typespec/openapi3. The advisory's demonstrated path traversal originates in OpenAPI3 version interpolation; the TJSV emitter boundary test rejects adding @typespec/openapi3 and verifies the sole-emitter configuration.",
+      "expiresAt": "2026-09-16T04:00:00.000Z"
+    },
+    {
+      "advisoryId": "npm:1193788",
+      "package": "@typespec/asset-emitter",
+      "owner": "ORESoftware",
+      "rationale": "npm propagates GHSA-2q42-4q24-7rgv through the JSON Schema emitter's transitive asset-emitter dependency; no separate asset-emitter advisory or patched release is identified.",
+      "reachabilityEvidence": "@typespec/asset-emitter is transitive to @typespec/json-schema. TJSV's lockfile contains no @typespec/openapi3 package, and its generator resolves only @typespec/json-schema as the emitter. The producer regression suite locks that boundary while this exception is active.",
+      "expiresAt": "2026-09-16T04:00:00.000Z"
+    }
+  ]
+}
