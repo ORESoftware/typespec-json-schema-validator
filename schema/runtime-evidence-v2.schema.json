@@ -7,7 +7,10 @@
   "additionalProperties": false,
   "required": ["schema", "contractIrId", "inputDigest", "corpusDigest", "adapters"],
   "properties": {
-    "schema": { "const": "ores.typespec-json-schema-validator.runtime-evidence/v2" },
+    "schema": {
+      "type": "string",
+      "const": "ores.typespec-json-schema-validator.runtime-evidence/v2"
+    },
     "contractIrId": { "$ref": "#/$defs/sha256" },
     "inputDigest": { "$ref": "#/$defs/sha256" },
     "corpusDigest": { "$ref": "#/$defs/sha256" },
@@ -69,11 +72,29 @@
       "required": ["id", "language", "runtime", "validator", "toolchain", "status", "results"],
       "properties": {
         "id": { "$ref": "#/$defs/identifier" },
-        "language": { "allOf": [{ "$ref": "#/$defs/boundedText" }, { "maxLength": 128 }] },
-        "runtime": { "allOf": [{ "$ref": "#/$defs/boundedText" }, { "maxLength": 128 }] },
-        "validator": { "allOf": [{ "$ref": "#/$defs/boundedText" }, { "maxLength": 128 }] },
+        "language": {
+          "allOf": [
+            { "$ref": "#/$defs/boundedText" },
+            { "type": "string", "maxLength": 128 }
+          ]
+        },
+        "runtime": {
+          "allOf": [
+            { "$ref": "#/$defs/boundedText" },
+            { "type": "string", "maxLength": 128 }
+          ]
+        },
+        "validator": {
+          "allOf": [
+            { "$ref": "#/$defs/boundedText" },
+            { "type": "string", "maxLength": 128 }
+          ]
+        },
         "toolchain": { "$ref": "#/$defs/boundedText" },
-        "status": { "enum": ["passed", "failed", "skipped", "unsupported"] },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "skipped", "unsupported"]
+        },
         "results": {
           "type": "array",
           "maxItems": 100000,
@@ -88,7 +109,10 @@
       "properties": {
         "caseId": { "$ref": "#/$defs/identifier" },
         "declaration": { "$ref": "#/$defs/boundedText" },
-        "verdict": { "enum": ["accepted", "rejected", "error", "skipped", "unsupported"] },
+        "verdict": {
+          "type": "string",
+          "enum": ["accepted", "rejected", "error", "skipped", "unsupported"]
+        },
         "inputDigest": { "$ref": "#/$defs/sha256" },
         "outputDigest": {
           "oneOf": [
@@ -104,32 +128,40 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "verdict": { "const": "accepted" } }, "required": ["verdict"] },
+          "if": {
+            "properties": { "verdict": { "const": "accepted" } },
+            "required": ["verdict"]
+          },
           "then": {
             "properties": {
               "outputDigest": { "$ref": "#/$defs/sha256" },
-              "errors": { "maxItems": 0 }
-            }
-          }
-        },
-        {
-          "if": { "properties": { "verdict": { "const": "rejected" } }, "required": ["verdict"] },
-          "then": {
-            "properties": {
-              "outputDigest": { "type": "null" },
-              "errors": { "minItems": 1 }
+              "errors": { "type": "array", "maxItems": 0 }
             }
           }
         },
         {
           "if": {
-            "properties": { "verdict": { "enum": ["error", "skipped", "unsupported"] } },
+            "properties": { "verdict": { "const": "rejected" } },
             "required": ["verdict"]
           },
           "then": {
             "properties": {
               "outputDigest": { "type": "null" },
-              "errors": { "maxItems": 0 }
+              "errors": { "type": "array", "minItems": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "verdict": { "enum": ["error", "skipped", "unsupported"] }
+            },
+            "required": ["verdict"]
+          },
+          "then": {
+            "properties": {
+              "outputDigest": { "type": "null" },
+              "errors": { "type": "array", "maxItems": 0 }
             }
           }
         }
