@@ -32,6 +32,27 @@ function normalizeIsoDate(value, label) {
   return text;
 }
 
+export function validateAuditEnvironment({ npmVersion, registry }) {
+  const version = requireNonemptyString(npmVersion, 'npm version');
+  if (version === 'unavailable' || !/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/u.test(version)) {
+    throw new TypeError('npm version must be an available semantic version');
+  }
+
+  const registryText = requireNonemptyString(registry, 'npm registry');
+  if (registryText === 'unavailable') throw new TypeError('npm registry must be available');
+  let registryUrl;
+  try {
+    registryUrl = new URL(registryText);
+  } catch {
+    throw new TypeError('npm registry must be an absolute URL');
+  }
+  if (registryUrl.protocol !== 'https:') throw new TypeError('npm registry must use HTTPS');
+  if (registryUrl.username || registryUrl.password || registryUrl.search || registryUrl.hash) {
+    throw new TypeError('npm registry URL must not contain credentials, query parameters, or fragments');
+  }
+  return { npmVersion: version, registry: registryUrl.href };
+}
+
 export function parseExceptionLedger(value) {
   const ledger = requireObject(value, 'exception ledger');
   if (ledger.schema !== EXCEPTION_SCHEMA) {
@@ -129,6 +150,7 @@ export function evaluateAudit({
   packageJsonDigest,
   auditDocumentDigest,
 }) {
+  const tool = validateAuditEnvironment({ npmVersion, registry });
   if (auditExitCode !== 0 && auditExitCode !== 1) {
     return {
       schema: RECEIPT_SCHEMA,
@@ -137,7 +159,7 @@ export function evaluateAudit({
       failure: `npm audit infrastructure exit ${auditExitCode}`,
       findings: [],
       exceptionsApplied: [],
-      tool: { npmVersion, registry },
+      tool,
       inputs: { packageLockDigest, packageJsonDigest, auditDocumentDigest },
     };
   }
@@ -182,7 +204,7 @@ export function evaluateAudit({
       npmArguments: ['audit', '--omit=dev', '--json', '--audit-level=high'],
       actionReachabilityPolicy: 'all production-installed vulnerable paths are conservatively reachable unless an exact exception proves otherwise',
     },
-    tool: { npmVersion, registry },
+    tool,
     inputs: { packageLockDigest, packageJsonDigest, auditDocumentDigest },
     metadata: auditDocument.metadata,
     findings,
