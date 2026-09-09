@@ -36,7 +36,11 @@ function validInput() {
       runId,
       status: 'passed',
       zeroUnexplainedFindings: true,
-      differential: { summary: { divergences: 0 } },
+      findings: [],
+      coverage: { differentialInstanceValidation: true },
+      differential: {
+        summary: { probesEvaluated: 16, divergences: 0, refusals: 0 },
+      },
     },
     contractIr: {
       schema: 'ores.typespec-json-schema-validator.contract-ir/v1',
@@ -51,6 +55,9 @@ function validInput() {
         generatedJsonSchema: 'comparison-evidence-only',
         precedence: 'none',
       },
+      declarations: [{ id: 'Domain.Item' }],
+      excludedDeclarations: [],
+      outOfScopeDeclarations: [],
       admission: {
         receipt: { runId },
         requirements: { differentialInstanceValidation: true },
