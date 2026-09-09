@@ -218,7 +218,6 @@ export function normalizeResult(value, adapterId, index, findings, evidenceSchem
   if (!validBoundedText(declaration, 512)) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-result-declaration-invalid',
-      declaration,
       pointer: `${pointer}/declaration`,
       message: `adapter ${adapterId} case ${caseId} has an invalid declaration identity`,
       left: runtimeValueShape(value.declaration),
