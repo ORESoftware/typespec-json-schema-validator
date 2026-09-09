@@ -3,11 +3,34 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { compile, NodeHost } from '@typespec/compiler';
 import {
   inventoryTypeSpec,
   inventoryTypeSpecSource,
   lexTypeSpec,
 } from '../../src/typespec-inventory.mjs';
+
+async function compileTypeSpecSource(source, filename) {
+  const root = await mkdtemp(join(tmpdir(), 'tjsv-namespace-compiler-'));
+  const entry = join(root, filename);
+  await writeFile(entry, source);
+  const program = await compile(NodeHost, entry, {
+    noEmit: true,
+    warningAsError: true,
+  });
+  assert.equal(
+    program.hasError(),
+    false,
+    program.diagnostics.map((diagnostic) => String(diagnostic.message)).join('\n'),
+  );
+  return program.getGlobalNamespaceType();
+}
+
+function requireNamespace(parent, name, label) {
+  const namespace = parent.namespaces.get(name);
+  assert.ok(namespace, `official TypeSpec compiler must resolve ${label}`);
+  return namespace;
+}
 
 test('lexer ignores declaration-looking text inside comments and strings', () => {
   const source = `
@@ -87,6 +110,68 @@ test('qualified nested namespace detection is segment-aware and stable at multip
   assert.deepEqual(inventory.errors, []);
   assert.deepEqual(
     inventory.declarations.map((item) => item.qualifiedName),
+    [
+      'Demo.Demo2.PrefixCollision',
+      'Demo.Inner.Deep.FullyQualifiedDeep',
+      'Demo.Inner.Innerish.RelativeDeep',
+    ],
+  );
+});
+
+test('official TypeSpec compiler and TJSV inventory agree on qualified nested namespace identity', async () => {
+  const basicSource = `
+    namespace Demo {
+      model OuterModel {}
+      namespace Demo.Inner {
+        model WeatherReading {}
+      }
+      namespace Relative {
+        model LocalReading {}
+      }
+    }
+  `;
+  const basicInventory = inventoryTypeSpecSource(basicSource, 'compiler-basic.tsp');
+  const basicGlobal = await compileTypeSpecSource(basicSource, 'compiler-basic.tsp');
+  const basicDemo = requireNamespace(basicGlobal, 'Demo', 'Demo');
+  const basicInner = requireNamespace(basicDemo, 'Inner', 'Demo.Inner');
+  const basicRelative = requireNamespace(basicDemo, 'Relative', 'Demo.Relative');
+  assert.ok(basicDemo.models.has('OuterModel'));
+  assert.ok(basicInner.models.has('WeatherReading'));
+  assert.ok(basicRelative.models.has('LocalReading'));
+  assert.equal(basicDemo.namespaces.has('Demo'), false, 'qualified child must not duplicate its parent');
+  assert.deepEqual(
+    basicInventory.declarations.map((item) => item.qualifiedName),
+    ['Demo.OuterModel', 'Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
+  );
+
+  const deepSource = `
+    namespace Demo {
+      namespace Demo2 {
+        model PrefixCollision {}
+      }
+      namespace Demo.Inner {
+        namespace Demo.Inner.Deep {
+          model FullyQualifiedDeep {}
+        }
+        namespace Innerish {
+          model RelativeDeep {}
+        }
+      }
+    }
+  `;
+  const deepInventory = inventoryTypeSpecSource(deepSource, 'compiler-deep.tsp');
+  const deepGlobal = await compileTypeSpecSource(deepSource, 'compiler-deep.tsp');
+  const deepDemo = requireNamespace(deepGlobal, 'Demo', 'Demo');
+  const demo2 = requireNamespace(deepDemo, 'Demo2', 'Demo.Demo2');
+  const deepInner = requireNamespace(deepDemo, 'Inner', 'Demo.Inner');
+  const deep = requireNamespace(deepInner, 'Deep', 'Demo.Inner.Deep');
+  const innerish = requireNamespace(deepInner, 'Innerish', 'Demo.Inner.Innerish');
+  assert.ok(demo2.models.has('PrefixCollision'));
+  assert.ok(deep.models.has('FullyQualifiedDeep'));
+  assert.ok(innerish.models.has('RelativeDeep'));
+  assert.equal(deepInner.namespaces.has('Demo'), false, 'deep qualified child must not repeat its root');
+  assert.deepEqual(
+    deepInventory.declarations.map((item) => item.qualifiedName),
     [
       'Demo.Demo2.PrefixCollision',
       'Demo.Inner.Deep.FullyQualifiedDeep',
