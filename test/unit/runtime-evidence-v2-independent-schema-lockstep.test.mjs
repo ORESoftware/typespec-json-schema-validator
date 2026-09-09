@@ -98,8 +98,11 @@ const schemaInvalidMutations = [
     });
   }],
   ['invalid JSON Pointer error path', (value) => { firstResult(value, 1).errors[0].path = 'id'; }],
-  ['raw-looking error parameter value', (value) => {
+  ['raw email-shaped error parameter value', (value) => {
     firstResult(value, 1).errors[0].params = { value: 'alice@example.com' };
+  }],
+  ['identifier-shaped raw error parameter value', (value) => {
+    firstResult(value, 1).errors[0].params = { value: 'alice' };
   }],
   ['unknown validation error property', (value) => { firstResult(value, 1).errors[0].message = 'required'; }],
   ['uppercase output digest', (value) => { firstResult(value, 0).outputDigest = 'A'.repeat(64); }],
@@ -190,17 +193,23 @@ test('schema-valid duplicate adapter and case identities remain explicit executa
   ));
 });
 
-test('v2 schema and executable both reject non-data-like public error metadata surfaces', async () => {
+test('v2 schema and executable admit only non-string public error params', async () => {
   const validate = await independentValidator();
   const value = evidence();
-  firstResult(value, 1).errors[0].params = { format: 'email', minimum: 3 };
+  firstResult(value, 1).errors[0] = {
+    path: '/email',
+    code: 'format_email',
+    params: { minimum: 3, inclusive: true, observed: null },
+  };
   assert.equal(validate(value), true, JSON.stringify(validate.errors));
   assert.deepEqual(validateRuntimeEvidence(value).findings, []);
 
-  const unsafe = evidence();
-  firstResult(unsafe, 1).errors[0].params = { format: 'not an identifier with spaces' };
-  assert.equal(validate(unsafe), false);
-  assertExecutableRejects(unsafe, 'unbounded/free-form error metadata');
+  for (const raw of ['alice', 'email', 'not an identifier with spaces']) {
+    const unsafe = evidence();
+    firstResult(unsafe, 1).errors[0].params = { value: raw };
+    assert.equal(validate(unsafe), false, raw);
+    assertExecutableRejects(unsafe, `string-valued error metadata: ${raw}`);
+  }
 });
 
 test('malformed known runtime-evidence fields never echo their raw value into findings', () => {
