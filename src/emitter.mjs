@@ -33,8 +33,6 @@ async function overlayNodeModulePath(path) {
 function createPinnedCompilerHost() {
   return {
     ...NodeHost,
-    // The subprocess compiler is intentionally quiet here. The outer CLI owns the receipt and
-    // human-readable summary; diagnostics are collected from the returned Program below.
     logSink: { log() {} },
     async stat(path) {
       return NodeHost.stat(await overlayNodeModulePath(path));
@@ -165,8 +163,8 @@ export async function resolveTspBinary(explicit) {
   }
   const executable = process.platform === 'win32' ? 'tsp.cmd' : 'tsp';
   const local = await executableCandidate([
-    join(process.cwd(), 'node_modules', '.bin', executable),
     join(MODULE_ROOT, 'node_modules', '.bin', executable),
+    join(process.cwd(), 'node_modules', '.bin', executable),
   ]);
   return local ?? executable;
 }
