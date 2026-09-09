@@ -106,7 +106,7 @@ Pin the action to an exact TJSV commit:
     verification: artifacts/protobuf-compatibility.json
 ```
 
-The action exits `0` on `passed`, `2` on `stopped_for_evaluation`, and `1` on execution/configuration failure. A failing run still writes its receipt before returning nonzero so CI retains the reason promotion was blocked.
+The action exits `0` on `passed`, `2` on `stopped_for_evaluation`, and `3` on execution/configuration failure. A failing run still writes its receipt before returning nonzero so CI retains the reason promotion was blocked.
 
 The runner accepts only normalized relative POSIX paths beneath its configured root, rejects symlinked or multiply-linked input files, and the receipt writer refuses to replace symlinked, multiply-linked, or unrecognized evidence files.
 
