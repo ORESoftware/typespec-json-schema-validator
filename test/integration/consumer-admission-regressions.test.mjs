@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
-test('real compiler and canonical verifier: seven refusals; stale positive receipt is replaced', async () => {
+test('real compiler and canonical verifier: nineteen refusals; stale positive receipt is replaced', async () => {
   // Repository-local temp sources resolve the lockfile-installed TypeSpec emitter.
   const dir = await mkdtemp(join(root, '.consumer-regression-'));
   try {
@@ -33,10 +33,14 @@ test('real compiler and canonical verifier: seven refusals; stale positive recei
       TSJSV_VERIFY_DECLARATIONS: '["AdmissionRegression.Item"]', TSJSV_VERIFY_VERIFICATION: verification };
     const run = () => spawnSync(process.execPath, [resolve(root, 'scripts/test-consumer-admission.mjs')],
       { cwd: root, env, encoding: 'utf8', timeout: 120000 });
+    const inputPaths = [typespec, schema, report, ir, env.TSJSV_VERIFY_GENERATED];
+    const originalInputs = await Promise.all(inputPaths.map((path) => readFile(path, 'utf8')));
     const passed = run();
     assert.equal(passed.status, 0, passed.stderr || passed.stdout);
-    assert.equal(JSON.parse(passed.stdout).negativeCasesPassed, 7);
+    assert.equal(JSON.parse(passed.stdout).negativeCasesPassed, 19);
     assert.equal(JSON.parse(await readFile(verification, 'utf8')).status, 'passed');
+    assert.deepEqual(await Promise.all(inputPaths.map((path) => readFile(path, 'utf8'))), originalInputs,
+      'positive and negative admission probes must not rewrite either authority or retained input evidence');
     const altered = JSON.parse(await readFile(ir, 'utf8'));
     altered.irId = '0'.repeat(64);
     await writeFile(ir, JSON.stringify(altered));

@@ -7,8 +7,17 @@ function requireCondition(condition, message) {
   if (!condition) throw new Error(`STOPPED_FOR_EVALUATION: ${message}`);
 }
 
-function identities(values, label) {
+function denseArray(values, label) {
   requireCondition(Array.isArray(values) && values.length > 0, `${label} must be a nonempty array`);
+  // Array.every/map skip holes and can read inherited numeric properties.
+  // In-process callers must provide the same explicit inventory as JSON callers.
+  for (let index = 0; index < values.length; index++) {
+    requireCondition(Object.hasOwn(values, index), `${label} contains a missing own element`);
+  }
+}
+
+function identities(values, label) {
+  denseArray(values, label);
   requireCondition(values.every((value) => typeof value === 'string' && value.trim() === value && value !== ''), `${label} contains an invalid identity`);
   requireCondition(new Set(values).size === values.length, `${label} contains duplicate identities`);
   return [...values].sort();
@@ -29,6 +38,7 @@ export async function verifyConsumerContract(options, verifier) {
   requireCondition(Array.isArray(contractIr.excludedDeclarations) && contractIr.excludedDeclarations.length === 0, 'excluded declarations are not admitted');
   requireCondition(Array.isArray(contractIr.outOfScopeDeclarations) && contractIr.outOfScopeDeclarations.length === 0, 'out-of-scope declarations are not admitted');
   requireCondition(Array.isArray(contractIr.declarations), 'declarations are missing');
+  denseArray(contractIr.declarations, 'admitted declarations');
   const actual = identities(contractIr.declarations.map((entry) => entry?.id), 'admitted declarations');
   requireCondition(JSON.stringify(actual) === JSON.stringify(expected), 'declaration inventory does not match the consumer scope');
   requireCondition(contractIr.admission.scope.admittedDeclarations === actual.length, 'admitted declaration count is inconsistent');
