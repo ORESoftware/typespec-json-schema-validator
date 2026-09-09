@@ -5,6 +5,7 @@ import {
   RUNTIME_EVIDENCE_SCHEMA_V2,
   RUNTIME_EVIDENCE_SCHEMAS,
   positiveSafeInteger,
+  runtimeValueShape,
 } from './constants.mjs';
 import { validateContractIrBinding } from './contract-ir-binding.mjs';
 import { makeRuntimeFinding, sortRuntimeFindings } from './findings.mjs';
@@ -215,31 +216,42 @@ export function compareRuntimeEvidence({
   const required = normalizeRequiredAdapters(requiredAdapters, findings);
   findings.push(...validated.findings);
 
-  if (requiredEvidenceSchema !== undefined && !RUNTIME_EVIDENCE_SCHEMAS.has(requiredEvidenceSchema)) {
+  const trustedRequiredEvidenceSchema = requiredEvidenceSchema === undefined
+    || RUNTIME_EVIDENCE_SCHEMAS.has(requiredEvidenceSchema)
+    ? requiredEvidenceSchema
+    : undefined;
+  const trustedExpectedInputDigest = DIGEST_PATTERN.test(expectedInputDigest ?? '')
+    ? expectedInputDigest
+    : undefined;
+  const trustedExpectedCorpusDigest = DIGEST_PATTERN.test(expectedCorpusDigest ?? '')
+    ? expectedCorpusDigest
+    : undefined;
+
+  if (requiredEvidenceSchema !== undefined && trustedRequiredEvidenceSchema === undefined) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-required-evidence-schema-invalid',
       pointer: '#/requiredEvidenceSchema',
       message: 'requiredEvidenceSchema must name a supported runtime evidence contract',
-      left: requiredEvidenceSchema,
+      left: runtimeValueShape(requiredEvidenceSchema),
       right: [...RUNTIME_EVIDENCE_SCHEMAS].sort(),
     }));
   }
 
-  if (!DIGEST_PATTERN.test(expectedInputDigest ?? '')) {
+  if (trustedExpectedInputDigest === undefined) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-expected-input-digest-invalid',
       pointer: '#/expectedInputDigest',
       message: 'expectedInputDigest must be the lowercase SHA-256 runId from the trusted parity receipt',
-      left: expectedInputDigest,
+      left: runtimeValueShape(expectedInputDigest),
       right: '64 lowercase hexadecimal characters',
     }));
   }
-  if (!DIGEST_PATTERN.test(expectedCorpusDigest ?? '')) {
+  if (trustedExpectedCorpusDigest === undefined) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-expected-corpus-digest-invalid',
       pointer: '#/expectedCorpusDigest',
       message: 'expectedCorpusDigest must be a lowercase SHA-256 digest from the trusted corpus loader',
-      left: expectedCorpusDigest,
+      left: runtimeValueShape(expectedCorpusDigest),
       right: '64 lowercase hexadecimal characters',
     }));
   }
@@ -247,22 +259,21 @@ export function compareRuntimeEvidence({
   const binding = validateContractIrBinding({
     contractIr,
     contractIrVerification,
-    expectedInputDigest,
+    expectedInputDigest: trustedExpectedInputDigest,
     findings,
   });
   compareCorpusToContractIr(corpus, binding, findings);
 
   const normalized = validated.normalized;
   if (normalized) {
-    if (requiredEvidenceSchema !== undefined
-      && RUNTIME_EVIDENCE_SCHEMAS.has(requiredEvidenceSchema)
-      && normalized.schema !== requiredEvidenceSchema) {
+    if (trustedRequiredEvidenceSchema !== undefined
+      && normalized.schema !== trustedRequiredEvidenceSchema) {
       findings.push(makeRuntimeFinding({
         ruleId: 'runtime-evidence-required-schema-mismatch',
         pointer: '#/schema',
         message: 'runtime evidence does not satisfy the required semantic evidence profile',
         left: normalized.schema,
-        right: requiredEvidenceSchema,
+        right: trustedRequiredEvidenceSchema,
       }));
     }
     if (binding.irId && normalized.contractIrId !== binding.irId) {
@@ -274,22 +285,24 @@ export function compareRuntimeEvidence({
         right: binding.irId,
       }));
     }
-    if (normalized.inputDigest !== expectedInputDigest) {
+    if (trustedExpectedInputDigest !== undefined
+      && normalized.inputDigest !== trustedExpectedInputDigest) {
       findings.push(makeRuntimeFinding({
         ruleId: 'runtime-input-digest-mismatch',
         pointer: '#/inputDigest',
         message: 'runtime evidence is not bound to the requested parity receipt and authority/configuration closure',
         left: normalized.inputDigest,
-        right: expectedInputDigest,
+        right: trustedExpectedInputDigest,
       }));
     }
-    if (normalized.corpusDigest !== expectedCorpusDigest) {
+    if (trustedExpectedCorpusDigest !== undefined
+      && normalized.corpusDigest !== trustedExpectedCorpusDigest) {
       findings.push(makeRuntimeFinding({
         ruleId: 'runtime-corpus-digest-mismatch',
         pointer: '#/corpusDigest',
         message: 'runtime evidence is not bound to the requested instance corpus',
         left: normalized.corpusDigest,
-        right: expectedCorpusDigest,
+        right: trustedExpectedCorpusDigest,
       }));
     }
 

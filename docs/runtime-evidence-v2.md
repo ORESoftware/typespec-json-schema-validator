@@ -15,7 +15,7 @@ Every v2 case result carries the fixed fields:
 
 Accepted values never appear in the evidence file itself. Only their canonical digest is retained. Rejected values, raw exception messages, stack traces, stdout/stderr, credentials, and environment values remain forbidden.
 
-A stable validation error contains `{ path, code, params }`. `path` is an RFC 6901 JSON Pointer. `code` and parameter names are bounded lowercase identifiers. Parameter values are limited to null, booleans, finite JSON numbers, or bounded identifier strings so adapters can report rule metadata such as `minimum`, `maximum`, or `format` without retaining the rejected value or library-specific prose.
+A stable validation error contains `{ path, code, params }`. `path` is an RFC 6901 JSON Pointer. `code` and parameter names are bounded lowercase identifiers. Parameter values are restricted to null, booleans, or finite JSON numbers. String-valued params are deliberately forbidden because a raw rejected value can itself look like an identifier. Stable categorical metadata such as type or format identity belongs in the error `code` (for example `type_string` or `format_email`), while numeric rule metadata such as minimum/maximum bounds may live in `params`.
 
 ## Trusted case binding
 

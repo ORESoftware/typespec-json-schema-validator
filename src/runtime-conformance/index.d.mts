@@ -8,7 +8,7 @@ export type RuntimeEvidenceSchema =
 export interface RuntimeValidationError {
   path: string;
   code: string;
-  params: Record<string, null | boolean | number | string>;
+  params: Record<string, null | boolean | number>;
 }
 
 export interface RuntimeEvidenceResultV1 {
