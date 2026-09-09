@@ -1,0 +1,1 @@
+{"source":"protobuf","revision":"40143a78cd010b04edee7dbea8466f178897b394","fingerprint":"relational-v1:abc123","relationCount":-1,"columnCount":17,"lineage":"protobuf-descriptors","artifactDigest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","contractVersion":"grpc-pg-contract-ledger/v1"}
