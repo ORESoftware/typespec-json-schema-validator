@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
 export const EXCEPTION = Object.freeze({
@@ -95,7 +96,7 @@ export function main() {
   process.stdout.write(`${JSON.stringify(verdict)}\n`);
 }
 
-if (import.meta.url === new URL(`file://${process.argv[1]}`).href) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try { main(); } catch (error) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
