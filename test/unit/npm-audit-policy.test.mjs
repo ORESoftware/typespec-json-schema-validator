@@ -42,8 +42,34 @@ function auditWith({ severity = 'high', isDirect = false, source = 1234, package
   };
 }
 
+function propagatedAudit() {
+  const audit = auditWith({ packageName: '@typespec/compiler', isDirect: true, source: 1193788 });
+  audit.vulnerabilities['@typespec/json-schema'] = {
+    name: '@typespec/json-schema', severity: 'high', isDirect: true,
+    via: ['@typespec/compiler'], effects: [], range: '*',
+    nodes: ['node_modules/@typespec/json-schema'], fixAvailable: false,
+  };
+  audit.vulnerabilities['@typespec/asset-emitter'] = {
+    name: '@typespec/asset-emitter', severity: 'high', isDirect: false,
+    via: ['@typespec/compiler'], effects: ['@typespec/json-schema'], range: '*',
+    nodes: ['node_modules/@typespec/asset-emitter'], fixAvailable: false,
+  };
+  return audit;
+}
+
 function ledger(exceptions = []) {
   return { schema: EXCEPTION_SCHEMA, exceptions };
+}
+
+function exceptionFor(packageName, advisoryId = 'npm:1234') {
+  return {
+    advisoryId,
+    package: packageName,
+    owner: 'security@example.invalid',
+    rationale: 'temporary upstream compatibility hold',
+    reachabilityEvidence: 'reviewed dependency path and compensating control',
+    expiresAt: '2026-09-10T04:00:00.000Z',
+  };
 }
 
 function evaluate(auditDocument, exceptionLedger = ledger(), auditExitCode = 1) {
@@ -94,84 +120,93 @@ test('production audit paths are conservatively action-reachable', () => {
   assert.equal(finding.actionReachability, 'conservatively-reachable');
 });
 
+test('propagated npm package entries inherit the exact root advisory identity', () => {
+  const findings = collectAuditFindings(propagatedAudit());
+  assert.equal(findings.length, 3);
+  assert.deepEqual(new Set(findings.map((finding) => finding.advisoryId)), new Set(['npm:1193788']));
+  assert.deepEqual(new Set(findings.map((finding) => finding.advisoryPackage)), new Set(['@typespec/compiler']));
+  assert.equal(findings.find((finding) => finding.package === '@typespec/json-schema').propagated, true);
+});
+
+test('propagated finding records package path evidence', () => {
+  const finding = collectAuditFindings(propagatedAudit())
+    .find((entry) => entry.package === '@typespec/asset-emitter');
+  assert.deepEqual(finding.viaPackages, ['@typespec/compiler']);
+  assert.deepEqual(finding.nodes, ['node_modules/@typespec/asset-emitter']);
+  assert.deepEqual(finding.effects, ['@typespec/json-schema']);
+});
+
 test('exact nonexpired exception waives only its advisory and package', () => {
-  const receipt = evaluate(auditWith(), ledger([{
-    advisoryId: 'npm:1234',
-    package: 'transitive-pkg',
-    owner: 'security@example.invalid',
-    rationale: 'temporary upstream compatibility hold',
-    reachabilityEvidence: 'reviewed dependency path and compensating control',
-    expiresAt: '2026-09-10T04:00:00.000Z',
-  }]));
+  const receipt = evaluate(auditWith(), ledger([exceptionFor('transitive-pkg')]));
   assert.equal(receipt.status, 'passed');
   assert.equal(receipt.exceptionsApplied.length, 1);
 });
 
+test('one root-advisory exception cannot blanket-waive propagated packages', () => {
+  const receipt = evaluate(
+    propagatedAudit(),
+    ledger([exceptionFor('@typespec/compiler', 'npm:1193788')]),
+  );
+  assert.equal(receipt.status, 'stopped_for_evaluation');
+  assert.equal(receipt.unwaivedHighOrCritical.length, 2);
+});
+
+test('exact exceptions can waive each propagated package path independently', () => {
+  const receipt = evaluate(
+    propagatedAudit(),
+    ledger([
+      exceptionFor('@typespec/compiler', 'npm:1193788'),
+      exceptionFor('@typespec/json-schema', 'npm:1193788'),
+      exceptionFor('@typespec/asset-emitter', 'npm:1193788'),
+    ]),
+  );
+  assert.equal(receipt.status, 'passed');
+  assert.equal(receipt.exceptionsApplied.length, 3);
+});
+
 test('package mismatch cannot blanket-waive an advisory', () => {
-  const receipt = evaluate(auditWith(), ledger([{
-    advisoryId: 'npm:1234',
-    package: 'other-package',
-    owner: 'security@example.invalid',
-    rationale: 'wrong package on purpose',
-    reachabilityEvidence: 'not applicable to the actual path',
-    expiresAt: '2026-09-10T04:00:00.000Z',
-  }]));
+  const receipt = evaluate(auditWith(), ledger([exceptionFor('other-package')]));
   assert.equal(receipt.status, 'stopped_for_evaluation');
 });
 
 test('expired exception fails closed', () => {
-  const receipt = evaluate(auditWith(), ledger([{
-    advisoryId: 'npm:1234',
-    package: 'transitive-pkg',
-    owner: 'security@example.invalid',
-    rationale: 'expired',
-    reachabilityEvidence: 'expired evidence',
-    expiresAt: '2026-09-09T03:59:59.000Z',
-  }]));
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-09-09T03:59:59.000Z';
+  const receipt = evaluate(auditWith(), ledger([exception]));
   assert.equal(receipt.status, 'stopped_for_evaluation');
   assert.equal(receipt.unwaivedHighOrCritical[0].reason, 'exception-expired');
 });
 
 test('exception requires reachability evidence', () => {
-  assert.throws(() => parseExceptionLedger(ledger([{
-    advisoryId: 'npm:1234',
-    package: 'transitive-pkg',
-    owner: 'security@example.invalid',
-    rationale: 'missing evidence',
-    reachabilityEvidence: '',
-    expiresAt: '2026-09-10T04:00:00.000Z',
-  }])), /reachabilityEvidence/);
+  const exception = exceptionFor('transitive-pkg');
+  exception.reachabilityEvidence = '';
+  assert.throws(() => parseExceptionLedger(ledger([exception])), /reachabilityEvidence/);
 });
 
 test('exception expiry must be canonical UTC', () => {
-  assert.throws(() => parseExceptionLedger(ledger([{
-    advisoryId: 'npm:1234',
-    package: 'transitive-pkg',
-    owner: 'security@example.invalid',
-    rationale: 'bad timestamp',
-    reachabilityEvidence: 'evidence',
-    expiresAt: '2026-09-10',
-  }])), /canonical RFC3339 UTC/);
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-09-10';
+  assert.throws(() => parseExceptionLedger(ledger([exception])), /canonical RFC3339 UTC/);
 });
 
 test('duplicate exact exceptions are refused', () => {
-  const exception = {
-    advisoryId: 'npm:1234',
-    package: 'transitive-pkg',
-    owner: 'security@example.invalid',
-    rationale: 'duplicate',
-    reachabilityEvidence: 'evidence',
-    expiresAt: '2026-09-10T04:00:00.000Z',
-  };
+  const exception = exceptionFor('transitive-pkg');
   assert.throws(() => parseExceptionLedger(ledger([exception, exception])), /duplicate exception/);
 });
 
-test('aggregate vulnerability without advisory object remains fail-closed', () => {
+test('aggregate vulnerability without a resolvable advisory remains fail-closed', () => {
   const audit = auditWith();
   audit.vulnerabilities['transitive-pkg'].via = ['nested-package'];
   const receipt = evaluate(audit);
   assert.equal(receipt.status, 'stopped_for_evaluation');
   assert.match(receipt.unwaivedHighOrCritical[0].advisoryId, /^aggregate:/);
+});
+
+test('cyclic propagated vulnerability references do not recurse forever', () => {
+  const audit = propagatedAudit();
+  audit.vulnerabilities['@typespec/compiler'].via = ['@typespec/json-schema'];
+  const findings = collectAuditFindings(audit);
+  assert.ok(findings.some((finding) => finding.advisoryId.startsWith('aggregate:')));
 });
 
 test('duplicate advisory entries are deterministically deduplicated', () => {

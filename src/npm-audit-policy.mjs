@@ -69,7 +69,10 @@ export function parseExceptionLedger(value) {
     const packageName = requireNonemptyString(item.package, `exception[${index}].package`);
     const owner = requireNonemptyString(item.owner, `exception[${index}].owner`);
     const rationale = requireNonemptyString(item.rationale, `exception[${index}].rationale`);
-    const reachabilityEvidence = requireNonemptyString(item.reachabilityEvidence, `exception[${index}].reachabilityEvidence`);
+    const reachabilityEvidence = requireNonemptyString(
+      item.reachabilityEvidence,
+      `exception[${index}].reachabilityEvidence`,
+    );
     const expiresAt = normalizeIsoDate(item.expiresAt, `exception[${index}].expiresAt`);
     const key = `${advisoryId}\u0000${packageName}`;
     if (seen.has(key)) throw new TypeError(`duplicate exception for ${advisoryId} / ${packageName}`);
@@ -90,12 +93,57 @@ function advisoryIdFor(via, vulnerability) {
   return `aggregate:${vulnerability.name ?? 'unknown'}:${vulnerability.severity ?? 'unknown'}:${range}`;
 }
 
+function advisoryIdentity(advisory) {
+  if (!advisory || typeof advisory !== 'object' || Array.isArray(advisory)) return null;
+  if (advisory.source !== undefined && advisory.source !== null) return `npm:${String(advisory.source)}`;
+  if (typeof advisory.url === 'string' && advisory.url.trim()) return advisory.url.trim();
+  if (typeof advisory.title === 'string' && advisory.title.trim()) return `title:${advisory.title.trim()}`;
+  return JSON.stringify(advisory);
+}
+
+function resolveAdvisories(packageName, vulnerabilities, active = new Set()) {
+  if (active.has(packageName)) return [];
+  const vulnerability = vulnerabilities[packageName];
+  if (!vulnerability || typeof vulnerability !== 'object' || Array.isArray(vulnerability)) return [];
+
+  const nextActive = new Set(active);
+  nextActive.add(packageName);
+  const via = Array.isArray(vulnerability.via) ? vulnerability.via : [];
+  const advisories = [];
+
+  for (const entry of via) {
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      advisories.push(entry);
+      continue;
+    }
+    if (typeof entry === 'string' && vulnerabilities[entry]) {
+      advisories.push(...resolveAdvisories(entry, vulnerabilities, nextActive));
+    }
+  }
+
+  const unique = new Map();
+  for (const advisory of advisories) {
+    const key = advisoryIdentity(advisory);
+    if (key && !unique.has(key)) unique.set(key, advisory);
+  }
+  return [...unique.values()];
+}
+
+function sortedStrings(value) {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry) => typeof entry === 'string').sort();
+}
+
 function findingFor(packageName, vulnerability, via) {
   const advisory = via && typeof via === 'object' && !Array.isArray(via) ? via : null;
   const severity = String(advisory?.severity ?? vulnerability.severity ?? 'unknown').toLowerCase();
+  const advisoryPackage = typeof advisory?.name === 'string'
+    ? advisory.name
+    : (typeof advisory?.dependency === 'string' ? advisory.dependency : packageName);
   return {
     advisoryId: advisoryIdFor(advisory, vulnerability),
     advisoryUrl: typeof advisory?.url === 'string' ? advisory.url : null,
+    advisoryPackage,
     package: packageName,
     dependency: typeof advisory?.dependency === 'string' ? advisory.dependency : packageName,
     severity,
@@ -104,6 +152,10 @@ function findingFor(packageName, vulnerability, via) {
       ? advisory.range
       : (typeof vulnerability.range === 'string' ? vulnerability.range : null),
     directDependency: vulnerability.isDirect === true,
+    propagated: advisory !== null && advisoryPackage !== packageName,
+    viaPackages: sortedStrings(vulnerability.via),
+    nodes: sortedStrings(vulnerability.nodes),
+    effects: sortedStrings(vulnerability.effects),
     productionScope: true,
     actionReachability: 'conservatively-reachable',
     fixAvailable: vulnerability.fixAvailable ?? false,
@@ -118,13 +170,12 @@ export function collectAuditFindings(auditDocument) {
   const findings = [];
   for (const packageName of Object.keys(vulnerabilities).sort()) {
     const vulnerability = requireObject(vulnerabilities[packageName], `vulnerability ${packageName}`);
-    const via = Array.isArray(vulnerability.via) ? vulnerability.via : [];
-    const advisoryEntries = via.filter((entry) => entry && typeof entry === 'object' && !Array.isArray(entry));
-    if (advisoryEntries.length === 0) {
+    const advisories = resolveAdvisories(packageName, vulnerabilities);
+    if (advisories.length === 0) {
       findings.push(findingFor(packageName, vulnerability, null));
       continue;
     }
-    for (const advisory of advisoryEntries) findings.push(findingFor(packageName, vulnerability, advisory));
+    for (const advisory of advisories) findings.push(findingFor(packageName, vulnerability, advisory));
   }
 
   const unique = new Map();
@@ -167,7 +218,9 @@ export function evaluateAudit({
   const timestamp = normalizeIsoDate(now, 'now');
   const ledger = parseExceptionLedger(exceptionLedger);
   const findings = collectAuditFindings(auditDocument);
-  const exceptionsByKey = new Map(ledger.exceptions.map((entry) => [`${entry.advisoryId}\u0000${entry.package}`, entry]));
+  const exceptionsByKey = new Map(
+    ledger.exceptions.map((entry) => [`${entry.advisoryId}\u0000${entry.package}`, entry]),
+  );
   const exceptionsApplied = [];
   const unwaived = [];
 
@@ -186,6 +239,7 @@ export function evaluateAudit({
       advisoryId: finding.advisoryId,
       package: finding.package,
       owner: exception.owner,
+      rationale: exception.rationale,
       expiresAt: exception.expiresAt,
       reachabilityEvidence: exception.reachabilityEvidence,
     });
