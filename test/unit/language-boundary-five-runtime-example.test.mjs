@@ -103,6 +103,10 @@ async function validInput() {
   };
 }
 
+function hasRule(result, ruleId) {
+  return result.findings.some((finding) => finding.ruleId === ruleId);
+}
+
 test('five-runtime manifest validates against the published Draft 2020-12 boundary contract', async () => {
   const manifest = await loadManifest();
   const schema = await loadManifestSchema();
@@ -165,4 +169,32 @@ test('symbolic source labels are rejected as immutable cross-runtime evidence', 
 
   assert.equal(result.status, 'stopped_for_evaluation');
   assert.ok(result.findings.some((finding) => finding.ruleId === 'boundary-source-revision-invalid'));
+});
+
+test('runtime evidence must bind the exact parity receipt and Contract IR', async () => {
+  const receiptInput = await validInput();
+  receiptInput.evidenceByPath.get('rust/native.json').receiptRunId = '9'.repeat(64);
+  const receiptResult = verifyLanguageBoundaries(receiptInput);
+  assert.equal(receiptResult.status, 'stopped_for_evaluation');
+  assert.ok(hasRule(receiptResult, 'boundary-evidence-receipt-mismatch'));
+
+  const irInput = await validInput();
+  irInput.evidenceByPath.get('gleam/beam.json').contractIrId = '8'.repeat(64);
+  const irResult = verifyLanguageBoundaries(irInput);
+  assert.equal(irResult.status, 'stopped_for_evaluation');
+  assert.ok(hasRule(irResult, 'boundary-evidence-contract-ir-mismatch'));
+});
+
+test('required ingress and egress failures stop promotion even when every runtime reports status passed', async () => {
+  const ingressInput = await validInput();
+  ingressInput.evidenceByPath.get('rust/native.json').validation.ingress = 'failed';
+  const ingressResult = verifyLanguageBoundaries(ingressInput);
+  assert.equal(ingressResult.status, 'stopped_for_evaluation');
+  assert.ok(hasRule(ingressResult, 'boundary-ingress-not-verified'));
+
+  const egressInput = await validInput();
+  egressInput.evidenceByPath.get('dart/flutter.json').validation.egress = 'failed';
+  const egressResult = verifyLanguageBoundaries(egressInput);
+  assert.equal(egressResult.status, 'stopped_for_evaluation');
+  assert.ok(hasRule(egressResult, 'boundary-egress-not-verified'));
 });
