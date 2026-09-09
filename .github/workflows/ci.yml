@@ -47,12 +47,12 @@ jobs:
       - name: Install pinned dependencies
         run: npm ci
 
-      - name: Audit production action dependencies
-        if: matrix.os == 'ubuntu-24.04'
-        run: npm audit --omit=dev --audit-level=high
-
       - name: Run syntax, CLI-contract, unit, and compiler-backed integration gates
         run: npm run test:all
 
       - name: Verify package contents
         run: npm pack --dry-run
+
+      - name: Audit production action dependencies
+        if: matrix.os == 'ubuntu-24.04'
+        run: npm audit --omit=dev --audit-level=high
