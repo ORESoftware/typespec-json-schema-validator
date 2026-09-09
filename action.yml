@@ -61,6 +61,13 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Audit the validator's production dependency lockfile
+      shell: bash
+      working-directory: ${{ github.action_path }}
+      env:
+        TSJSV_NPM_AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+      run: node ./scripts/npm-audit-gate.mjs
+
     - name: Install the validator's lockfile-pinned toolchain
       shell: bash
       working-directory: ${{ github.action_path }}

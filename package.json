@@ -50,6 +50,7 @@
     "src"
   ],
   "scripts": {
+    "audit:prod": "node ./scripts/npm-audit-gate.mjs",
     "check": "node ./scripts/check.mjs",
     "flags:audit": "f2e audit ./.cli-flags.toml",
     "test": "node --test ./test/unit/*.test.mjs",
