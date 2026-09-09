@@ -1,0 +1,1 @@
+Semantic salvage review complete: preserve current main implementation; retain only five-runtime example/test intent from PR #77.
