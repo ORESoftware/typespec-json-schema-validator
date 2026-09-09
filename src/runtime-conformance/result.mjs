@@ -18,15 +18,12 @@ const JSON_POINTER_PATTERN = /^(?:\/(?:[^~\/\u0000-\u001f\u007f]|~0|~1)*)*$/u;
 function normalizeErrorParam(value, pointer, findings) {
   if (value === null || typeof value === 'boolean') return value;
   if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string'
-    && value.length <= 128
-    && IDENTIFIER_PATTERN.test(value)) return value;
   findings.push(makeRuntimeFinding({
     ruleId: 'runtime-error-param-invalid',
     pointer,
-    message: 'validation error params may contain only bounded rule metadata, never raw rejected values',
+    message: 'validation error params may contain only non-payload rule metadata, never raw rejected values',
     left: runtimeValueShape(value),
-    right: 'null, boolean, finite number, or bounded identifier string',
+    right: 'null, boolean, or finite number; encode categorical metadata in the stable error code',
   }));
   return null;
 }
