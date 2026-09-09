@@ -30,6 +30,10 @@
       "import": "./src/language-boundary-verification.mjs",
       "types": "./src/language-boundary-verification.d.mts"
     },
+    "./language-boundary-current-inputs": {
+      "import": "./src/language-boundary-current-inputs.mjs",
+      "types": "./src/language-boundary-current-inputs.d.mts"
+    },
     "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
     "./schema/contract-ir": "./schema/contract-ir.schema.json",
     "./schema/language-boundaries": "./schema/language-boundaries.schema.json",
