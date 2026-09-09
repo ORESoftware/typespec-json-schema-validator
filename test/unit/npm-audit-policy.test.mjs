@@ -5,6 +5,7 @@ import {
   evaluateAudit,
   EXCEPTION_SCHEMA,
   parseExceptionLedger,
+  validateAuditEnvironment,
 } from '../../src/npm-audit-policy.mjs';
 
 const NOW = '2026-09-09T04:00:00.000Z';
@@ -202,3 +203,26 @@ test('missing npm audit vulnerability inventory is refused', () => {
   delete audit.vulnerabilities;
   assert.throws(() => collectAuditFindings(audit), /vulnerabilities/);
 });
+
+test('audit environment accepts an available npm version and HTTPS registry', () => {
+  assert.deepEqual(validateAuditEnvironment({
+    npmVersion: '11.6.0',
+    registry: 'https://registry.npmjs.org',
+  }), {
+    npmVersion: '11.6.0',
+    registry: 'https://registry.npmjs.org/',
+  });
+});
+
+for (const [name, value, pattern] of [
+  ['unavailable npm version', { npmVersion: 'unavailable', registry: 'https://registry.npmjs.org/' }, /npm version/],
+  ['malformed npm version', { npmVersion: 'latest', registry: 'https://registry.npmjs.org/' }, /npm version/],
+  ['unavailable registry', { npmVersion: '11.6.0', registry: 'unavailable' }, /registry/],
+  ['insecure registry', { npmVersion: '11.6.0', registry: 'http://registry.npmjs.org/' }, /HTTPS/],
+  ['credential-bearing registry', { npmVersion: '11.6.0', registry: 'https://user:secret@registry.npmjs.org/' }, /credentials/],
+  ['query-bearing registry', { npmVersion: '11.6.0', registry: 'https://registry.npmjs.org/?mirror=1' }, /query parameters/],
+]) {
+  test(`audit environment fails closed: ${name}`, () => {
+    assert.throws(() => validateAuditEnvironment(value), pattern);
+  });
+}
