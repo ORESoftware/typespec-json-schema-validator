@@ -10,6 +10,10 @@
       "import": "./src/index.mjs",
       "types": "./src/index.d.ts"
     },
+    "./language-boundary-verification": {
+      "import": "./src/language-boundary-verification.mjs",
+      "types": "./src/language-boundary-verification.d.mts"
+    },
     "./runtime-conformance": {
       "import": "./src/runtime-conformance/index.mjs",
       "types": "./src/runtime-conformance/index.d.mts"
@@ -28,6 +32,9 @@
     },
     "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
     "./schema/contract-ir": "./schema/contract-ir.schema.json",
+    "./schema/language-boundary-evidence": "./schema/language-boundary-evidence.schema.json",
+    "./schema/language-boundary-manifest": "./schema/language-boundary-manifest.schema.json",
+    "./schema/language-boundary-verification": "./schema/language-boundary-verification.schema.json",
     "./schema/mapping": "./schema/mapping.schema.json",
     "./schema/projection-manifest": "./schema/projection-manifest.schema.json",
     "./schema/projection-verification-policy": "./schema/projection-verification-policy.schema.json",
