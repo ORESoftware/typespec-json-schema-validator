@@ -18,7 +18,7 @@ export const PROTOBUF_COMPATIBILITY_RECEIPT_SCHEMA =
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const PACKAGE = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$/u;
-const TYPE = /^\.?[A-Za-z_][A-Za-z0-9_.]*(?:<[^\s<>]+(?:,[^\s<>]+)*>)?$/u;
+const TYPE = /^\.?[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*(?:<[A-Za-z_][A-Za-z0-9_.]*,[A-Za-z_][A-Za-z0-9_.]*>)?$/u;
 const CARDINALITIES = new Set(['singular', 'optional', 'repeated']);
 const PRESENCE = new Set(['implicit', 'explicit']);
 
