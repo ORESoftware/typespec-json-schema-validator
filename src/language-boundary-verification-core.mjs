@@ -58,18 +58,22 @@ function hasOnlyFields(value, allowed) {
   return isPlainObject(value) && Object.keys(value).every((key) => allowed.has(key));
 }
 
+function jsonCharacterLength(value) {
+  return typeof value === 'string' ? Array.from(value).length : -1;
+}
+
 function canonicalToken(value) {
   return typeof value === 'string'
-    && value.length > 0
-    && value.length <= MAX_TOKEN_LENGTH
+    && jsonCharacterLength(value) > 0
+    && jsonCharacterLength(value) <= MAX_TOKEN_LENGTH
     && value === value.trim()
     && !CONTROL_PATTERN.test(value);
 }
 
 function canonicalEvidencePath(value) {
   if (typeof value !== 'string'
-    || value.length === 0
-    || value.length > MAX_EVIDENCE_PATH_LENGTH
+    || jsonCharacterLength(value) === 0
+    || jsonCharacterLength(value) > MAX_EVIDENCE_PATH_LENGTH
     || value !== value.trim()
     || CONTROL_PATTERN.test(value)) return false;
   if (value.startsWith('/') || value.endsWith('/') || value.includes('\\')) return false;
