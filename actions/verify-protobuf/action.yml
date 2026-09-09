@@ -1,0 +1,74 @@
+name: Verify Protobuf projection compatibility
+description: Fail closed when a generated TypeSpec-lane Protobuf projection breaks stable wire, reservation, presence, enum, or RPC semantics.
+author: ORESoftware
+
+inputs:
+  root:
+    description: Checked-out workspace root containing the normalized projection evidence.
+    required: false
+    default: .
+  baseline:
+    description: Previously admitted normalized Protobuf projection, relative to root.
+    required: true
+  current:
+    description: Current generated normalized Protobuf projection, relative to root.
+    required: true
+  verification:
+    description: Relative path for the deterministic self-digesting compatibility receipt.
+    required: false
+    default: .typespec-json-schema-validator/protobuf-compatibility.json
+  max_findings:
+    description: Maximum breaking-change findings retained in the receipt.
+    required: false
+    default: "250"
+  quiet:
+    description: Suppress JSON receipt output while retaining the machine-readable artifact.
+    required: false
+    default: "true"
+
+outputs:
+  verification:
+    description: Protobuf compatibility receipt path.
+    value: ${{ steps.verify.outputs.verification }}
+  status:
+    description: Compatibility receipt status.
+    value: ${{ steps.verify.outputs.status }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install the validator's lockfile-pinned toolchain
+      shell: bash
+      run: |
+        set -euo pipefail
+        cd "${GITHUB_ACTION_PATH}/../.."
+        npm ci --omit=dev
+
+    - name: Verify Protobuf projection compatibility
+      id: verify
+      shell: bash
+      env:
+        TSJSV_PROTOBUF_ROOT: ${{ inputs.root }}
+        TSJSV_PROTOBUF_BASELINE: ${{ inputs.baseline }}
+        TSJSV_PROTOBUF_CURRENT: ${{ inputs.current }}
+        TSJSV_PROTOBUF_VERIFICATION: ${{ inputs.verification }}
+        TSJSV_MAX_FINDINGS: ${{ inputs.max_findings }}
+        TSJSV_QUIET: ${{ inputs.quiet }}
+      run: |
+        set -uo pipefail
+        set +e
+        node "${GITHUB_ACTION_PATH}/../../scripts/verify-protobuf.mjs"
+        verify_code="$?"
+        set -e
+
+        receipt_path="${TSJSV_PROTOBUF_ROOT%/}/${TSJSV_PROTOBUF_VERIFICATION}"
+        if [[ -f "${receipt_path}" ]]; then
+          status="$(node -e '
+            const fs = require("node:fs");
+            const receipt = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+            process.stdout.write(receipt.status);
+          ' "${receipt_path}")"
+          printf 'verification=%s\n' "${receipt_path}" >> "${GITHUB_OUTPUT}"
+          printf 'status=%s\n' "${status}" >> "${GITHUB_OUTPUT}"
+        fi
+        exit "${verify_code}"

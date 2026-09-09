@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/protobuf-compatibility-receipt/v1",
+  "title": "TJSV Protobuf compatibility receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema", "status", "admissible", "baselineDigest", "currentDigest",
+    "breakingChangeCount", "truncated", "breakingChanges", "failureCode", "verificationId"
+  ],
+  "properties": {
+    "schema": {"const": "ores.typespec-json-schema-validator.protobuf-compatibility-receipt/v1"},
+    "status": {"enum": ["passed", "stopped_for_evaluation", "failed"]},
+    "admissible": {"type": "boolean"},
+    "baselineDigest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+    "currentDigest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+    "breakingChangeCount": {"type": "integer", "minimum": 0},
+    "truncated": {"type": "boolean"},
+    "breakingChanges": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+    "failureCode": {
+      "oneOf": [
+        {"enum": ["protobuf-breaking-change-detected", "protobuf-compatibility-verification-failed"]},
+        {"type": "null"}
+      ]
+    },
+    "verificationId": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "subject", "message", "baseline", "current", "fingerprint"],
+      "properties": {
+        "ruleId": {"type": "string", "pattern": "^protobuf-[A-Za-z0-9-]+$"},
+        "subject": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "baseline": {},
+        "current": {},
+        "fingerprint": {"$ref": "#/$defs/digest"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "passed"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "admissible": {"const": true},
+          "baselineDigest": {"$ref": "#/$defs/digest"},
+          "currentDigest": {"$ref": "#/$defs/digest"},
+          "breakingChangeCount": {"const": 0},
+          "truncated": {"const": false},
+          "breakingChanges": {"maxItems": 0},
+          "failureCode": {"type": "null"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "stopped_for_evaluation"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "admissible": {"const": false},
+          "baselineDigest": {"$ref": "#/$defs/digest"},
+          "currentDigest": {"$ref": "#/$defs/digest"},
+          "breakingChangeCount": {"minimum": 1},
+          "breakingChanges": {"minItems": 1},
+          "failureCode": {"const": "protobuf-breaking-change-detected"}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"status": {"const": "failed"}}, "required": ["status"]},
+      "then": {
+        "properties": {
+          "admissible": {"const": false},
+          "breakingChangeCount": {"const": 0},
+          "truncated": {"const": false},
+          "breakingChanges": {"maxItems": 0},
+          "failureCode": {"const": "protobuf-compatibility-verification-failed"}
+        }
+      }
+    }
+  ]
+}
