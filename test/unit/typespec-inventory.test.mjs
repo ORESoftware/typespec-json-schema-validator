@@ -147,22 +147,6 @@ test('official TypeSpec compiler and TJSV inventory agree on qualified nested na
       }
     }
   `;
-  const basicInventory = inventoryTypeSpecSource(basicSource, 'compiler-basic.tsp');
-  const basicProgram = await compileTypeSpecSource(basicSource, 'compiler-basic.tsp');
-  for (const reference of [
-    'Demo.OuterModel',
-    'Demo.Inner.WeatherReading',
-    'Demo.Relative.LocalReading',
-  ]) {
-    requireCompilerModel(basicProgram, reference);
-  }
-  requireCompilerReferenceAbsent(basicProgram, 'Demo.Demo.Inner.WeatherReading');
-  requireCompilerReferenceAbsent(basicProgram, 'Demo.Demo.Relative.LocalReading');
-  assert.deepEqual(
-    basicInventory.declarations.map((item) => item.qualifiedName),
-    ['Demo.OuterModel', 'Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
-  );
-
   const deepSource = `
     namespace Demo {
       namespace Demo2 {
@@ -178,18 +162,43 @@ test('official TypeSpec compiler and TJSV inventory agree on qualified nested na
       }
     }
   `;
+
+  const basicInventory = inventoryTypeSpecSource(basicSource, 'compiler-basic.tsp');
   const deepInventory = inventoryTypeSpecSource(deepSource, 'compiler-deep.tsp');
-  const deepProgram = await compileTypeSpecSource(deepSource, 'compiler-deep.tsp');
+
+  // One official compiler program is enough to independently resolve both fixtures.
+  // Keeping the oracle in one compilation also prevents this focused regression from
+  // doubling compiler startup/memory cost under the macOS node:test worker budget.
+  const compilerProgram = await compileTypeSpecSource(
+    `${basicSource}\n${deepSource}`,
+    'compiler-namespace-lockstep.tsp',
+  );
+
   for (const reference of [
+    'Demo.OuterModel',
+    'Demo.Inner.WeatherReading',
+    'Demo.Relative.LocalReading',
     'Demo.Demo2.PrefixCollision',
     'Demo.Inner.Deep.FullyQualifiedDeep',
     'Demo.Inner.Innerish.RelativeDeep',
   ]) {
-    requireCompilerModel(deepProgram, reference);
+    requireCompilerModel(compilerProgram, reference);
   }
-  requireCompilerReferenceAbsent(deepProgram, 'Demo2.PrefixCollision');
-  requireCompilerReferenceAbsent(deepProgram, 'Demo.Inner.Demo.Inner.Deep.FullyQualifiedDeep');
-  requireCompilerReferenceAbsent(deepProgram, 'Demo.Innerish.RelativeDeep');
+
+  for (const reference of [
+    'Demo.Demo.Inner.WeatherReading',
+    'Demo.Demo.Relative.LocalReading',
+    'Demo2.PrefixCollision',
+    'Demo.Inner.Demo.Inner.Deep.FullyQualifiedDeep',
+    'Demo.Innerish.RelativeDeep',
+  ]) {
+    requireCompilerReferenceAbsent(compilerProgram, reference);
+  }
+
+  assert.deepEqual(
+    basicInventory.declarations.map((item) => item.qualifiedName),
+    ['Demo.OuterModel', 'Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
+  );
   assert.deepEqual(
     deepInventory.declarations.map((item) => item.qualifiedName),
     [
