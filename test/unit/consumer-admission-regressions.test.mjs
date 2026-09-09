@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { testConsumerAdmission } from '../../src/consumer-admission-regressions.mjs';
 
 const seed = () => ({
-  contractIr: { irId: 'a'.repeat(64), admission: { scope: { complete: true } } },
+  contractIr: {
+    schema: 'ores.typespec-json-schema-validator.contract-ir/v1',
+    status: 'passed', admissible: true, irId: 'a'.repeat(64),
+    admission: { scope: { complete: true, admittedDeclarations: 1 } },
+    declarations: [{ id: 'Domain.Item' }], excludedDeclarations: [], outOfScopeDeclarations: [],
+  },
   report: { runId: 'b'.repeat(64), differential: { disabled: false } },
   expectedDeclarations: ['Domain.Item'],
   typespec: 'main.tsp', generatedSchema: 'generated.json', authoredSchema: 'authored.json',
@@ -16,18 +21,18 @@ function strictVerifier(o) {
   return success();
 }
 
-test('positive admission, all seven negatives, and final positive; inputs untouched', async () => {
+test('positive admission, all nineteen negatives, and final positive; inputs untouched', async () => {
   const input = seed();
   let calls = 0;
   const result = await testConsumerAdmission(input, (o) => { calls++; return strictVerifier(o); });
-  assert.equal(calls, 9);
-  assert.equal(result.rejected.length, 7);
-  assert.equal(new Set(result.rejected).size, 7);
+  assert.equal(calls, 21);
+  assert.equal(result.rejected.length, 19);
+  assert.equal(new Set(result.rejected).size, 19);
   assert.deepEqual(input, seed());
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.rejected));
 });
-for (let accepted = 1; accepted <= 7; accepted++) {
+for (let accepted = 1; accepted <= 19; accepted++) {
   test(`rejects a verifier accepting negative case ${accepted}`, async () => {
     let calls = 0;
     await assert.rejects(testConsumerAdmission(seed(), (o) => {
@@ -66,7 +71,7 @@ test('returned failures cannot silently replace the canonical throwing API', asy
 test('final positive detects leaked state or evidence identity changes', async () => {
   let calls = 0;
   await assert.rejects(testConsumerAdmission(seed(), (o) => {
-    if (++calls === 9) return {...success(), receiptRunId: 'c'.repeat(64)};
+    if (++calls === 21) return {...success(), receiptRunId: 'c'.repeat(64)};
     return strictVerifier(o);
   }), /changed after/);
 });

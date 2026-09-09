@@ -1,5 +1,5 @@
 name: Test exact-evidence consumer admission
-description: Verify current Contract IR and prove seven altered-evidence or incomplete-scope cases are refused. Run fresh compiler-backed parity first.
+description: Verify current Contract IR and prove nineteen altered-evidence or incomplete-scope cases are refused. Run fresh compiler-backed parity first.
 inputs:
   contract_ir:
     description: Current parity-approved Contract IR file.

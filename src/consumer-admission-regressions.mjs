@@ -27,6 +27,18 @@ export async function testConsumerAdmission(options, verify = verifyConsumerCont
       while (o.expectedDeclarations.includes(id)) id += '_';
       o.expectedDeclarations.push(id);
     }],
+    ['foreign-ir-schema', (o) => { o.contractIr.schema = 'unrecognized-contract-ir'; }],
+    ['nonpassing-ir-status', (o) => { o.contractIr.status = 'stopped_for_evaluation'; }],
+    ['inadmissible-ir', (o) => { o.contractIr.admissible = false; }],
+    ['excluded-ir-declarations', (o) => { o.contractIr.excludedDeclarations = [{ id: o.expectedDeclarations[0] }]; }],
+    ['out-of-scope-ir-declarations', (o) => { o.contractIr.outOfScopeDeclarations = [{ id: o.expectedDeclarations[0] }]; }],
+    ['missing-ir-declarations', (o) => { delete o.contractIr.declarations; }],
+    ['empty-ir-declarations', (o) => { o.contractIr.declarations = []; }],
+    ['duplicate-ir-declarations', (o) => { o.contractIr.declarations.push(structuredClone(o.contractIr.declarations[0])); }],
+    ['inconsistent-admitted-count', (o) => { o.contractIr.admission.scope.admittedDeclarations += 1; }],
+    ['missing-typespec-path', (o) => { o.typespec = ''; }],
+    ['missing-authored-path', (o) => { o.authoredSchema = ''; }],
+    ['missing-generated-path', (o) => { o.generatedSchema = ''; }],
   ];
   const rejected = [];
   for (const [name, mutate] of cases) {
