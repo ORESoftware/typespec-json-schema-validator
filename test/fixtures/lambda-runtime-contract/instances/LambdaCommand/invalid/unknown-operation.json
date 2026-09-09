@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "ores.lambda-command/v1",
+  "provider": "aws-lambda",
+  "operation": "reboot",
+  "requestId": "lambda-fixture-2"
+}

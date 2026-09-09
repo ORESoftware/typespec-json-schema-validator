@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "ores.lambda-runtime-fixture.schema.json",
+  "$defs": {
+    "Provider": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "Provider",
+      "type": "string",
+      "enum": [
+        "aws-lambda",
+        "gcp-cloud-run",
+        "azure-functions",
+        "vercel",
+        "cloudflare-workers",
+        "scintilla",
+        "local"
+      ]
+    },
+    "Operation": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "Operation",
+      "type": "string",
+      "enum": ["health", "version", "echo"]
+    },
+    "LambdaCommand": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "LambdaCommand",
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "string", "const": "ores.lambda-command/v1" },
+        "provider": { "$ref": "Provider" },
+        "operation": { "$ref": "Operation" },
+        "requestId": { "type": "string" }
+      },
+      "required": ["schemaVersion", "provider", "operation", "requestId"],
+      "unevaluatedProperties": false
+    }
+  }
+}
