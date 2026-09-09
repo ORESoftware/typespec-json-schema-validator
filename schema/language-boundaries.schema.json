@@ -6,7 +6,7 @@
   "required": ["schema", "minimumDistinctLanguages", "authorities", "targets"],
   "properties": {
     "schema": { "const": "ores.typespec-json-schema-validator.language-boundaries/v1" },
-    "minimumDistinctLanguages": { "type": "integer", "minimum": 2 },
+    "minimumDistinctLanguages": { "type": "integer", "minimum": 2, "maximum": 9007199254740991 },
     "authorities": {
       "type": "object",
       "required": ["typeSpec", "jsonSchema", "generatedWitness"],
@@ -41,13 +41,13 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 256,
-      "pattern": "^(?!\\s).*(?<!\\s)$"
+      "pattern": "^(?!\\s)(?!.*[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]).*(?<!\\s)$"
     },
     "relativePath": {
       "type": "string",
       "minLength": 1,
       "maxLength": 2048,
-      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//).+$"
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//)(?!\\s)(?!.*\\s$)(?!.*[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029])(?!.*\\/$).+$"
     }
   }
 }

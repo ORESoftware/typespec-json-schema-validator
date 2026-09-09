@@ -12,7 +12,28 @@ const CONTRACT_IR_SCHEMA = 'ores.typespec-json-schema-validator.contract-ir/v1';
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const ARTIFACT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/u;
+const CONTROL_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
 const MAX_TOKEN_LENGTH = 256;
+const MAX_EVIDENCE_PATH_LENGTH = 2048;
+
+const MANIFEST_FIELDS = new Set(['schema', 'minimumDistinctLanguages', 'authorities', 'targets']);
+const AUTHORITY_FIELDS = new Set(['typeSpec', 'jsonSchema', 'generatedWitness']);
+const TARGET_FIELDS = new Set(['language', 'runtime', 'required', 'ingress', 'egress', 'evidence']);
+const EVIDENCE_FIELDS = new Set([
+  'schema',
+  'language',
+  'runtime',
+  'status',
+  'sourceRevision',
+  'artifactDigest',
+  'receiptRunId',
+  'contractIrId',
+  'toolchain',
+  'generator',
+  'validation',
+]);
+const TOOL_FIELDS = new Set(['name', 'version']);
+const VALIDATION_FIELDS = new Set(['ingress', 'egress']);
 
 function makeFinding(ruleId, message, pointer = '#') {
   const finding = {
@@ -33,16 +54,28 @@ function pushFinding(findings, ruleId, message, pointer = '#') {
   findings.push(makeFinding(ruleId, message, pointer));
 }
 
+function hasOnlyFields(value, allowed) {
+  return isPlainObject(value) && Object.keys(value).every((key) => allowed.has(key));
+}
+
+function jsonCharacterLength(value) {
+  return typeof value === 'string' ? Array.from(value).length : -1;
+}
+
 function canonicalToken(value) {
   return typeof value === 'string'
-    && value.length > 0
-    && value.length <= MAX_TOKEN_LENGTH
+    && jsonCharacterLength(value) > 0
+    && jsonCharacterLength(value) <= MAX_TOKEN_LENGTH
     && value === value.trim()
-    && !/[\u0000-\u001f\u007f]/u.test(value);
+    && !CONTROL_PATTERN.test(value);
 }
 
 function canonicalEvidencePath(value) {
-  if (!canonicalToken(value)) return false;
+  if (typeof value !== 'string'
+    || jsonCharacterLength(value) === 0
+    || jsonCharacterLength(value) > MAX_EVIDENCE_PATH_LENGTH
+    || value !== value.trim()
+    || CONTROL_PATTERN.test(value)) return false;
   if (value.startsWith('/') || value.endsWith('/') || value.includes('\\')) return false;
   const segments = value.split('/');
   return segments.length > 0
@@ -74,6 +107,14 @@ function validateAuthorityModel(manifest, findings) {
       findings,
       'boundary-authority-model-invalid',
       'TypeSpec and authored JSON Schema must remain peer authorities and the generated witness must remain evidence only',
+      '#/manifest/authorities',
+    );
+  }
+  if (isPlainObject(authorities) && !hasOnlyFields(authorities, AUTHORITY_FIELDS)) {
+    pushFinding(
+      findings,
+      'boundary-manifest-schema-invalid',
+      'the language boundary authority envelope must not contain unknown properties',
       '#/manifest/authorities',
     );
   }
@@ -139,11 +180,17 @@ function validateEvidence({ evidence, target, expectedRunId, expectedIrId, findi
     pushFinding(findings, 'boundary-evidence-schema-invalid', 'runtime boundary evidence must be an object using the supported evidence schema', pointer);
     return false;
   }
+  if (!hasOnlyFields(evidence, EVIDENCE_FIELDS)) {
+    pushFinding(findings, 'boundary-evidence-schema-invalid', 'runtime boundary evidence must not contain unknown properties', pointer);
+  }
   if (evidence.schema !== LANGUAGE_BOUNDARY_EVIDENCE_SCHEMA) {
     pushFinding(findings, 'boundary-evidence-schema-invalid', 'runtime boundary evidence uses an unsupported schema identity', `${pointer}/schema`);
   }
   if (evidence.status !== 'passed') {
     pushFinding(findings, 'boundary-evidence-not-passed', 'runtime boundary evidence must explicitly report passed status', `${pointer}/status`);
+  }
+  if (!canonicalToken(evidence.language) || !canonicalToken(evidence.runtime)) {
+    pushFinding(findings, 'boundary-evidence-schema-invalid', 'runtime evidence language and runtime identities must be nonblank canonical tokens', pointer);
   }
   if (evidence.language !== target.language || evidence.runtime !== target.runtime) {
     pushFinding(findings, 'boundary-evidence-target-mismatch', 'runtime evidence does not match the target language and runtime identity', pointer);
@@ -154,10 +201,24 @@ function validateEvidence({ evidence, target, expectedRunId, expectedIrId, findi
   if (!ARTIFACT_DIGEST_PATTERN.test(evidence.artifactDigest ?? '')) {
     pushFinding(findings, 'boundary-artifact-digest-invalid', 'runtime evidence must bind a canonical lowercase SHA-256 artifact digest', `${pointer}/artifactDigest`);
   }
+  if (!SHA256_PATTERN.test(evidence.receiptRunId ?? '')) {
+    pushFinding(findings, 'boundary-evidence-schema-invalid', 'runtime evidence receiptRunId must be a lowercase SHA-256 digest', `${pointer}/receiptRunId`);
+  }
+  if (!SHA256_PATTERN.test(evidence.contractIrId ?? '')) {
+    pushFinding(findings, 'boundary-evidence-schema-invalid', 'runtime evidence contractIrId must be a lowercase SHA-256 digest', `${pointer}/contractIrId`);
+  }
   for (const [name, value] of [
     ['toolchain', evidence.toolchain],
     ['generator', evidence.generator],
   ]) {
+    if (isPlainObject(value) && !hasOnlyFields(value, TOOL_FIELDS)) {
+      pushFinding(
+        findings,
+        'boundary-evidence-schema-invalid',
+        `runtime evidence ${name} envelope must not contain unknown properties`,
+        `${pointer}/${name}`,
+      );
+    }
     if (!isPlainObject(value) || !canonicalToken(value.name) || !canonicalToken(value.version)) {
       pushFinding(
         findings,
@@ -167,10 +228,22 @@ function validateEvidence({ evidence, target, expectedRunId, expectedIrId, findi
       );
     }
   }
-  if (target.ingress === true && evidence.validation?.ingress !== 'passed') {
+  const validation = evidence.validation;
+  if (!isPlainObject(validation)
+    || !hasOnlyFields(validation, VALIDATION_FIELDS)
+    || !['passed', 'failed'].includes(validation.ingress)
+    || !['passed', 'failed'].includes(validation.egress)) {
+    pushFinding(
+      findings,
+      'boundary-evidence-schema-invalid',
+      'runtime evidence validation must be a closed ingress/egress envelope using passed or failed statuses',
+      `${pointer}/validation`,
+    );
+  }
+  if (target.ingress === true && validation?.ingress !== 'passed') {
     pushFinding(findings, 'boundary-ingress-not-verified', 'required ingress validation must explicitly report passed', `${pointer}/validation/ingress`);
   }
-  if (target.egress === true && evidence.validation?.egress !== 'passed') {
+  if (target.egress === true && validation?.egress !== 'passed') {
     pushFinding(findings, 'boundary-egress-not-verified', 'required egress validation must explicitly report passed', `${pointer}/validation/egress`);
   }
   if (evidence.receiptRunId !== expectedRunId) {
@@ -226,6 +299,9 @@ export function verifyLanguageBoundaries(input = {}) {
   if (!isPlainObject(manifest) || manifest.schema !== LANGUAGE_BOUNDARY_MANIFEST_SCHEMA) {
     pushFinding(findings, 'boundary-manifest-schema-invalid', 'the language boundary manifest uses an unsupported schema identity', '#/manifest/schema');
   }
+  if (isPlainObject(manifest) && !hasOnlyFields(manifest, MANIFEST_FIELDS)) {
+    pushFinding(findings, 'boundary-manifest-schema-invalid', 'the language boundary manifest must not contain unknown properties', '#/manifest');
+  }
   validateAuthorityModel(manifest, findings);
 
   const receiptRunId = validateParityReport(input?.report, findings);
@@ -233,7 +309,7 @@ export function verifyLanguageBoundaries(input = {}) {
 
   const minimum = manifest?.minimumDistinctLanguages;
   if (!Number.isSafeInteger(minimum) || minimum < 2) {
-    pushFinding(findings, 'boundary-minimum-languages-invalid', 'minimumDistinctLanguages must be an integer of at least two', '#/manifest/minimumDistinctLanguages');
+    pushFinding(findings, 'boundary-minimum-languages-invalid', 'minimumDistinctLanguages must be a safe integer of at least two', '#/manifest/minimumDistinctLanguages');
   }
 
   const targets = Array.isArray(manifest?.targets) ? manifest.targets : [];
@@ -252,6 +328,9 @@ export function verifyLanguageBoundaries(input = {}) {
     if (!isPlainObject(target)) {
       pushFinding(findings, 'boundary-target-invalid', 'each language boundary target must be an object', pointer);
       continue;
+    }
+    if (!hasOnlyFields(target, TARGET_FIELDS)) {
+      pushFinding(findings, 'boundary-target-invalid', 'language boundary targets must not contain unknown properties', pointer);
     }
     const identityValid = canonicalToken(target.language) && canonicalToken(target.runtime);
     if (!identityValid) {

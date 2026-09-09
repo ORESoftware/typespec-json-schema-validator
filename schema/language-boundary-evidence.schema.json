@@ -31,7 +31,12 @@
   "additionalProperties": false,
   "$defs": {
     "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-    "token": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?!\\s).*(?<!\\s)$" },
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!\\s)(?!.*[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]).*(?<!\\s)$"
+    },
     "tool": {
       "type": "object",
       "required": ["name", "version"],
