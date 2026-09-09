@@ -6,6 +6,7 @@ import {
   validBoundedText,
 } from './constants.mjs';
 import { makeRuntimeFinding } from './findings.mjs';
+import { readRuntimeEnvelope } from './envelope.mjs';
 
 export function normalizeResult(value, adapterId, index, findings) {
   const pointer = `#/adapters/${adapterId}/results/${index}`;
@@ -19,6 +20,9 @@ export function normalizeResult(value, adapterId, index, findings) {
     }));
     return null;
   }
+  value = readRuntimeEnvelope(value,
+    ['caseId', 'declaration', 'verdict'], pointer, 'result', findings);
+
   const caseId = normalizedText(value.caseId);
   const declaration = normalizedText(value.declaration);
   const verdict = value.verdict;
