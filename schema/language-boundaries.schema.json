@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/language-boundaries/v1",
+  "title": "Cross-language runtime boundary manifest",
+  "type": "object",
+  "required": ["schema", "minimumDistinctLanguages", "authorities", "targets"],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.language-boundaries/v1" },
+    "minimumDistinctLanguages": { "type": "integer", "minimum": 2 },
+    "authorities": {
+      "type": "object",
+      "required": ["typeSpec", "jsonSchema", "generatedWitness"],
+      "properties": {
+        "typeSpec": { "const": "peer" },
+        "jsonSchema": { "const": "peer" },
+        "generatedWitness": { "const": "evidence_only" }
+      },
+      "additionalProperties": false
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["language", "runtime", "required", "ingress", "egress", "evidence"],
+        "properties": {
+          "language": { "$ref": "#/$defs/token" },
+          "runtime": { "$ref": "#/$defs/token" },
+          "required": { "type": "boolean" },
+          "ingress": { "type": "boolean" },
+          "egress": { "type": "boolean" },
+          "evidence": { "$ref": "#/$defs/relativePath" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "token": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^(?!\\s).*(?<!\\s)$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*//).+$"
+    }
+  }
+}
