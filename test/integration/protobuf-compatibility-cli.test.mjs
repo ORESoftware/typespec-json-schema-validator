@@ -65,7 +65,7 @@ test('verify-protobuf fails closed on path traversal and writes a failed receipt
   const root = await mkdtemp(resolve(tmpdir(), 'tsjsv-protobuf-cli-'));
   await writeJson(resolve(root, 'current.json'), projection());
   const child = run(root, { TSJSV_PROTOBUF_BASELINE: '../baseline.json' });
-  assert.equal(child.status, 1);
+  assert.equal(child.status, 3);
   const receipt = JSON.parse(await readFile(resolve(root, 'evidence/receipt.json'), 'utf8'));
   assert.equal(receipt.status, 'failed');
   assert.equal(receipt.admissible, false);
