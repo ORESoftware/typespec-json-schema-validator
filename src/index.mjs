@@ -43,17 +43,6 @@ export {
 } from './instance-validator.mjs';
 export { compareParity, loadMapping, MAPPING_SCHEMA, sortFindings } from './parity.mjs';
 export {
-  PROTOBUF_COMPATIBILITY_RECEIPT_SCHEMA,
-  PROTOBUF_PROJECTION_SCHEMA,
-  ProtobufProjectionError,
-  UnsafeProtobufCompatibilityReceiptDestinationError,
-  compareProtobufCompatibility,
-  createProtobufCompatibilityReceipt,
-  failedProtobufCompatibilityReceipt,
-  normalizeProtobufProjection,
-  writeProtobufCompatibilityReceipt,
-} from './protobuf-compatibility.mjs';
-export {
   EXIT_CODES,
   REPORT_SCHEMA,
   failedReport,
