@@ -4,6 +4,8 @@ import { assertFindingLimit } from './finding-limit.mjs';
 import {
   canonicalStringify,
   deepDiff,
+  escapeJsonPointerSegment,
+  normalizeComparisonRef,
   normalizeSchemaNodeForComparison,
   stableFindingFingerprint,
 } from './canonical.mjs';
@@ -14,6 +16,16 @@ import {
 import { declarationKindFamily } from './typespec-inventory.mjs';
 
 export const MAPPING_SCHEMA = 'ores.typespec-json-schema-validator.mapping/v1';
+
+const SCHEMA_MAP_KEYS = new Set([
+  '$defs', 'definitions', 'properties', 'patternProperties', 'dependentSchemas',
+]);
+const SCHEMA_ARRAY_KEYS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
+const SCHEMA_SINGLE_KEYS = new Set([
+  'additionalItems', 'additionalProperties', 'contains', 'contentSchema', 'else',
+  'if', 'items', 'not', 'propertyNames', 'then', 'unevaluatedItems',
+  'unevaluatedProperties',
+]);
 
 function makeFinding(input) {
   const finding = {
@@ -209,10 +221,67 @@ function compareSchemaInventories(generatedMap, authoredMap, expectedDeclaration
   }
 }
 
+function normalizedDeclarationRef(name) {
+  return normalizeComparisonRef(`#/$defs/${escapeJsonPointerSegment(name)}`);
+}
+
+function buildReferenceAliases(expectedDeclarations, lane) {
+  const aliases = new Map();
+  const ambiguous = new Set();
+  for (const expected of expectedDeclarations.values()) {
+    const name = lane === 'generated' ? expected.generatedName : expected.authoredName;
+    const source = normalizedDeclarationRef(name);
+    const target = normalizedDeclarationRef(expected.declaration.qualifiedName);
+    if (aliases.has(source) && aliases.get(source) !== target) {
+      aliases.delete(source);
+      ambiguous.add(source);
+    } else if (!ambiguous.has(source)) {
+      aliases.set(source, target);
+    }
+  }
+  return aliases;
+}
+
+/**
+ * Rewrite only comparison-normalized $refs that point at mapped top-level
+ * declarations. Literal JSON under const/enum/default/extensions is opaque and
+ * must never be interpreted as schema syntax. Executable schemas are untouched.
+ */
+function aliasMappedDeclarationRefs(value, aliases) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => {
+    if (key === '$ref' && typeof child === 'string') {
+      return [key, aliases.get(child) ?? child];
+    }
+    if (SCHEMA_MAP_KEYS.has(key) && child !== null && typeof child === 'object' && !Array.isArray(child)) {
+      return [key, Object.fromEntries(Object.entries(child).map(([name, schema]) =>
+        [name, aliasMappedDeclarationRefs(schema, aliases)]))];
+    }
+    if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(child)) {
+      return [key, child.map((schema) => aliasMappedDeclarationRefs(schema, aliases))];
+    }
+    if (SCHEMA_SINGLE_KEYS.has(key)) {
+      if (key === 'items' && Array.isArray(child)) {
+        return [key, child.map((schema) => aliasMappedDeclarationRefs(schema, aliases))];
+      }
+      return [key, aliasMappedDeclarationRefs(child, aliases)];
+    }
+    if (key === 'dependencies' && child !== null && typeof child === 'object' && !Array.isArray(child)) {
+      return [key, Object.fromEntries(Object.entries(child).map(([name, dependency]) => [
+        name,
+        Array.isArray(dependency) ? dependency : aliasMappedDeclarationRefs(dependency, aliases),
+      ]))];
+    }
+    return [key, child];
+  }));
+}
+
 function compareSemanticSchemas(generatedMap, authoredMap, expectedDeclarations, maxFindings, findings) {
   const expected = [...expectedDeclarations.values()].sort((left, right) =>
     left.declaration.qualifiedName.localeCompare(right.declaration.qualifiedName),
   );
+  const generatedAliases = buildReferenceAliases(expectedDeclarations, 'generated');
+  const authoredAliases = buildReferenceAliases(expectedDeclarations, 'authored');
   for (const pair of expected) {
     if (findings.length >= maxFindings) {
       break;
@@ -223,10 +292,18 @@ function compareSemanticSchemas(generatedMap, authoredMap, expectedDeclarations,
       continue;
     }
     // Comparison normalization may erase non-assertion presentation metadata
-    // and unify declaration identities. The executable collections remain
-    // untouched so their $id resource graphs and probe annotations still work.
-    const left = normalizeSchemaNodeForComparison(generated.schema);
-    const right = normalizeSchemaNodeForComparison(authored.schema);
+    // and unify declaration identities. Mapping aliases are applied only to
+    // recognized top-level declaration $refs in this comparison-only copy.
+    // Executable collections remain untouched so their $id resource graphs and
+    // probe annotations continue to resolve using each authority's own names.
+    const left = aliasMappedDeclarationRefs(
+      normalizeSchemaNodeForComparison(generated.schema),
+      generatedAliases,
+    );
+    const right = aliasMappedDeclarationRefs(
+      normalizeSchemaNodeForComparison(authored.schema),
+      authoredAliases,
+    );
     const remaining = Math.max(1, maxFindings - findings.length);
     const { differences } = deepDiff(left, right, { maxFindings: remaining });
     for (const difference of differences) {
