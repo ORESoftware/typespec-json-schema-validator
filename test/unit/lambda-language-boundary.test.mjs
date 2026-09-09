@@ -46,7 +46,11 @@ function input() {
       runId,
       status: 'passed',
       zeroUnexplainedFindings: true,
-      differential: { summary: { divergences: 0 } },
+      findings: [],
+      coverage: { differentialInstanceValidation: true },
+      differential: {
+        summary: { probesEvaluated: 12, divergences: 0, refusals: 0 },
+      },
     },
     contractIr: {
       schema: 'ores.typespec-json-schema-validator.contract-ir/v1',
@@ -61,6 +65,9 @@ function input() {
         generatedJsonSchema: 'comparison-evidence-only',
         precedence: 'none',
       },
+      declarations: [{ id: 'Lambda.Contract' }],
+      excludedDeclarations: [],
+      outOfScopeDeclarations: [],
       admission: {
         receipt: { runId },
         requirements: { differentialInstanceValidation: true },
