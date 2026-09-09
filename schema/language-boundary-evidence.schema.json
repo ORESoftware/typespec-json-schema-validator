@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/language-boundaries/v1/evidence.schema.json",
+  "title": "TJSV generated language/runtime boundary evidence",
+  "type": "object",
+  "required": [
+    "schema",
+    "language",
+    "runtime",
+    "status",
+    "sourceRevision",
+    "artifactDigest",
+    "contractIrId",
+    "receiptRunId",
+    "toolchain",
+    "generator",
+    "validation"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.language-boundary-evidence/v1"
+    },
+    "language": { "$ref": "#/$defs/identity" },
+    "runtime": { "$ref": "#/$defs/identity" },
+    "status": { "enum": ["passed", "failed", "skipped", "unsupported"] },
+    "sourceRevision": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "artifactDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "contractIrId": { "$ref": "#/$defs/digest" },
+    "receiptRunId": { "$ref": "#/$defs/digest" },
+    "toolchain": { "$ref": "#/$defs/tool" },
+    "generator": { "$ref": "#/$defs/tool" },
+    "validation": {
+      "type": "object",
+      "required": ["ingress", "egress"],
+      "properties": {
+        "ingress": { "enum": ["passed", "failed"] },
+        "egress": { "enum": ["passed", "failed"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "identity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9+._:@/-]{0,127}$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identity" },
+        "version": { "$ref": "#/$defs/identity" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

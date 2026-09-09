@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/language-boundaries/v1/verification.schema.json",
+  "title": "TJSV language/runtime boundary verification receipt",
+  "type": "object",
+  "required": ["schema", "status", "admissible", "binding", "counts", "findings", "verificationId"],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.language-boundary-verification/v1"
+    },
+    "status": { "enum": ["passed", "stopped_for_evaluation"] },
+    "admissible": { "type": "boolean" },
+    "binding": {
+      "type": "object",
+      "required": ["receiptRunId", "contractIrId"],
+      "properties": {
+        "receiptRunId": { "$ref": "#/$defs/nullableDigest" },
+        "contractIrId": { "$ref": "#/$defs/nullableDigest" }
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": ["targets", "requiredTargets", "distinctRequiredLanguages", "suppliedEvidence", "findings"],
+      "properties": {
+        "targets": { "$ref": "#/$defs/count" },
+        "requiredTargets": { "$ref": "#/$defs/count" },
+        "distinctRequiredLanguages": { "$ref": "#/$defs/count" },
+        "suppliedEvidence": { "$ref": "#/$defs/count" },
+        "findings": { "$ref": "#/$defs/count" }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "targetIndex"],
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "pattern": "^boundary-[a-z0-9-]+$"
+          },
+          "targetIndex": {
+            "anyOf": [
+              { "type": "integer", "minimum": 0 },
+              { "type": "null" }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "verificationId": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableDigest": {
+      "anyOf": [
+        { "$ref": "#/$defs/digest" },
+        { "type": "null" }
+      ]
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}
