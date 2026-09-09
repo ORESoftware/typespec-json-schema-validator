@@ -245,6 +245,22 @@ function compareMessages(baseline, current, findings, maxFindings) {
         `message ${before.name} was removed`, before, null);
       continue;
     }
+    for (const number of before.reservedNumbers) {
+      if (!after.reservedNumbers.includes(number)) {
+        pushFinding(findings, maxFindings, 'protobuf-reserved-field-number-unreserved',
+          `${before.name}#${number}`,
+          `message ${before.name} dropped baseline-reserved field number ${number}`,
+          number, null);
+      }
+    }
+    for (const name of before.reservedNames) {
+      if (!after.reservedNames.includes(name)) {
+        pushFinding(findings, maxFindings, 'protobuf-reserved-field-name-unreserved',
+          `${before.name}.${name}`,
+          `message ${before.name} dropped baseline-reserved field name ${name}`,
+          name, null);
+      }
+    }
     const currentByNumber = new Map(after.fields.map((item) => [item.number, item]));
     const currentByFieldName = new Map(after.fields.map((item) => [item.name, item]));
     for (const field of before.fields) {
@@ -299,6 +315,22 @@ function compareEnums(baseline, current, findings, maxFindings) {
       pushFinding(findings, maxFindings, 'protobuf-enum-removed', before.name,
         `enum ${before.name} was removed`, before, null);
       continue;
+    }
+    for (const number of before.reservedNumbers) {
+      if (!after.reservedNumbers.includes(number)) {
+        pushFinding(findings, maxFindings, 'protobuf-reserved-enum-number-unreserved',
+          `${before.name}#${number}`,
+          `enum ${before.name} dropped baseline-reserved number ${number}`,
+          number, null);
+      }
+    }
+    for (const name of before.reservedNames) {
+      if (!after.reservedNames.includes(name)) {
+        pushFinding(findings, maxFindings, 'protobuf-reserved-enum-name-unreserved',
+          `${before.name}.${name}`,
+          `enum ${before.name} dropped baseline-reserved name ${name}`,
+          name, null);
+      }
     }
     const currentByNumber = new Map(after.values.map((item) => [item.number, item]));
     const currentByValueName = new Map(after.values.map((item) => [item.name, item]));
