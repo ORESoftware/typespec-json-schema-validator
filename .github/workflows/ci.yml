@@ -53,6 +53,6 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
-      - name: Audit production action dependencies
+      - name: Audit production action dependencies with exact temporary exception
         if: matrix.os == 'ubuntu-24.04'
-        run: npm audit --omit=dev --audit-level=high
+        run: node scripts/check-production-audit.mjs
