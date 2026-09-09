@@ -87,7 +87,7 @@ test('real compiler admission: hostile evidence, filesystem ownership, and recov
     assert.equal(compiled.status, 0, compiled.stderr || compiled.stdout);
     const first = run();
     assert.equal(first.status, 0, first.stderr || first.stdout);
-    assert.equal(JSON.parse(first.stdout).negativeCasesPassed, 7);
+    assert.equal(JSON.parse(first.stdout).negativeCasesPassed, 19);
     assert.equal(JSON.parse(first.stdout).positiveChecksPassed, 2);
     const positive = await assertReceipt(verification, 'passed');
     const files = await snapshot(workspace);
