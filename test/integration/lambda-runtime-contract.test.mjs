@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { access, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -61,7 +61,7 @@ test('lambda provider and operation peers admit Contract IR with differential fi
   assert.equal(contractIr.declarations.length, 3);
 });
 
-test('lambda enum drift fails closed and cannot emit admissible Contract IR', async () => {
+test('lambda enum drift fails closed and emits only a non-admissible Contract IR tombstone', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'tsjsv-lambda-drift-'));
   const source = JSON.parse(await readFile(resolve(fixture, 'authored.schema.json'), 'utf8'));
   source.$defs.Provider.enum = source.$defs.Provider.enum.filter((value) => value !== 'cloudflare-workers');
@@ -70,11 +70,15 @@ test('lambda enum drift fails closed and cannot emit admissible Contract IR', as
   await writeFile(driftSchema, `${JSON.stringify(source, null, 2)}\n`);
 
   const result = await run(checkArgs(temp, driftSchema, contractIrPath));
-  assert.notEqual(result.code, 0, 'provider drift must stop promotion');
+  assert.equal(result.code, 2, result.stderr || result.stdout);
 
   const report = JSON.parse(await readFile(join(temp, 'report.json'), 'utf8'));
+  const contractIr = JSON.parse(await readFile(contractIrPath, 'utf8'));
   assert.equal(report.status, 'stopped_for_evaluation');
   assert.equal(report.zeroUnexplainedFindings, false);
   assert.ok(report.findings.length > 0);
-  await assert.rejects(access(contractIrPath), 'drift must not emit Contract IR');
+  assert.equal(contractIr.status, 'stopped_for_evaluation');
+  assert.equal(contractIr.admissible, false);
+  assert.equal(contractIr.declarations.length, 0);
+  assert.equal(contractIr.admission.receipt.runId, report.runId);
 });
