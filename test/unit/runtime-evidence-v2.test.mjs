@@ -218,7 +218,7 @@ test('per-case input digest divergence is independently visible', () => {
 test('v2 rejects payload-like error params and inconsistent verdict fields', () => {
   const badRejected = rejected({
     outputDigest: '6'.repeat(64),
-    errors: [{ path: '/email', code: 'format', params: { value: 'alice@example.com' } }],
+    errors: [{ path: '/email', code: 'format_email', params: { value: 'alice@example.com' } }],
   });
   const badAccepted = accepted({
     errors: [{ path: '/id', code: 'unexpected', params: {} }],
@@ -232,6 +232,34 @@ test('v2 rejects payload-like error params and inconsistent verdict fields', () 
   assert.ok(ids.includes('runtime-error-param-invalid'));
   assert.ok(ids.includes('runtime-result-nonaccepted-output-digest-not-null'));
   assert.ok(ids.includes('runtime-result-accepted-errors-not-empty'));
+});
+
+test('identifier-shaped rejected data cannot hide in error params', () => {
+  const ir = contractIr();
+  const bad = rejected({
+    errors: [{ path: '/username', code: 'pattern', params: { value: 'alice' } }],
+  });
+  const report = compare(evidence([
+    adapter('typescript-zod', { results: [accepted(), bad] }),
+    adapter('rust-serde'),
+  ], { contractIrId: ir.irId }));
+  assert.equal(report.status, 'stopped_for_evaluation');
+  assert.ok(rules(report).includes('runtime-error-param-invalid'));
+  assert.equal(JSON.stringify(report.findings).includes('alice'), false);
+});
+
+test('invalid comparison options are shape-redacted rather than echoed', () => {
+  const marker = 'secret-looking-runtime-option';
+  const report = compare(undefined, {
+    requiredEvidenceSchema: marker,
+    expectedInputDigest: marker,
+    expectedCorpusDigest: marker,
+  });
+  assert.equal(report.status, 'stopped_for_evaluation');
+  assert.ok(rules(report).includes('runtime-required-evidence-schema-invalid'));
+  assert.ok(rules(report).includes('runtime-expected-input-digest-invalid'));
+  assert.ok(rules(report).includes('runtime-expected-corpus-digest-invalid'));
+  assert.equal(JSON.stringify(report.findings).includes(marker), false);
 });
 
 test('stable error normalization makes semantically identical error order deterministic', () => {
