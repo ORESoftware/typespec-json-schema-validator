@@ -21,8 +21,18 @@ const ACCEPTED_INPUT = '1'.repeat(64);
 const ACCEPTED_OUTPUT = '2'.repeat(64);
 const REJECTED_INPUT = '3'.repeat(64);
 const cases = [
-  { id: 'user.valid.basic', declaration: 'Example.User', expectation: 'accepted' },
-  { id: 'user.invalid.missing-id', declaration: 'Example.User', expectation: 'rejected' },
+  {
+    id: 'user.valid.basic',
+    declaration: 'Example.User',
+    expectation: 'accepted',
+    inputDigest: ACCEPTED_INPUT,
+  },
+  {
+    id: 'user.invalid.missing-id',
+    declaration: 'Example.User',
+    expectation: 'rejected',
+    inputDigest: REJECTED_INPUT,
+  },
 ];
 
 function contractIr() {
@@ -180,6 +190,36 @@ test('v1 remains compatible but cannot satisfy a v2-required assurance profile',
   assert.ok(rules(stronger).includes('runtime-evidence-required-schema-mismatch'));
 });
 
+test('v2 requires trusted expected-case input digests even when inferred from evidence', () => {
+  const ir = contractIr();
+  const unboundCases = cases.map(({ inputDigest: _inputDigest, ...value }) => value);
+  const report = compare(
+    evidence([adapter('typescript-zod'), adapter('rust-serde')], { contractIrId: ir.irId }),
+    {
+      expectedCases: unboundCases,
+      requiredEvidenceSchema: undefined,
+    },
+  );
+  assert.equal(report.status, 'stopped_for_evaluation');
+  assert.ok(rules(report).includes('runtime-corpus-case-input-digest-invalid'));
+});
+
+test('matching wrong input digests cannot collude past trusted corpus binding', () => {
+  const ir = contractIr();
+  const colludingResults = [
+    accepted({ inputDigest: '7'.repeat(64) }),
+    rejected({ inputDigest: '8'.repeat(64) }),
+  ];
+  const report = compare(evidence([
+    adapter('typescript-zod', { results: colludingResults }),
+    adapter('rust-serde', { results: colludingResults }),
+  ], { contractIrId: ir.irId }));
+  const ids = rules(report);
+  assert.equal(report.status, 'stopped_for_evaluation');
+  assert.ok(ids.includes('runtime-case-input-digest-mismatch'));
+  assert.ok(!ids.includes('runtime-adapter-input-digest-divergence'));
+});
+
 test('same accepted verdict with different canonical outputs stops evaluation', () => {
   const rustResults = [accepted({ outputDigest: '4'.repeat(64) }), rejected()];
   const ir = contractIr();
@@ -213,6 +253,7 @@ test('per-case input digest divergence is independently visible', () => {
     adapter('rust-serde', { results: rustResults }),
   ], { contractIrId: ir.irId }));
   assert.ok(rules(report).includes('runtime-adapter-input-digest-divergence'));
+  assert.ok(rules(report).includes('runtime-case-input-digest-mismatch'));
 });
 
 test('v2 rejects payload-like error params and inconsistent verdict fields', () => {

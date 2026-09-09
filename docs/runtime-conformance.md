@@ -33,7 +33,8 @@ A runtime pass requires all of the following:
 - every required adapter is present with the expected language and validator identity;
 - every adapter reports `status: "passed"`;
 - every expected case is present exactly once and no unknown case is reported;
-- declaration identities and trusted accepted/rejected expectations match; and
+- declaration identities and trusted accepted/rejected expectations match;
+- when v2 evidence is presented or required, every trusted case supplies its canonical `inputDigest` and every adapter result matches that digest directly; and
 - independently executed adapters do not disagree.
 
 Missing, stale, tampered, malformed, skipped, unsupported, errored, duplicated, or divergent evidence returns `stopped_for_evaluation`. A validator process crash is **not** equivalent to a schema rejection. A copied `status: "passed"`, copied IR id, or copied receipt run id is never sufficient.
@@ -75,7 +76,7 @@ The JSON format is defined by `schema/runtime-evidence.schema.json`. It delibera
 
 `inputDigest` is the exact `runId` from the passed parity receipt embedded in the verified Contract IR. It is not a free-form repository hash. `contractIrId` is the Contract IR self-digest. Both are required so adapters cannot replay evidence from a different parity run or a different IR with the same broad source label.
 
-The trusted caller supplies case expectations separately. Adapter-authored `expected` fields are intentionally rejected by the JSON Schema because an adapter must not grade its own output.
+The trusted caller supplies case expectations separately. Adapter-authored `expected` fields are intentionally rejected by the JSON Schema because an adapter must not grade its own output. Runtime evidence v2 additionally requires the trusted caller to supply the canonical per-case input digest; adapter-to-adapter agreement is corroborating evidence and cannot replace this trusted binding.
 
 ## Preferred current-input admission API
 
@@ -124,6 +125,8 @@ if (report.status !== 'passed') {
 }
 ```
 
+The example above shows the legacy v1 expectation shape. For v2, add `inputDigest` to each trusted case and pass `requiredEvidenceSchema: RUNTIME_EVIDENCE_SCHEMA_V2` when the assurance profile requires semantic output/error evidence.
+
 The three source paths may be omitted only when the retained parity report contains their exact current paths. Explicit paths are preferable in CI because they make the checkout boundary visible at the call site.
 
 Changing the receipt, TypeSpec input closure, generated Schema B, authored Schema A, mapping/configuration, toolchain, or Contract IR causes the internally computed verification to fail. Missing or unreadable current inputs also stop evaluation. Those failures do not echo arbitrary filesystem paths, schema values, or internal verifier error text into deterministic runtime findings.
@@ -160,6 +163,8 @@ Do not persist and reuse a prior verification result after any source, receipt, 
 ## Corpus boundary
 
 `expectedCases` is trusted test metadata, not a third schema authority. Every case declaration must exist in `contractIr.declarations`; excluded and out-of-scope declarations cannot receive a green runtime receipt. The separately supplied `expectedCorpusDigest` must be produced by the trusted corpus loader over the exact recorded fixtures used by every adapter.
+
+For runtime evidence v2, the trusted loader must include `inputDigest` on every expected case. TJSV compares every adapter result to that expected digest and includes the trusted case digests in `expectedCaseDigest`. Matching but incorrect adapter digests therefore fail even when every adapter reports the same value.
 
 A finite corpus provides bounded behavioral evidence only. It does not prove universal semantic equivalence and cannot waive an unexplained structural discrepancy from the TypeSpec/JSON Schema parity gate.
 

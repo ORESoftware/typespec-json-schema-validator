@@ -15,7 +15,7 @@ import {
   validateRuntimeEvidence,
 } from './normalize.mjs';
 
-function compareAdapter(adapter, expectedById, findings) {
+function compareAdapter(adapter, expectedById, findings, evidenceSchema) {
   if (adapter.status !== 'passed') {
     findings.push(makeRuntimeFinding({
       ruleId: adapter.status === 'failed' ? 'runtime-adapter-failed' : 'runtime-adapter-not-executed',
@@ -48,6 +48,17 @@ function compareAdapter(adapter, expectedById, findings) {
         message: `adapter ${adapter.id} case ${expected.id} is bound to the wrong declaration`,
         left: actual.declaration,
         right: expected.declaration,
+      }));
+    }
+    if (evidenceSchema === RUNTIME_EVIDENCE_SCHEMA_V2
+      && actual.inputDigest !== expected.inputDigest) {
+      findings.push(makeRuntimeFinding({
+        ruleId: 'runtime-case-input-digest-mismatch',
+        declaration: expected.declaration,
+        pointer: `#/adapters/${adapter.id}/results/${actual.caseId}/inputDigest`,
+        message: `adapter ${adapter.id} case ${expected.id} did not execute the trusted canonical input`,
+        left: actual.inputDigest,
+        right: expected.inputDigest,
       }));
     }
     if (actual.verdict === 'error') {
@@ -196,9 +207,13 @@ export function compareRuntimeEvidence({
   maxAdapters = positiveSafeInteger(maxAdapters, 'maxAdapters');
   maxResultsPerAdapter = positiveSafeInteger(maxResultsPerAdapter, 'maxResultsPerAdapter');
   const findings = [];
-  const corpus = normalizeExpectedCases(expectedCases, findings);
-  const required = normalizeRequiredAdapters(requiredAdapters, findings);
   const validated = validateRuntimeEvidence(evidence, { maxAdapters, maxResultsPerAdapter });
+  const requireCaseInputDigest = requiredEvidenceSchema === RUNTIME_EVIDENCE_SCHEMA_V2
+    || validated.normalized?.schema === RUNTIME_EVIDENCE_SCHEMA_V2;
+  const corpus = normalizeExpectedCases(expectedCases, findings, {
+    requireInputDigest: requireCaseInputDigest,
+  });
+  const required = normalizeRequiredAdapters(requiredAdapters, findings);
   findings.push(...validated.findings);
 
   const trustedRequiredEvidenceSchema = requiredEvidenceSchema === undefined
@@ -318,7 +333,9 @@ export function compareRuntimeEvidence({
     }
 
     const expectedById = new Map(corpus.map((item) => [item.id, item]));
-    for (const adapter of normalized.adapters) compareAdapter(adapter, expectedById, findings);
+    for (const adapter of normalized.adapters) {
+      compareAdapter(adapter, expectedById, findings, normalized.schema);
+    }
     compareAdapters(normalized.adapters, expectedById, findings, normalized.schema);
   }
 
