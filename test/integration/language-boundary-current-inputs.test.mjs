@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -47,7 +47,7 @@ function boundaryInput(artifacts, overrides = {}) {
     target('dart', 'flutter'),
   ];
   return {
-    typespec: sourceTypeSpec,
+    typespec: artifacts.typespec ?? sourceTypeSpec,
     generatedSchema: artifacts.generatedSchema,
     authoredSchema: artifacts.authoredSchema,
     report: artifacts.parityReport,
@@ -66,11 +66,11 @@ function boundaryInput(artifacts, overrides = {}) {
   };
 }
 
-async function parityArtifacts({ authoredSchema = sourceAuthoredSchema } = {}) {
+async function parityArtifacts({ typespec = sourceTypeSpec, authoredSchema = sourceAuthoredSchema } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'tsjsv-language-current-inputs-'));
   const generatedSchema = join(directory, 'generated');
   const parityReport = await runCheck({
-    typespec: sourceTypeSpec,
+    typespec,
     authoredSchema,
     outputDir: generatedSchema,
     maxFindings: 250,
@@ -79,13 +79,13 @@ async function parityArtifacts({ authoredSchema = sourceAuthoredSchema } = {}) {
   assert.equal(parityReport.status, 'passed');
   const contractIr = await buildContractIr({
     report: parityReport,
-    typespec: sourceTypeSpec,
+    typespec,
     generatedSchema,
     authoredSchema,
   });
   assert.equal(contractIr.status, 'passed');
   assert.equal(contractIr.admissible, true);
-  return { directory, generatedSchema, authoredSchema, parityReport, contractIr };
+  return { directory, typespec, generatedSchema, authoredSchema, parityReport, contractIr };
 }
 
 function ruleIds(result) {
@@ -124,6 +124,49 @@ test('preferred language boundary API rejects a stale authored authority without
   } finally {
     await rm(artifacts.directory, { recursive: true, force: true });
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('preferred language boundary API rejects byte-stale TypeSpec authority before runtime admission', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-language-current-typespec-stale-'));
+  const typespec = join(directory, 'main.tsp');
+  await copyFile(sourceTypeSpec, typespec);
+  const artifacts = await parityArtifacts({ typespec });
+  try {
+    const source = await readFile(typespec, 'utf8');
+    await writeFile(typespec, `${source}\n// do-not-leak-typespec-current-input-marker\n`, 'utf8');
+
+    const result = await verifyLanguageBoundariesAgainstCurrentInputs(boundaryInput(artifacts));
+    assert.equal(result.status, 'stopped_for_evaluation');
+    assert.equal(result.counts.admittedEvidence, 0);
+    assert.ok(ruleIds(result).includes('boundary-current-contract-ir-verification-failed'));
+    assert.doesNotMatch(JSON.stringify(result), /do-not-leak-typespec-current-input-marker|main\.tsp/);
+  } finally {
+    await rm(artifacts.directory, { recursive: true, force: true });
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('preferred language boundary API rejects byte-stale generated Schema B before runtime admission', async () => {
+  const artifacts = await parityArtifacts();
+  try {
+    const generatedFiles = (await readdir(artifacts.generatedSchema, { recursive: true }))
+      .filter((entry) => entry.endsWith('.json'))
+      .sort();
+    assert.ok(generatedFiles.length > 0, 'expected compiler-backed generated JSON Schema output');
+
+    const generatedFile = join(artifacts.generatedSchema, generatedFiles[0]);
+    const document = JSON.parse(await readFile(generatedFile, 'utf8'));
+    document.$comment = 'do-not-leak-generated-schema-current-input-marker';
+    await writeFile(generatedFile, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+
+    const result = await verifyLanguageBoundariesAgainstCurrentInputs(boundaryInput(artifacts));
+    assert.equal(result.status, 'stopped_for_evaluation');
+    assert.equal(result.counts.admittedEvidence, 0);
+    assert.ok(ruleIds(result).includes('boundary-current-contract-ir-verification-failed'));
+    assert.doesNotMatch(JSON.stringify(result), /do-not-leak-generated-schema-current-input-marker/);
+  } finally {
+    await rm(artifacts.directory, { recursive: true, force: true });
   }
 });
 
