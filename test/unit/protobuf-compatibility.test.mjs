@@ -162,3 +162,9 @@ test('truncation is reported only when more findings exist than the configured l
   assert.equal(truncated.findings.length, 1);
   assert.equal(truncated.truncated, true);
 });
+
+test('malformed protobuf type identities are rejected', () => {
+  const bad = projection();
+  bad.messages[0].fields[0].type = '.ores..Broken';
+  assert.throws(() => normalizeProtobufProjection(bad), /normalized protobuf type name/u);
+});
