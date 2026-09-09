@@ -12,6 +12,8 @@ export {
   LANGUAGE_BOUNDARY_VERIFICATION_SCHEMA,
 };
 
+const REVISION_PATTERN = /^[a-f0-9]{40}$/u;
+
 function makeFinding(ruleId, message, pointer) {
   const finding = {
     ruleId,
@@ -45,6 +47,32 @@ function evidenceLookup(evidenceByPath, path) {
   return { present: false, value: undefined };
 }
 
+function sourceRevisionCoherenceFindings(input) {
+  const targets = input?.manifest?.targets;
+  if (!denseArray(targets)) return [];
+
+  const revisions = [];
+  for (let index = 0; index < targets.length; index += 1) {
+    const target = targets[index];
+    if (!isPlainObject(target) || typeof target.evidence !== 'string') continue;
+    const lookup = evidenceLookup(input?.evidenceByPath, target.evidence);
+    if (!lookup.present || !isPlainObject(lookup.value)) continue;
+    const sourceRevision = lookup.value.sourceRevision;
+    if (!REVISION_PATTERN.test(sourceRevision ?? '')) continue;
+    revisions.push({ index, required: target.required === true, sourceRevision });
+  }
+
+  if (revisions.length < 2) return [];
+  const baseline = revisions.find((entry) => entry.required) ?? revisions[0];
+  return revisions
+    .filter((entry) => entry.sourceRevision !== baseline.sourceRevision)
+    .map((entry) => makeFinding(
+      'boundary-source-revision-mismatch',
+      `runtime evidence must describe one immutable source revision across all supplied targets; target ${entry.index} differs from baseline target ${baseline.index}`,
+      `#/evidence/${entry.index}/sourceRevision`,
+    ));
+}
+
 function hardeningFindings(input) {
   const findings = [];
   const report = input?.report;
@@ -58,6 +86,8 @@ function hardeningFindings(input) {
       '#/manifest/targets',
     ));
   }
+
+  findings.push(...sourceRevisionCoherenceFindings(input));
 
   if (isPlainObject(report)) {
     if (!denseArray(report.findings) || report.findings.length !== 0) {
