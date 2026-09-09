@@ -1,13 +1,16 @@
 import {
+  DIGEST_PATTERN,
   EXPECTATIONS,
   IDENTIFIER_PATTERN,
   isPlainObject,
   normalizedText,
+  runtimeValueShape,
   validBoundedText,
 } from './constants.mjs';
 import { makeRuntimeFinding } from './findings.mjs';
 
-export function normalizeExpectedCases(expectedCases, findings) {
+export function normalizeExpectedCases(expectedCases, findings, options = {}) {
+  const requireInputDigest = options.requireInputDigest === true;
   if (!Array.isArray(expectedCases)) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-corpus-invalid',
@@ -89,7 +92,26 @@ export function normalizeExpectedCases(expectedCases, findings) {
       }));
       continue;
     }
-    normalized.push(Object.freeze({ id, declaration, expectation }));
+
+    let inputDigest;
+    if (requireInputDigest) {
+      inputDigest = value.inputDigest;
+      if (typeof inputDigest !== 'string' || !DIGEST_PATTERN.test(inputDigest)) {
+        findings.push(makeRuntimeFinding({
+          ruleId: 'runtime-corpus-case-input-digest-invalid',
+          declaration,
+          pointer: `${pointer}/inputDigest`,
+          message: `trusted corpus case ${id} must bind the canonical input used by runtime-evidence/v2`,
+          left: runtimeValueShape(inputDigest),
+          right: '64 lowercase hexadecimal characters',
+        }));
+        continue;
+      }
+    }
+
+    normalized.push(Object.freeze(requireInputDigest
+      ? { id, declaration, expectation, inputDigest }
+      : { id, declaration, expectation }));
   }
   return normalized.sort((left, right) => left.id.localeCompare(right.id));
 }
@@ -161,4 +183,3 @@ export function normalizeRequiredAdapters(requiredAdapters, findings) {
   }
   return normalized.sort((left, right) => left.id.localeCompare(right.id));
 }
-
