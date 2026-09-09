@@ -276,3 +276,5 @@ export const SARIF_SCHEMA: 'https://json.schemastore.org/sarif-2.1.0.json';
 export const SARIF_TOOL_NAME: '@oresoftware/typespec-json-schema-validator';
 export const SARIF_VERSION: '2.1.0';
 export const EXIT_CODES: Readonly<Record<ValidatorStatus, number>>;
+
+export * from './language-boundary-verification.mjs';
