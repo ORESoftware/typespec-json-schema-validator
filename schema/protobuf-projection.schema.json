@@ -20,7 +20,7 @@
     "identifier": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
     "typeName": {
       "type": "string",
-      "pattern": "^\\.?[A-Za-z_][A-Za-z0-9_.]*(?:<[^\\s<>]+(?:,[^\\s<>]+)*>)?$"
+      "pattern": "^\\.?[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*(?:<[A-Za-z_][A-Za-z0-9_.]*,[A-Za-z_][A-Za-z0-9_.]*>)?$"
     },
     "fieldNumber": {
       "type": "integer",
