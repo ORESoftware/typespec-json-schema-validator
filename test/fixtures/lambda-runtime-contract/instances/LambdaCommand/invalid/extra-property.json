@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "ores.lambda-command/v1",
+  "provider": "aws-lambda",
+  "operation": "health",
+  "requestId": "lambda-fixture-extra-property",
+  "admin": true
+}

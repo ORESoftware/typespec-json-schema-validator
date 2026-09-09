@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "ores.lambda-command/v1",
+  "provider": "vercel",
+  "operation": "echo",
+  "requestId": "lambda-fixture-vercel-1"
+}
