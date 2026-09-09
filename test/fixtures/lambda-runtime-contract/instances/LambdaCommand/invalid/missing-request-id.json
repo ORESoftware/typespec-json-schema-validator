@@ -1,0 +1,5 @@
+{
+  "schemaVersion": "ores.lambda-command/v1",
+  "provider": "aws-lambda",
+  "operation": "health"
+}
