@@ -1,6 +1,9 @@
 import {
   DIGEST_PATTERN,
   RUNTIME_EVIDENCE_SCHEMA,
+  RUNTIME_EVIDENCE_SCHEMA_V1,
+  RUNTIME_EVIDENCE_SCHEMA_V2,
+  RUNTIME_EVIDENCE_SCHEMAS,
   isPlainObject,
   positiveSafeInteger,
 } from './constants.mjs';
@@ -51,15 +54,18 @@ export function validateRuntimeEvidence(value, options = {}) {
     ['schema', 'contractIrId', 'inputDigest', 'corpusDigest', 'adapters'],
     '#', 'evidence', findings);
 
-  if (value.schema !== RUNTIME_EVIDENCE_SCHEMA) {
+  if (!RUNTIME_EVIDENCE_SCHEMAS.has(value.schema)) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-evidence-schema-mismatch',
       pointer: '#/schema',
       message: 'runtime evidence schema identifier is missing or unsupported',
       left: value.schema,
-      right: RUNTIME_EVIDENCE_SCHEMA,
+      right: [RUNTIME_EVIDENCE_SCHEMA_V1, RUNTIME_EVIDENCE_SCHEMA_V2],
     }));
   }
+  const evidenceSchema = RUNTIME_EVIDENCE_SCHEMAS.has(value.schema)
+    ? value.schema
+    : RUNTIME_EVIDENCE_SCHEMA;
   const contractIrId = validateDigest(
     value.contractIrId,
     '#/contractIrId',
@@ -110,7 +116,13 @@ export function validateRuntimeEvidence(value, options = {}) {
   const adapters = [];
   const seen = new Set();
   for (let index = 0; index < Math.min(value.adapters.length, maxAdapters); index += 1) {
-    const adapter = normalizeAdapter(value.adapters[index], index, findings, maxResultsPerAdapter);
+    const adapter = normalizeAdapter(
+      value.adapters[index],
+      index,
+      findings,
+      maxResultsPerAdapter,
+      evidenceSchema,
+    );
     if (!adapter) continue;
     if (seen.has(adapter.id)) {
       findings.push(makeRuntimeFinding({
