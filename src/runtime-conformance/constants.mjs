@@ -22,10 +22,20 @@ export function isPlainObject(value) {
 }
 
 export function validBoundedText(value, maxLength = 256) {
-  return typeof value === 'string'
-    && value.length > 0
-    && value.length <= maxLength
-    && !/[\u0000-\u001f\u007f]/u.test(value);
+  if (typeof value !== 'string' || /[\u0000-\u001f\u007f]/u.test(value)) return false;
+  let length = 0;
+  for (const _character of value) {
+    length += 1;
+    if (length > maxLength) return false;
+  }
+  return length > 0;
+}
+
+export function runtimeValueShape(value) {
+  if (value === null) return Object.freeze({ type: 'null' });
+  if (Array.isArray(value)) return Object.freeze({ type: 'array', length: value.length });
+  if (typeof value === 'string') return Object.freeze({ type: 'string', length: value.length });
+  return Object.freeze({ type: typeof value });
 }
 
 export function normalizedText(value) {
