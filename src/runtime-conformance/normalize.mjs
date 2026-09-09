@@ -6,6 +6,7 @@ import {
   RUNTIME_EVIDENCE_SCHEMAS,
   isPlainObject,
   positiveSafeInteger,
+  runtimeValueShape,
 } from './constants.mjs';
 import { normalizeAdapter } from './adapter.mjs';
 import { readRuntimeEnvelope } from './envelope.mjs';
@@ -17,9 +18,7 @@ function validateDigest(value, pointer, label, findings) {
       ruleId: 'runtime-evidence-invalid-digest',
       pointer,
       message: `${label} must be a lowercase SHA-256 digest`,
-      left: typeof value === 'string' ? value : {
-        type: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value,
-      },
+      left: runtimeValueShape(value),
       right: '64 lowercase hexadecimal characters',
     }));
     return null;
@@ -44,7 +43,7 @@ export function validateRuntimeEvidence(value, options = {}) {
       ruleId: 'runtime-evidence-invalid',
       pointer: '#',
       message: 'runtime evidence must be an object',
-      left: value,
+      left: runtimeValueShape(value),
       right: 'object',
     });
     return { normalized: null, findings: [finding] };
@@ -59,7 +58,7 @@ export function validateRuntimeEvidence(value, options = {}) {
       ruleId: 'runtime-evidence-schema-mismatch',
       pointer: '#/schema',
       message: 'runtime evidence schema identifier is missing or unsupported',
-      left: value.schema,
+      left: runtimeValueShape(value.schema),
       right: [RUNTIME_EVIDENCE_SCHEMA_V1, RUNTIME_EVIDENCE_SCHEMA_V2],
     }));
   }
@@ -80,7 +79,7 @@ export function validateRuntimeEvidence(value, options = {}) {
       ruleId: 'runtime-evidence-adapters-invalid',
       pointer: '#/adapters',
       message: 'runtime evidence adapters must be an array',
-      left: value.adapters,
+      left: runtimeValueShape(value.adapters),
       right: 'array',
     }));
     return {
