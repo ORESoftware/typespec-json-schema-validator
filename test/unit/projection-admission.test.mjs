@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { link, mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -760,7 +760,7 @@ test('createProjectionManifest rejects stale contract evidence', () => {
 });
 
 test('loadProjectionManifest reads a bounded singly linked regular JSON file', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   const path = join(directory, 'manifest.json');
   const manifest = makeBase().manifest;
   await writeFile(path, `${JSON.stringify(manifest)}\n`);
@@ -768,7 +768,7 @@ test('loadProjectionManifest reads a bounded singly linked regular JSON file', a
 });
 
 test('loadProjectionManifest rejects symbolic links', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   const target = join(directory, 'target.json');
   const path = join(directory, 'manifest.json');
   await writeFile(target, '{}');
@@ -777,7 +777,7 @@ test('loadProjectionManifest rejects symbolic links', async () => {
 });
 
 test('loadProjectionManifest rejects multiply linked files', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   const target = join(directory, 'target.json');
   const path = join(directory, 'manifest.json');
   await writeFile(target, '{}');
@@ -786,14 +786,14 @@ test('loadProjectionManifest rejects multiply linked files', async () => {
 });
 
 test('loadProjectionManifest rejects oversized input', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   const path = join(directory, 'manifest.json');
   await writeFile(path, '{"long":"value"}');
   await assert.rejects(loadProjectionManifest(path, { maxBytes: 4 }), /byte limit/u);
 });
 
 test('loadProjectionManifest rejects malformed JSON without echoing it', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   const path = join(directory, 'manifest.json');
   await writeFile(path, '{SENTINEL_PRIVATE_VALUE');
   await assert.rejects(loadProjectionManifest(path), (error) => {
@@ -804,7 +804,7 @@ test('loadProjectionManifest rejects malformed JSON without echoing it', async (
 });
 
 test('hashProjectionFiles computes exact size and digest under a trusted root', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   await mkdir(join(directory, 'generated'));
   await writeFile(join(directory, 'generated', 'a.proto'), 'syntax = "proto3";\n');
   const [result] = await hashProjectionFiles(directory, [{
@@ -818,7 +818,7 @@ test('hashProjectionFiles computes exact size and digest under a trusted root', 
 });
 
 test('hashProjectionFiles rejects traversal before reading', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   await assert.rejects(
     hashProjectionFiles(directory, [{ path: '../outside' }]),
     /normalized relative POSIX path/u,
@@ -826,7 +826,7 @@ test('hashProjectionFiles rejects traversal before reading', async () => {
 });
 
 test('hashProjectionFiles rejects symbolic-link outputs', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   await mkdir(join(directory, 'generated'));
   const target = join(directory, 'target.proto');
   await writeFile(target, 'secret');
@@ -838,7 +838,7 @@ test('hashProjectionFiles rejects symbolic-link outputs', async () => {
 });
 
 test('hashProjectionFiles rejects duplicate descriptors', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'tsjsv-projection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'tsjsv-projection-')));
   await mkdir(join(directory, 'generated'));
   await writeFile(join(directory, 'generated', 'a.proto'), 'x');
   await assert.rejects(

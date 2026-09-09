@@ -114,9 +114,15 @@ export function normalizeComparisonRef(reference) {
   // `User.json`, while independently authored bundles commonly use
   // `#/$defs/User`. Paths, URLs, query strings, and nested fragments remain
   // untouched because their resolution semantics may differ.
-  const localFile = /^(?:\.\/)?([^/#?]+)\.json$/.exec(reference);
-  if (localFile) {
-    return declarationRef(localFile[1]);
+  // A colon can introduce a URI scheme; backslashes and percent escapes can
+  // identify a different resource. Do not guess equivalence for those spellings
+  // or for whitespace/control characters. Require a full match because `$`
+  // alone also accepts a position before a trailing line terminator in JS.
+  const localFile = /^(?:\.\/)?([^:/\\#?%\s\u0000-\u001f\u007f]+)\.json$/u.exec(reference);
+  if (localFile && localFile[0] === reference) {
+    // File names contain literal tildes; pointer tokens use ~0 and ~1 escapes.
+    // In particular A~1B.json names A~1B, not the declaration named A/B.
+    return declarationRef(escapeJsonPointerSegment(localFile[1]));
   }
   return reference;
 }

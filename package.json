@@ -22,12 +22,21 @@
       "import": "./src/projection-verification/index.mjs",
       "types": "./src/projection-verification/index.d.mts"
     },
-    "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
-    "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
+    "./protobuf-compatibility": {
+      "import": "./src/protobuf-compatibility.mjs",
+      "types": "./src/protobuf-compatibility.d.mts"
+    },
+    "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
+    "./schema/contract-ir": "./schema/contract-ir.schema.json",
+    "./schema/mapping": "./schema/mapping.schema.json",
     "./schema/projection-manifest": "./schema/projection-manifest.schema.json",
     "./schema/projection-verification-policy": "./schema/projection-verification-policy.schema.json",
     "./schema/projection-verification-receipt": "./schema/projection-verification-receipt.schema.json",
-    "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
+    "./schema/protobuf-projection": "./schema/protobuf-projection.schema.json",
+    "./schema/protobuf-compatibility-receipt": "./schema/protobuf-compatibility-receipt.schema.json",
+    "./schema/report": "./schema/report.schema.json",
+    "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
+    "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./src/index.d.ts",
@@ -47,8 +56,10 @@
     "src"
   ],
   "scripts": {
+    "audit:prod": "node ./scripts/npm-audit-gate.mjs",
     "check": "node ./scripts/check.mjs",
     "flags:audit": "f2e audit ./.cli-flags.toml",
+    "release:preflight": "node ./scripts/release-preflight.mjs",
     "test": "node --test ./test/unit/*.test.mjs",
     "test:integration": "node --test ./test/integration/*.test.mjs",
     "test:all": "npm run check && npm run flags:audit && npm test && npm run test:integration"

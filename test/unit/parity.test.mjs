@@ -26,6 +26,41 @@ async function compareFixture(name) {
   });
 }
 
+function mappedPairInput(generatedUser, authoredUser) {
+  const role = { type: 'string', enum: ['admin', 'user'] };
+  return {
+    typespecInventory: {
+      declarations: [
+        { kind: 'model', name: 'User', qualifiedName: 'Example.User' },
+        { kind: 'enum', name: 'Role', qualifiedName: 'Example.Role' },
+      ],
+      errors: [],
+      ambiguities: [],
+    },
+    generatedCollection: {
+      findings: [],
+      declarations: [
+        { name: 'User', kind: 'model', schema: generatedUser, pointer: '#/$defs/User' },
+        { name: 'Role', kind: 'enum', schema: role, pointer: '#/$defs/Role' },
+      ],
+    },
+    authoredCollection: {
+      findings: [],
+      declarations: [
+        { name: 'AccountUser', kind: 'model', schema: authoredUser, pointer: '#/$defs/AccountUser' },
+        { name: 'accountRole', kind: 'enum', schema: role, pointer: '#/$defs/accountRole' },
+      ],
+    },
+    mapping: {
+      declarations: [
+        { typespec: 'Example.User', generated: 'User', authored: 'AccountUser' },
+        { typespec: 'Example.Role', generated: 'Role', authored: 'accountRole' },
+      ],
+      ignore: { typespec: [], generated: [], authored: [] },
+    },
+  };
+}
+
 test('equivalent generated and authored schemas pass despite ordering and false-schema spelling', async () => {
   const result = await compareFixture('pass');
   assert.equal(result.findingCount, 0);
@@ -74,6 +109,56 @@ test('explicit mappings pair differently named generated and authored declaratio
     },
   });
   assert.equal(result.findingCount, 0);
+});
+
+test('declaration mappings also pair internal top-level declaration references', () => {
+  const generatedUser = {
+    type: 'object',
+    properties: { role: { $ref: '#/$defs/Role' } },
+    required: ['role'],
+  };
+  const authoredUser = {
+    type: 'object',
+    properties: { role: { $ref: '#/$defs/accountRole' } },
+    required: ['role'],
+  };
+  const input = mappedPairInput(generatedUser, authoredUser);
+  const generatedSnapshot = structuredClone(input.generatedCollection);
+  const authoredSnapshot = structuredClone(input.authoredCollection);
+  const result = compareParity(input);
+  assert.equal(result.findingCount, 0, canonicalStringify(result.findings));
+  assert.deepEqual(input.generatedCollection, generatedSnapshot, 'generated authority must remain untouched');
+  assert.deepEqual(input.authoredCollection, authoredSnapshot, 'authored authority must remain untouched');
+});
+
+test('mapping does not rewrite $ref-looking literal JSON data', () => {
+  const generatedUser = {
+    type: 'object',
+    properties: { marker: { const: { $ref: '#/$defs/Role' } } },
+  };
+  const authoredUser = {
+    type: 'object',
+    properties: { marker: { const: { $ref: '#/$defs/accountRole' } } },
+  };
+  const result = compareParity(mappedPairInput(generatedUser, authoredUser));
+  assert(result.findings.some(({ ruleId, pointer }) =>
+    ruleId === 'generated-authored-semantic-mismatch' && pointer.endsWith('/properties/marker/const/$ref')),
+  canonicalStringify(result.findings));
+});
+
+test('mapping does not guess equivalence for nested or non-top-level references', () => {
+  const generatedUser = {
+    type: 'object',
+    properties: { role: { $ref: '#/properties/Role' } },
+  };
+  const authoredUser = {
+    type: 'object',
+    properties: { role: { $ref: '#/properties/accountRole' } },
+  };
+  const result = compareParity(mappedPairInput(generatedUser, authoredUser));
+  assert(result.findings.some(({ ruleId, pointer }) =>
+    ruleId === 'generated-authored-semantic-mismatch' && pointer.endsWith('/properties/role/$ref')),
+  canonicalStringify(result.findings));
 });
 
 test('runCompare emits a passed deterministic receipt with peer-authority policy', async () => {

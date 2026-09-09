@@ -165,8 +165,8 @@ export async function resolveTspBinary(explicit) {
   }
   const executable = process.platform === 'win32' ? 'tsp.cmd' : 'tsp';
   const local = await executableCandidate([
-    join(process.cwd(), 'node_modules', '.bin', executable),
     join(MODULE_ROOT, 'node_modules', '.bin', executable),
+    join(process.cwd(), 'node_modules', '.bin', executable),
   ]);
   return local ?? executable;
 }
