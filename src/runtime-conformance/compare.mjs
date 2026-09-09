@@ -5,6 +5,7 @@ import {
   RUNTIME_EVIDENCE_SCHEMA_V2,
   RUNTIME_EVIDENCE_SCHEMAS,
   positiveSafeInteger,
+  runtimeValueShape,
 } from './constants.mjs';
 import { validateContractIrBinding } from './contract-ir-binding.mjs';
 import { makeRuntimeFinding, sortRuntimeFindings } from './findings.mjs';
@@ -205,7 +206,7 @@ export function compareRuntimeEvidence({
       ruleId: 'runtime-required-evidence-schema-invalid',
       pointer: '#/requiredEvidenceSchema',
       message: 'requiredEvidenceSchema must name a supported runtime evidence contract',
-      left: requiredEvidenceSchema,
+      left: runtimeValueShape(requiredEvidenceSchema),
       right: [...RUNTIME_EVIDENCE_SCHEMAS].sort(),
     }));
   }
@@ -215,7 +216,7 @@ export function compareRuntimeEvidence({
       ruleId: 'runtime-expected-input-digest-invalid',
       pointer: '#/expectedInputDigest',
       message: 'expectedInputDigest must be the lowercase SHA-256 runId from the trusted parity receipt',
-      left: expectedInputDigest,
+      left: runtimeValueShape(expectedInputDigest),
       right: '64 lowercase hexadecimal characters',
     }));
   }
@@ -224,7 +225,7 @@ export function compareRuntimeEvidence({
       ruleId: 'runtime-expected-corpus-digest-invalid',
       pointer: '#/expectedCorpusDigest',
       message: 'expectedCorpusDigest must be a lowercase SHA-256 digest from the trusted corpus loader',
-      left: expectedCorpusDigest,
+      left: runtimeValueShape(expectedCorpusDigest),
       right: '64 lowercase hexadecimal characters',
     }));
   }
