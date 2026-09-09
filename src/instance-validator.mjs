@@ -15,6 +15,7 @@
 
 import { isPlainObject, escapeJsonPointerSegment, unescapeJsonPointerSegment } from './canonical.mjs';
 import { registerSchemaUri } from './schema-uri-index.mjs';
+import { FORMAT_ASSERTIONS } from './format-assertions.mjs';
 export { SchemaIdentityError } from './schema-uri-index.mjs';
 
 /** Synthetic base authority used when a schema document declares no absolute `$id`. */
@@ -102,21 +103,6 @@ const ANNOTATION_KEYWORDS = new Set([
 const REFUSED_KEYWORDS = new Set(['$dynamicAnchor', '$dynamicRef', '$recursiveAnchor', '$recursiveRef', '$vocabulary']);
 
 const SIMPLE_TYPES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
-
-/** Formats asserted when `formatAssertion` is enabled. Unknown formats stay annotations. */
-const FORMAT_ASSERTIONS = Object.freeze({
-  'date': /^\d{4}-\d{2}-\d{2}$/u,
-  'date-time': /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/u,
-  'duration': /^P(?!$)(\d+Y)?(\d+M)?(\d+W)?(\d+D)?(T(?=\d)(\d+H)?(\d+M)?(\d+(\.\d+)?S)?)?$/u,
-  'email': /^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/u,
-  'hostname': /^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$/u,
-  'ipv4': /^((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/u,
-  'ipv6': /^[0-9A-Fa-f:.]+$/u,
-  'time': /^\d{2}:\d{2}:\d{2}(\.\d+)?([Zz]|[+-]\d{2}:\d{2})$/u,
-  'uri': /^[A-Za-z][A-Za-z0-9+.-]*:\S*$/u,
-  'uri-reference': /^\S*$/u,
-  'uuid': /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/u,
-});
 
 export class UnsupportedKeywordError extends Error {
   constructor(keyword, pointer, source) {
