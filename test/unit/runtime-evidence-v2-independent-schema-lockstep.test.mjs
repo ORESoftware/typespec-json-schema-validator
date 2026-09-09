@@ -72,7 +72,9 @@ function assertExecutableRejects(value, label) {
 }
 
 const schemaInvalidMutations = [
+  ['wrong evidence schema identity', (value) => { value.schema = 'ores.typespec-json-schema-validator.runtime-evidence/v3'; }],
   ['unknown result property', (value) => { firstResult(value, 0).raw = true; }],
+  ['malformed result input digest', (value) => { firstResult(value, 0).inputDigest = 'not-a-digest'; }],
   ['accepted output digest missing', (value) => { firstResult(value, 0).outputDigest = null; }],
   ['accepted validation errors present', (value) => {
     firstResult(value, 0).errors = [{ path: '/id', code: 'unexpected', params: {} }];
@@ -85,12 +87,22 @@ const schemaInvalidMutations = [
       errors: [{ path: '/id', code: 'required', params: {} }],
     });
   }],
+  ['runtime error carries output digest', (value) => {
+    Object.assign(firstResult(value, 1), {
+      verdict: 'error',
+      outputDigest: digest('8'),
+      errors: [],
+    });
+  }],
   ['invalid JSON Pointer error path', (value) => { firstResult(value, 1).errors[0].path = 'id'; }],
   ['raw-looking error parameter value', (value) => {
     firstResult(value, 1).errors[0].params = { value: 'alice@example.com' };
   }],
   ['unknown validation error property', (value) => { firstResult(value, 1).errors[0].message = 'required'; }],
   ['uppercase output digest', (value) => { firstResult(value, 0).outputDigest = 'A'.repeat(64); }],
+  ['overlong adapter language', (value) => { value.adapters[0].language = 'x'.repeat(129); }],
+  ['control character in adapter runtime', (value) => { value.adapters[0].runtime = 'node\n22'; }],
+  ['invalid adapter status', (value) => { value.adapters[0].status = 'ok'; }],
   ['too many validation errors', (value) => {
     firstResult(value, 1).errors = Array.from({ length: 33 }, (_, index) => ({
       path: `/field${index}`,
@@ -126,6 +138,24 @@ test('schema-valid duplicate stable errors remain an explicit executable cross-i
   assert.equal(validate(value), true, JSON.stringify(validate.errors));
   const runtime = validateRuntimeEvidence(value);
   assert.ok(runtime.findings.some((finding) => finding.ruleId === 'runtime-result-error-duplicate'));
+});
+
+test('schema-valid duplicate adapter and case identities remain explicit executable cross-item policy', async () => {
+  const validate = await independentValidator();
+
+  const duplicateAdapter = evidence();
+  duplicateAdapter.adapters.push(structuredClone(duplicateAdapter.adapters[0]));
+  assert.equal(validate(duplicateAdapter), true, JSON.stringify(validate.errors));
+  assert.ok(validateRuntimeEvidence(duplicateAdapter).findings.some(
+    (finding) => finding.ruleId === 'runtime-adapter-duplicate',
+  ));
+
+  const duplicateCase = evidence();
+  duplicateCase.adapters[0].results.push(structuredClone(firstResult(duplicateCase, 0)));
+  assert.equal(validate(duplicateCase), true, JSON.stringify(validate.errors));
+  assert.ok(validateRuntimeEvidence(duplicateCase).findings.some(
+    (finding) => finding.ruleId === 'runtime-result-duplicate',
+  ));
 });
 
 test('v2 schema and executable both reject non-data-like public error metadata surfaces', async () => {
