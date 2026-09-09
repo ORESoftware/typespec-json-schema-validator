@@ -12,7 +12,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -23,6 +23,10 @@ const MAX_FILE_BYTES = 32 * 1024 * 1024;
 const MAX_CAPTURE_BYTES = 1024 * 1024;
 
 export const RELEASE_RECEIPT_SCHEMA = 'ores.tjsv-release-preflight/v1';
+
+export const APPROVED_LIFECYCLE_REBUILDS = Object.freeze([
+  '@oresoftware/f2e',
+]);
 
 export const REQUIRED_PACK_PATHS = Object.freeze([
   '.cli-flags.toml',
@@ -247,18 +251,25 @@ async function runProcess(command, args, cwd, label) {
       rejectPromise(new Error(`${label} could not start`, { cause: error }));
     });
     child.once('close', (code, signal) => {
-      const result = {
+      resolvePromise({
+        code: code ?? -1,
+        signal: signal ?? null,
         stdout: Buffer.concat(stdout).toString('utf8'),
         stderr: Buffer.concat(stderr).toString('utf8'),
-      };
-      if (code !== 0) {
-        const termination = signal === null ? `exit ${code}` : `signal ${signal}`;
-        rejectPromise(new Error(`${label} failed with ${termination}`));
-        return;
-      }
-      resolvePromise(result);
+      });
     });
   });
+}
+
+async function runChecked(command, args, cwd, label) {
+  const result = await runProcess(command, args, cwd, label);
+  if (result.code !== 0) {
+    const termination = result.signal === null ? `exit ${result.code}` : `signal ${result.signal}`;
+    const error = new Error(`${label} failed with ${termination}`);
+    error.result = result;
+    throw error;
+  }
+  return result;
 }
 
 async function fileDigest(path, algorithm, encoding = 'hex') {
@@ -279,6 +290,19 @@ function installedBin(consumerDirectory, name) {
   );
 }
 
+function describeDoctorFailure(alias, result) {
+  let report = null;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    // Keep diagnostics bounded and secret-free. The doctor command emits only
+    // its version/availability receipt, never environment values.
+  }
+  const typespec = report?.typespec?.available === true ? 'available' : 'unavailable';
+  const emitter = report?.jsonSchemaEmitter?.available === true ? 'available' : 'unavailable';
+  return `${alias} doctor failed: TypeSpec ${typespec}, JSON Schema emitter ${emitter}`;
+}
+
 async function verifyCleanConsumer(consumerDirectory, tarballPath) {
   await mkdir(consumerDirectory, { recursive: true, mode: 0o700 });
   await writeFile(
@@ -286,7 +310,7 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
     `${JSON.stringify({ name: 'tjsv-release-preflight-consumer', private: true, type: 'module' }, null, 2)}\n`,
     { mode: 0o600 },
   );
-  await runProcess(
+  await runChecked(
     npmExecutable(),
     [
       'install',
@@ -301,6 +325,19 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
     'clean consumer installation',
   );
 
+  // All lifecycle scripts remain blocked during installation. The sole
+  // approved native build is then invoked explicitly, matching the checked-in
+  // Zed package contract and preventing unrelated transitive scripts from
+  // executing implicitly.
+  for (const packageName of APPROVED_LIFECYCLE_REBUILDS) {
+    await runChecked(
+      npmExecutable(),
+      ['rebuild', packageName, '--foreground-scripts', '--no-audit', '--no-fund'],
+      consumerDirectory,
+      `approved lifecycle rebuild for ${packageName}`,
+    );
+  }
+
   const importProbe = [
     "const root = await import('@oresoftware/typespec-json-schema-validator');",
     "for (const name of ['runCheck', 'validateInstance', 'verifyContractIr']) {",
@@ -310,7 +347,7 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
     "await import('@oresoftware/typespec-json-schema-validator/projection-admission');",
     "await import('@oresoftware/typespec-json-schema-validator/projection-verification');",
   ].join('\n');
-  await runProcess(
+  await runChecked(
     process.execPath,
     ['--input-type=module', '--eval', importProbe],
     consumerDirectory,
@@ -324,18 +361,26 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
     if (!info.isFile()) {
       throw new Error(`installed CLI alias is not a regular file: ${alias}`);
     }
-    await runProcess(executable, ['doctor', '--quiet'], consumerDirectory, `${alias} doctor`);
+    const result = await runProcess(
+      executable,
+      ['doctor', '--quiet'],
+      consumerDirectory,
+      `${alias} doctor`,
+    );
+    if (result.code !== 0) {
+      throw new Error(describeDoctorFailure(alias, result));
+    }
   }
   return aliases;
 }
 
 async function gitRevision() {
-  const result = await runProcess('git', ['rev-parse', 'HEAD'], ROOT, 'git revision lookup');
+  const result = await runChecked('git', ['rev-parse', 'HEAD'], ROOT, 'git revision lookup');
   const revision = result.stdout.trim();
   if (!/^[0-9a-f]{40}$/u.test(revision)) {
     throw new Error('git revision lookup returned an invalid commit identity');
   }
-  const statusResult = await runProcess(
+  const statusResult = await runChecked(
     'git',
     ['status', '--porcelain=v1', '--untracked-files=no'],
     ROOT,
@@ -368,7 +413,7 @@ export async function runReleasePreflight() {
     const packDirectory = join(workspace, 'pack');
     const consumerDirectory = join(workspace, 'consumer');
     await mkdir(packDirectory, { recursive: true, mode: 0o700 });
-    const packed = await runProcess(
+    const packed = await runChecked(
       npmExecutable(),
       ['pack', '--json', '--ignore-scripts', '--pack-destination', packDirectory],
       ROOT,
@@ -424,6 +469,8 @@ export async function runReleasePreflight() {
         forbiddenFilesAbsent: true,
         npmDigestsVerified: true,
         cleanConsumerInstall: true,
+        implicitLifecycleScriptsBlocked: true,
+        approvedLifecycleRebuilds: APPROVED_LIFECYCLE_REBUILDS,
         publicImports: true,
         cliAliases: aliases,
       },
