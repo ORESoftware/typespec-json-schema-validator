@@ -50,7 +50,7 @@ test('lambda provider and operation peers admit Contract IR with differential fi
   assert.equal(report.status, 'passed');
   assert.equal(report.zeroUnexplainedFindings, true);
   assert.equal(report.coverage.differentialInstanceValidation, true);
-  assert.equal(report.differential.summary.corpusInstances, 2);
+  assert.equal(report.differential.summary.corpusInstances, 8);
   assert.equal(report.differential.summary.divergences, 0);
   assert.equal(contractIr.status, 'passed');
   assert.equal(contractIr.admissible, true);

@@ -1,0 +1,6 @@
+{
+  "schemaVersion": "ores.lambda-command/v2",
+  "provider": "aws-lambda",
+  "operation": "health",
+  "requestId": "lambda-fixture-schema-version"
+}
