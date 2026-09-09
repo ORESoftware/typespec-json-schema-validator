@@ -12,7 +12,7 @@ const CONTRACT_IR_SCHEMA = 'ores.typespec-json-schema-validator.contract-ir/v1';
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const ARTIFACT_DIGEST_PATTERN = /^sha256:[a-f0-9]{64}$/u;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/u;
-const CONTROL_PATTERN = /[\u0000-\u001f\u007f]/u;
+const CONTROL_PATTERN = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
 const MAX_TOKEN_LENGTH = 256;
 const MAX_EVIDENCE_PATH_LENGTH = 2048;
 
