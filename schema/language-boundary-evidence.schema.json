@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/language-boundary-evidence/v1",
+  "title": "Generated language/runtime boundary evidence",
+  "type": "object",
+  "required": [
+    "schema", "language", "runtime", "status", "sourceRevision", "artifactDigest",
+    "receiptRunId", "contractIrId", "toolchain", "generator", "validation"
+  ],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.language-boundary-evidence/v1" },
+    "language": { "$ref": "#/$defs/token" },
+    "runtime": { "$ref": "#/$defs/token" },
+    "status": { "enum": ["passed", "failed", "stopped_for_evaluation"] },
+    "sourceRevision": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "artifactDigest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "receiptRunId": { "$ref": "#/$defs/sha256" },
+    "contractIrId": { "$ref": "#/$defs/sha256" },
+    "toolchain": { "$ref": "#/$defs/tool" },
+    "generator": { "$ref": "#/$defs/tool" },
+    "validation": {
+      "type": "object",
+      "required": ["ingress", "egress"],
+      "properties": {
+        "ingress": { "enum": ["passed", "failed"] },
+        "egress": { "enum": ["passed", "failed"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "token": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^(?!\\s).*(?<!\\s)$" },
+    "tool": {
+      "type": "object",
+      "required": ["name", "version"],
+      "properties": {
+        "name": { "$ref": "#/$defs/token" },
+        "version": { "$ref": "#/$defs/token" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
