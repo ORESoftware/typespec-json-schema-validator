@@ -7,6 +7,7 @@ import {
   RUNTIME_EVIDENCE_SCHEMA_V2,
   isPlainObject,
   normalizedText,
+  runtimeValueShape,
   validBoundedText,
 } from './constants.mjs';
 import { makeRuntimeFinding } from './findings.mjs';
@@ -24,7 +25,7 @@ function normalizeErrorParam(value, pointer, findings) {
     ruleId: 'runtime-error-param-invalid',
     pointer,
     message: 'validation error params may contain only bounded rule metadata, never raw rejected values',
-    left: { type: value === null ? 'null' : typeof value },
+    left: runtimeValueShape(value),
     right: 'null, boolean, finite number, or bounded identifier string',
   }));
   return null;
@@ -37,7 +38,7 @@ function normalizeErrorParams(value, pointer, findings) {
       ruleId: 'runtime-error-params-invalid',
       pointer,
       message: 'validation error params must be a plain data object',
-      left: { type: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value },
+      left: runtimeValueShape(value),
       right: 'plain object',
     }));
     return Object.freeze({});
@@ -70,7 +71,7 @@ function normalizeErrorParams(value, pointer, findings) {
         ruleId: 'runtime-error-param-key-invalid',
         pointer: `${pointer}/${key}`,
         message: 'validation error param names must be bounded lowercase identifiers',
-        left: key,
+        left: runtimeValueShape(key),
         right: 'bounded lowercase identifier',
       }));
       continue;
@@ -87,7 +88,7 @@ function normalizeError(value, adapterId, caseId, index, pointer, findings) {
       ruleId: 'runtime-error-invalid',
       pointer: errorPointer,
       message: `adapter ${adapterId} case ${caseId} validation error must be an object`,
-      left: { type: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value },
+      left: runtimeValueShape(value),
       right: 'object',
     }));
     return null;
@@ -102,7 +103,7 @@ function normalizeError(value, adapterId, caseId, index, pointer, findings) {
       ruleId: 'runtime-error-path-invalid',
       pointer: `${errorPointer}/path`,
       message: 'validation error path must be a bounded RFC 6901 JSON Pointer',
-      left: typeof path === 'string' ? path : { type: typeof path },
+      left: runtimeValueShape(path),
       right: 'RFC 6901 JSON Pointer up to 512 characters',
     }));
     return null;
@@ -112,7 +113,7 @@ function normalizeError(value, adapterId, caseId, index, pointer, findings) {
       ruleId: 'runtime-error-code-invalid',
       pointer: `${errorPointer}/code`,
       message: 'validation error code must be a bounded lowercase identifier',
-      left: value.code,
+      left: runtimeValueShape(value.code),
       right: 'bounded lowercase identifier',
     }));
     return null;
@@ -130,7 +131,7 @@ function normalizeErrors(value, adapterId, caseId, pointer, findings) {
       ruleId: 'runtime-result-errors-invalid',
       pointer: `${pointer}/errors`,
       message: `adapter ${adapterId} case ${caseId} errors must be an array`,
-      left: { type: value === null ? 'null' : typeof value },
+      left: runtimeValueShape(value),
       right: 'array',
     }));
     return Object.freeze([]);
@@ -173,7 +174,7 @@ function validateDigest(value, pointer, label, findings) {
       ruleId: 'runtime-result-digest-invalid',
       pointer,
       message: `${label} must be a lowercase SHA-256 digest`,
-      left: typeof value === 'string' ? value : { type: value === null ? 'null' : typeof value },
+      left: runtimeValueShape(value),
       right: '64 lowercase hexadecimal characters',
     }));
     return null;
@@ -188,7 +189,7 @@ export function normalizeResult(value, adapterId, index, findings, evidenceSchem
       ruleId: 'runtime-result-invalid',
       pointer,
       message: `adapter ${adapterId} result must be an object`,
-      left: value,
+      left: runtimeValueShape(value),
       right: 'object',
     }));
     return null;
@@ -212,7 +213,7 @@ export function normalizeResult(value, adapterId, index, findings, evidenceSchem
       ruleId: 'runtime-result-case-id-invalid',
       pointer: `${pointer}/caseId`,
       message: `adapter ${adapterId} emitted an invalid case id`,
-      left: value.caseId,
+      left: runtimeValueShape(value.caseId),
       right: 'bounded lowercase identifier',
     }));
     return null;
@@ -222,7 +223,7 @@ export function normalizeResult(value, adapterId, index, findings, evidenceSchem
       ruleId: 'runtime-result-declaration-invalid',
       pointer: `${pointer}/declaration`,
       message: `adapter ${adapterId} case ${caseId} has an invalid declaration identity`,
-      left: value.declaration,
+      left: runtimeValueShape(value.declaration),
       right: 'non-empty bounded text without control characters',
     }));
     return null;
@@ -233,7 +234,7 @@ export function normalizeResult(value, adapterId, index, findings, evidenceSchem
       declaration,
       pointer: `${pointer}/verdict`,
       message: `adapter ${adapterId} case ${caseId} has an invalid verdict`,
-      left: verdict,
+      left: runtimeValueShape(verdict),
       right: [...CASE_VERDICTS].sort(),
     }));
     return null;
@@ -262,7 +263,7 @@ export function normalizeResult(value, adapterId, index, findings, evidenceSchem
         declaration,
         pointer: `${pointer}/outputDigest`,
         message: `adapter ${adapterId} case ${caseId} must not claim admitted output when it was not accepted`,
-        left: typeof value.outputDigest === 'string' ? value.outputDigest : { type: typeof value.outputDigest },
+        left: runtimeValueShape(value.outputDigest),
         right: null,
       }));
     }
