@@ -7,11 +7,11 @@ const runId = '1'.repeat(64);
 const irId = '2'.repeat(64);
 const revision = '3'.repeat(40);
 
-function target(language, runtime) {
+function target(language, runtime, required = true) {
   return {
     language,
     runtime,
-    required: true,
+    required,
     ingress: true,
     egress: true,
     evidence: `${language}/${runtime}.json`,
@@ -141,4 +141,35 @@ test('lambda promotion rejects a passing parity receipt that retains findings', 
   assert.equal(result.status, 'stopped_for_evaluation');
   assert.ok(result.findings.some((entry) => entry.ruleId === 'boundary-parity-findings-incomplete'));
   assert.equal(result.counts.admittedEvidence, 0);
+});
+
+test('required Lambda runtime evidence from different source revisions cannot be combined', () => {
+  const value = input();
+  value.evidenceByPath.get('dart/flutter.json').sourceRevision = '6'.repeat(40);
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.equal(result.zeroUnexplainedFindings, false);
+  assert.equal(result.counts.admittedEvidence, 2);
+  assert.ok(result.findings.some((entry) => (
+    entry.ruleId === 'boundary-source-revision-mismatch'
+      && entry.pointer === '#/evidence/2/sourceRevision'
+  )));
+});
+
+test('supplied optional Lambda evidence must use the same source revision as required runtimes', () => {
+  const value = input();
+  const optional = target('go', 'native', false);
+  const optionalEvidence = evidence(optional.language, optional.runtime);
+  optionalEvidence.sourceRevision = '7'.repeat(40);
+  value.manifest.targets.push(optional);
+  value.evidenceByPath.set(optional.evidence, optionalEvidence);
+
+  const result = verifyLanguageBoundaries(value);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.equal(result.counts.requiredTargets, 3);
+  assert.equal(result.counts.admittedEvidence, 3);
+  assert.ok(result.findings.some((entry) => (
+    entry.ruleId === 'boundary-source-revision-mismatch'
+      && entry.pointer === '#/evidence/3/sourceRevision'
+  )));
 });
