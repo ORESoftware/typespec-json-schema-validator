@@ -5,6 +5,7 @@ import {
   evaluateAudit,
   failedAuditReceipt,
   sha256Utf8,
+  validateAuditEnvironment,
 } from '../src/npm-audit-policy.mjs';
 
 const root = resolve(import.meta.dirname, '..');
@@ -39,19 +40,29 @@ const packageLockDigest = sha256Utf8(packageLockText);
 
 const npmVersionResult = commandText('npm', ['--version']);
 const registryResult = commandText('npm', ['config', 'get', 'registry']);
-const npmVersion = npmVersionResult.status === 0 ? cleanOutput(npmVersionResult) : 'unavailable';
-const registry = registryResult.status === 0 ? cleanOutput(registryResult) : 'unavailable';
+const rawNpmVersion = npmVersionResult.status === 0 ? cleanOutput(npmVersionResult) : 'unavailable';
+const rawRegistry = registryResult.status === 0 ? cleanOutput(registryResult) : 'unavailable';
+let npmVersion = 'unavailable';
+let registry = 'unavailable';
+let environmentFailure = null;
+try {
+  const identity = validateAuditEnvironment({ npmVersion: rawNpmVersion, registry: rawRegistry });
+  npmVersion = identity.npmVersion;
+  registry = identity.registry;
+} catch (error) {
+  environmentFailure = `npm audit environment collection failed: ${error.message}`;
+}
 
 const audit = commandText('npm', ['audit', '--omit=dev', '--json', '--audit-level=high']);
 let receipt;
 let auditDocument = null;
-let parseFailure = null;
+let parseFailure = environmentFailure;
 
-if (audit.error) {
+if (!parseFailure && audit.error) {
   parseFailure = `npm audit could not start: ${audit.error.message}`;
-} else if (audit.status !== 0 && audit.status !== 1) {
+} else if (!parseFailure && audit.status !== 0 && audit.status !== 1) {
   parseFailure = `npm audit infrastructure exit ${String(audit.status)}`;
-} else {
+} else if (!parseFailure) {
   try {
     auditDocument = JSON.parse(cleanOutput(audit));
   } catch (error) {
