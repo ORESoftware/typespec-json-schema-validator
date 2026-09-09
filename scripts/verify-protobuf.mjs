@@ -64,6 +64,7 @@ let baseline = null;
 let current = null;
 let receipt;
 let verificationPath;
+let shouldQuiet = false;
 
 try {
   const baselinePath = workspacePath(root, required('TSJSV_PROTOBUF_BASELINE'), 'protobuf baseline');
@@ -74,6 +75,7 @@ try {
       ?? '.typespec-json-schema-validator/protobuf-compatibility.json',
     'protobuf compatibility receipt',
   );
+  shouldQuiet = quiet();
   [baseline, current] = await Promise.all([
     readJson(baselinePath, 'protobuf baseline'),
     readJson(currentPath, 'protobuf current projection'),
@@ -98,10 +100,10 @@ try {
   await writeProtobufCompatibilityReceipt(verificationPath, receipt);
 } catch (error) {
   process.stderr.write(`could not write protobuf compatibility receipt: ${error.message}\n`);
-  process.exitCode = 1;
+  process.exitCode = 3;
 }
 
-if (process.exitCode !== 1) {
-  if (!quiet()) process.stdout.write(`${JSON.stringify(receipt)}\n`);
-  process.exitCode = receipt.status === 'passed' ? 0 : receipt.status === 'stopped_for_evaluation' ? 2 : 1;
+if (process.exitCode !== 3) {
+  if (!shouldQuiet) process.stdout.write(`${JSON.stringify(receipt)}\n`);
+  process.exitCode = receipt.status === 'passed' ? 0 : receipt.status === 'stopped_for_evaluation' ? 2 : 3;
 }
