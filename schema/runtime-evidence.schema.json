@@ -8,6 +8,7 @@
   "required": ["schema", "contractIrId", "inputDigest", "corpusDigest", "adapters"],
   "properties": {
     "schema": {
+      "type": "string",
       "const": "ores.typespec-json-schema-validator.runtime-evidence/v1"
     },
     "contractIrId": {
@@ -64,25 +65,26 @@
         "language": {
           "allOf": [
             { "$ref": "#/$defs/boundedText" },
-            { "maxLength": 128 }
+            { "type": "string", "maxLength": 128 }
           ]
         },
         "runtime": {
           "allOf": [
             { "$ref": "#/$defs/boundedText" },
-            { "maxLength": 128 }
+            { "type": "string", "maxLength": 128 }
           ]
         },
         "validator": {
           "allOf": [
             { "$ref": "#/$defs/boundedText" },
-            { "maxLength": 128 }
+            { "type": "string", "maxLength": 128 }
           ]
         },
         "toolchain": {
           "$ref": "#/$defs/boundedText"
         },
         "status": {
+          "type": "string",
           "enum": ["passed", "failed", "skipped", "unsupported"]
         },
         "results": {
@@ -106,6 +108,7 @@
           "$ref": "#/$defs/boundedText"
         },
         "verdict": {
+          "type": "string",
           "enum": ["accepted", "rejected", "error", "skipped", "unsupported"]
         }
       }

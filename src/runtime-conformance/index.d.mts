@@ -1,12 +1,29 @@
 export type RuntimeAdapterStatus = 'passed' | 'failed' | 'skipped' | 'unsupported';
 export type RuntimeCaseVerdict = 'accepted' | 'rejected' | 'error' | 'skipped' | 'unsupported';
 export type RuntimeCaseExpectation = 'accepted' | 'rejected';
+export type RuntimeEvidenceSchema =
+  | typeof RUNTIME_EVIDENCE_SCHEMA_V1
+  | typeof RUNTIME_EVIDENCE_SCHEMA_V2;
 
-export interface RuntimeEvidenceResult {
+export interface RuntimeValidationError {
+  path: string;
+  code: string;
+  params: Record<string, null | boolean | number | string>;
+}
+
+export interface RuntimeEvidenceResultV1 {
   caseId: string;
   declaration: string;
   verdict: RuntimeCaseVerdict;
 }
+
+export interface RuntimeEvidenceResultV2 extends RuntimeEvidenceResultV1 {
+  inputDigest: string;
+  outputDigest: string | null;
+  errors: RuntimeValidationError[];
+}
+
+export type RuntimeEvidenceResult = RuntimeEvidenceResultV1 | RuntimeEvidenceResultV2;
 
 export interface RuntimeAdapterEvidence {
   id: string;
@@ -19,7 +36,7 @@ export interface RuntimeAdapterEvidence {
 }
 
 export interface RuntimeEvidence {
-  schema: typeof RUNTIME_EVIDENCE_SCHEMA;
+  schema: RuntimeEvidenceSchema;
   contractIrId: string;
   inputDigest: string;
   corpusDigest: string;
@@ -83,6 +100,7 @@ export interface RuntimeConformanceReport {
   contractIrVerified: boolean;
   receiptRunId: string | null;
   receiptDigest: string | null;
+  evidenceSchema: RuntimeEvidenceSchema | null;
   evidenceDigest: string | null;
   expectedCaseDigest: string;
   summary: Readonly<{
@@ -115,10 +133,14 @@ export interface CurrentInputRuntimeAdmissionOptions
   expectedCorpusDigest: string;
   expectedCases: ExpectedRuntimeCase[];
   requiredAdapters?: Array<string | RequiredRuntimeAdapter>;
+  /** Require an exact runtime-evidence schema; omit for v1/v2 compatibility admission. */
+  requiredEvidenceSchema?: RuntimeEvidenceSchema;
   maxFindings?: number;
 }
 
 export const RUNTIME_EVIDENCE_SCHEMA: 'ores.typespec-json-schema-validator.runtime-evidence/v1';
+export const RUNTIME_EVIDENCE_SCHEMA_V1: 'ores.typespec-json-schema-validator.runtime-evidence/v1';
+export const RUNTIME_EVIDENCE_SCHEMA_V2: 'ores.typespec-json-schema-validator.runtime-evidence/v2';
 export const RUNTIME_CONFORMANCE_REPORT_SCHEMA: 'ores.typespec-json-schema-validator.runtime-conformance-report/v1';
 
 export function validateRuntimeEvidence(
@@ -151,6 +173,7 @@ export function compareRuntimeEvidence(input: RuntimeEvidenceLimits & {
   expectedCorpusDigest: string;
   expectedCases: ExpectedRuntimeCase[];
   requiredAdapters?: Array<string | RequiredRuntimeAdapter>;
+  requiredEvidenceSchema?: RuntimeEvidenceSchema;
   maxFindings?: number;
 }): RuntimeConformanceReport;
 

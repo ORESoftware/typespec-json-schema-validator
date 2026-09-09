@@ -1,8 +1,12 @@
 import {
   DIGEST_PATTERN,
   RUNTIME_EVIDENCE_SCHEMA,
+  RUNTIME_EVIDENCE_SCHEMA_V1,
+  RUNTIME_EVIDENCE_SCHEMA_V2,
+  RUNTIME_EVIDENCE_SCHEMAS,
   isPlainObject,
   positiveSafeInteger,
+  runtimeValueShape,
 } from './constants.mjs';
 import { normalizeAdapter } from './adapter.mjs';
 import { readRuntimeEnvelope } from './envelope.mjs';
@@ -14,9 +18,7 @@ function validateDigest(value, pointer, label, findings) {
       ruleId: 'runtime-evidence-invalid-digest',
       pointer,
       message: `${label} must be a lowercase SHA-256 digest`,
-      left: typeof value === 'string' ? value : {
-        type: value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value,
-      },
+      left: runtimeValueShape(value),
       right: '64 lowercase hexadecimal characters',
     }));
     return null;
@@ -41,7 +43,7 @@ export function validateRuntimeEvidence(value, options = {}) {
       ruleId: 'runtime-evidence-invalid',
       pointer: '#',
       message: 'runtime evidence must be an object',
-      left: value,
+      left: runtimeValueShape(value),
       right: 'object',
     });
     return { normalized: null, findings: [finding] };
@@ -51,15 +53,18 @@ export function validateRuntimeEvidence(value, options = {}) {
     ['schema', 'contractIrId', 'inputDigest', 'corpusDigest', 'adapters'],
     '#', 'evidence', findings);
 
-  if (value.schema !== RUNTIME_EVIDENCE_SCHEMA) {
+  if (!RUNTIME_EVIDENCE_SCHEMAS.has(value.schema)) {
     findings.push(makeRuntimeFinding({
       ruleId: 'runtime-evidence-schema-mismatch',
       pointer: '#/schema',
       message: 'runtime evidence schema identifier is missing or unsupported',
-      left: value.schema,
-      right: RUNTIME_EVIDENCE_SCHEMA,
+      left: runtimeValueShape(value.schema),
+      right: [RUNTIME_EVIDENCE_SCHEMA_V1, RUNTIME_EVIDENCE_SCHEMA_V2],
     }));
   }
+  const evidenceSchema = RUNTIME_EVIDENCE_SCHEMAS.has(value.schema)
+    ? value.schema
+    : RUNTIME_EVIDENCE_SCHEMA;
   const contractIrId = validateDigest(
     value.contractIrId,
     '#/contractIrId',
@@ -74,7 +79,7 @@ export function validateRuntimeEvidence(value, options = {}) {
       ruleId: 'runtime-evidence-adapters-invalid',
       pointer: '#/adapters',
       message: 'runtime evidence adapters must be an array',
-      left: value.adapters,
+      left: runtimeValueShape(value.adapters),
       right: 'array',
     }));
     return {
@@ -110,7 +115,13 @@ export function validateRuntimeEvidence(value, options = {}) {
   const adapters = [];
   const seen = new Set();
   for (let index = 0; index < Math.min(value.adapters.length, maxAdapters); index += 1) {
-    const adapter = normalizeAdapter(value.adapters[index], index, findings, maxResultsPerAdapter);
+    const adapter = normalizeAdapter(
+      value.adapters[index],
+      index,
+      findings,
+      maxResultsPerAdapter,
+      evidenceSchema,
+    );
     if (!adapter) continue;
     if (seen.has(adapter.id)) {
       findings.push(makeRuntimeFinding({

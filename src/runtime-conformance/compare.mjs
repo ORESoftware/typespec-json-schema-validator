@@ -2,6 +2,8 @@ import { canonicalStringify, sha256 } from '../canonical.mjs';
 import {
   DIGEST_PATTERN,
   RUNTIME_EVIDENCE_SCHEMA,
+  RUNTIME_EVIDENCE_SCHEMA_V2,
+  RUNTIME_EVIDENCE_SCHEMAS,
   positiveSafeInteger,
 } from './constants.mjs';
 import { validateContractIrBinding } from './contract-ir-binding.mjs';
@@ -90,13 +92,37 @@ function compareAdapter(adapter, expectedById, findings) {
   }
 }
 
-function compareAdapters(adapters, expectedById, findings) {
+function sortedAdapterValues(values) {
+  return Object.fromEntries([...values.entries()].sort(([left], [right]) => left.localeCompare(right)));
+}
+
+function addSemanticDivergence(findings, ruleId, expected, values, label) {
+  if (new Set(values.values()).size <= 1) return;
+  findings.push(makeRuntimeFinding({
+    ruleId,
+    declaration: expected.declaration,
+    pointer: `#/cases/${expected.id}`,
+    message: `runtime adapters disagree on ${label} for case ${expected.id}`,
+    left: sortedAdapterValues(values),
+    right: 'identical semantic runtime evidence across adapters',
+  }));
+}
+
+function compareAdapters(adapters, expectedById, findings, evidenceSchema) {
   for (const expected of expectedById.values()) {
     const verdicts = new Map();
+    const inputs = new Map();
+    const outputs = new Map();
+    const errors = new Map();
     for (const adapter of adapters) {
       const result = adapter.results.find((item) => item.caseId === expected.id);
       if (result && (result.verdict === 'accepted' || result.verdict === 'rejected')) {
         verdicts.set(adapter.id, result.verdict);
+        if (evidenceSchema === RUNTIME_EVIDENCE_SCHEMA_V2) {
+          inputs.set(adapter.id, result.inputDigest);
+          if (result.verdict === 'accepted') outputs.set(adapter.id, result.outputDigest);
+          if (result.verdict === 'rejected') errors.set(adapter.id, canonicalStringify(result.errors));
+        }
       }
     }
     if (new Set(verdicts.values()).size > 1) {
@@ -105,9 +131,32 @@ function compareAdapters(adapters, expectedById, findings) {
         declaration: expected.declaration,
         pointer: `#/cases/${expected.id}`,
         message: `runtime adapters disagree on case ${expected.id}`,
-        left: Object.fromEntries([...verdicts.entries()].sort(([left], [right]) => left.localeCompare(right))),
+        left: sortedAdapterValues(verdicts),
         right: expected.expectation,
       }));
+    }
+    if (evidenceSchema === RUNTIME_EVIDENCE_SCHEMA_V2) {
+      addSemanticDivergence(
+        findings,
+        'runtime-adapter-input-digest-divergence',
+        expected,
+        inputs,
+        'trusted case input digest',
+      );
+      addSemanticDivergence(
+        findings,
+        'runtime-adapter-output-divergence',
+        expected,
+        outputs,
+        'canonical admitted output digest',
+      );
+      addSemanticDivergence(
+        findings,
+        'runtime-adapter-error-divergence',
+        expected,
+        errors,
+        'stable validation error evidence',
+      );
     }
   }
 }
@@ -137,6 +186,7 @@ export function compareRuntimeEvidence({
   expectedCorpusDigest,
   expectedCases,
   requiredAdapters = [],
+  requiredEvidenceSchema,
   maxFindings = 250,
   maxAdapters = 64,
   maxResultsPerAdapter = 100_000,
@@ -149,6 +199,16 @@ export function compareRuntimeEvidence({
   const required = normalizeRequiredAdapters(requiredAdapters, findings);
   const validated = validateRuntimeEvidence(evidence, { maxAdapters, maxResultsPerAdapter });
   findings.push(...validated.findings);
+
+  if (requiredEvidenceSchema !== undefined && !RUNTIME_EVIDENCE_SCHEMAS.has(requiredEvidenceSchema)) {
+    findings.push(makeRuntimeFinding({
+      ruleId: 'runtime-required-evidence-schema-invalid',
+      pointer: '#/requiredEvidenceSchema',
+      message: 'requiredEvidenceSchema must name a supported runtime evidence contract',
+      left: requiredEvidenceSchema,
+      right: [...RUNTIME_EVIDENCE_SCHEMAS].sort(),
+    }));
+  }
 
   if (!DIGEST_PATTERN.test(expectedInputDigest ?? '')) {
     findings.push(makeRuntimeFinding({
@@ -179,6 +239,17 @@ export function compareRuntimeEvidence({
 
   const normalized = validated.normalized;
   if (normalized) {
+    if (requiredEvidenceSchema !== undefined
+      && RUNTIME_EVIDENCE_SCHEMAS.has(requiredEvidenceSchema)
+      && normalized.schema !== requiredEvidenceSchema) {
+      findings.push(makeRuntimeFinding({
+        ruleId: 'runtime-evidence-required-schema-mismatch',
+        pointer: '#/schema',
+        message: 'runtime evidence does not satisfy the required semantic evidence profile',
+        left: normalized.schema,
+        right: requiredEvidenceSchema,
+      }));
+    }
     if (binding.irId && normalized.contractIrId !== binding.irId) {
       findings.push(makeRuntimeFinding({
         ruleId: 'runtime-contract-ir-id-mismatch',
@@ -235,7 +306,7 @@ export function compareRuntimeEvidence({
 
     const expectedById = new Map(corpus.map((item) => [item.id, item]));
     for (const adapter of normalized.adapters) compareAdapter(adapter, expectedById, findings);
-    compareAdapters(normalized.adapters, expectedById, findings);
+    compareAdapters(normalized.adapters, expectedById, findings, normalized.schema);
   }
 
   const findingCount = findings.length;
@@ -251,6 +322,7 @@ export function compareRuntimeEvidence({
     contractIrId: binding.irId,
     contractIrVerified: binding.verified,
     receiptRunId: binding.receiptRunId,
+    evidenceSchema: normalized?.schema ?? null,
     evidenceDigest: normalized ? sha256(canonicalStringify(normalized)) : null,
     expectedCaseDigest: sha256(canonicalStringify(corpus)),
     summary: Object.freeze({

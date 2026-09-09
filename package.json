@@ -48,6 +48,7 @@
     "./schema/report": "./schema/report.schema.json",
     "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
     "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
+    "./schema/runtime-evidence-v2": "./schema/runtime-evidence-v2.schema.json",
     "./package.json": "./package.json"
   },
   "types": "./src/index.d.ts",
