@@ -5,15 +5,18 @@ import test from 'node:test';
 import Ajv2020 from 'ajv/dist/2020.js';
 
 import {
+  RUNTIME_EVIDENCE_SCHEMA_V1,
   RUNTIME_EVIDENCE_SCHEMA_V2,
   validateRuntimeEvidence,
 } from '../../src/runtime-conformance/index.mjs';
 
 const digest = (character) => character.repeat(64);
 
-async function independentValidator() {
+async function independentValidator(
+  schemaPath = '../../schema/runtime-evidence-v2.schema.json',
+) {
   const schema = JSON.parse(await readFile(
-    new URL('../../schema/runtime-evidence-v2.schema.json', import.meta.url),
+    new URL(schemaPath, import.meta.url),
     'utf8',
   ));
   return new Ajv2020({ allErrors: true, strict: true }).compile(schema);
@@ -112,6 +115,13 @@ const schemaInvalidMutations = [
   }],
 ];
 
+test('both runtime evidence schemas compile under independent strict Draft 2020-12 validation', async () => {
+  const v1 = await independentValidator('../../schema/runtime-evidence.schema.json');
+  const v2 = await independentValidator();
+  assert.equal(typeof v1, 'function');
+  assert.equal(typeof v2, 'function');
+});
+
 test('Ajv Draft 2020-12 independently admits the canonical runtime-evidence v2 envelope', async () => {
   const validate = await independentValidator();
   const value = evidence();
@@ -127,6 +137,28 @@ test('sampled v2 schema-invalid envelopes also fail executable admission', async
     assert.equal(validate(value), false, `${label}: independent schema unexpectedly accepted mutation`);
     assertExecutableRejects(value, label);
   }
+});
+
+test('v2 schema and executable use JSON character length for bounded Unicode text', async () => {
+  const validate = await independentValidator();
+  const value = evidence();
+  const shortBound = '😀'.repeat(128);
+  const longBound = '😀'.repeat(512);
+  Object.assign(value.adapters[0], {
+    language: shortBound,
+    runtime: shortBound,
+    validator: shortBound,
+    toolchain: longBound,
+  });
+  for (const result of value.adapters[0].results) result.declaration = longBound;
+
+  assert.equal(validate(value), true, JSON.stringify(validate.errors));
+  assert.deepEqual(validateRuntimeEvidence(value).findings, []);
+
+  const over = evidence();
+  over.adapters[0].language = '😀'.repeat(129);
+  assert.equal(validate(over), false, JSON.stringify(validate.errors));
+  assertExecutableRejects(over, '129 Unicode characters exceed adapter language bound');
 });
 
 test('schema-valid duplicate stable errors remain an explicit executable cross-item policy', async () => {
@@ -169,4 +201,30 @@ test('v2 schema and executable both reject non-data-like public error metadata s
   firstResult(unsafe, 1).errors[0].params = { format: 'not an identifier with spaces' };
   assert.equal(validate(unsafe), false);
   assertExecutableRejects(unsafe, 'unbounded/free-form error metadata');
+});
+
+test('malformed known runtime-evidence fields never echo their raw value into findings', () => {
+  const marker = 'secret-looking-output';
+  const mutations = [
+    (value) => { value.schema = marker; },
+    (value) => { value.contractIrId = marker; },
+    (value) => { value.adapters = marker; },
+    (value) => { value.adapters[0].status = marker; },
+    (value) => { value.adapters[0].toolchain = `node@22\n${marker}`; },
+    (value) => { firstResult(value, 0).outputDigest = marker; },
+    (value) => { firstResult(value, 1).errors[0].path = marker; },
+    (value) => { firstResult(value, 1).errors[0].code = `${marker} with spaces`; },
+  ];
+
+  for (const mutate of mutations) {
+    const value = evidence();
+    mutate(value);
+    const runtime = validateRuntimeEvidence(value);
+    assert.ok(runtime.findings.length > 0);
+    assert.equal(JSON.stringify(runtime.findings).includes(marker), false);
+  }
+});
+
+test('v1 remains a supported protocol identity after strict-schema hardening', () => {
+  assert.equal(RUNTIME_EVIDENCE_SCHEMA_V1, 'ores.typespec-json-schema-validator.runtime-evidence/v1');
 });
