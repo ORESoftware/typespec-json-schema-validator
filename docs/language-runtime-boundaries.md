@@ -20,9 +20,28 @@ The npm package publishes three Draft 2020-12 contracts for non-Node producers a
 
 Node consumers may import `@oresoftware/typespec-json-schema-validator/language-boundary-verification`; trusted promotion orchestrators should use `@oresoftware/typespec-json-schema-validator/language-boundary-current-inputs`. Other runtimes should validate the same JSON envelopes against the published schemas before producing or consuming evidence.
 
-Each required target binds a unique language/runtime identity and canonical relative evidence path. Its evidence must bind an immutable 40-character source revision, lowercase SHA-256 artifact digest, exact parity `runId`, exact Contract IR `irId`, concrete generator/toolchain name and version, and explicit `passed` ingress and egress validation. Required targets cannot disable either validation direction.
+Each required target binds a unique language/runtime identity and canonical relative evidence path. Language, runtime, generator, and toolchain identity tokens are bounded to 256 JSON characters, reject leading/trailing whitespace and control characters, and remain case-sensitive. Evidence paths are a distinct contract: they may contain up to 2048 JSON characters and must be relative canonical POSIX paths with no leading/trailing slash, backslash, empty segment, dot segment, leading/trailing whitespace, or control character.
+
+Its evidence must bind an immutable 40-character source revision, lowercase SHA-256 artifact digest, exact parity `runId`, exact Contract IR `irId`, concrete generator/toolchain name and version, and explicit `passed` ingress and egress validation. Required targets cannot disable either validation direction.
 
 Optional target evidence may be absent. If optional evidence is supplied, it is validated with the same strict envelope and identity rules; optional cannot mean unchecked.
+
+## Independent schema/executable lockstep
+
+The public evidence envelopes are TJSV-owned wire contracts, not application-schema authorities. Their Draft 2020-12 grammar is tested with an independent JSON Schema implementation in addition to TJSV's own parser/validator. The independent corpus checks canonical positives, closed-object behavior, required fields, types, boundary lengths, whitespace/control characters, relative-path traversal cases, digest casing/length, status values, and unknown properties.
+
+Rules expressible as one-object Draft 2020-12 constraints stay aligned between the published schema and executable admission. Schema-invalid manifest or evidence envelopes must never be promoted by the JavaScript verifier. Both passed and stopped verification receipts must validate against the published verification-receipt schema.
+
+Some admission rules intentionally remain runtime/cross-object policy rather than JSON Schema grammar. A schema-valid object can therefore still be refused. These rules include:
+
+- uniqueness of the composite language/runtime target identity and evidence-path reuse across target array items;
+- coherence of immutable source revisions across independently valid runtime witnesses;
+- exact parity-receipt and Contract-IR identity binding across separate evidence objects;
+- minimum distinct required-language coverage computed across the configured target set;
+- completeness and convergence of retained parity/differential evidence and Contract-IR declaration scope;
+- fresh current-input provenance tying the retained receipt and Contract IR to the checked-out TypeSpec, generated Schema B, and independently authored Schema A.
+
+Likewise, the evidence schema permits explicit `failed` and `stopped_for_evaluation` status values because they are valid evidence-envelope states; promotion policy still requires `passed` for evidence that is to be admitted.
 
 ## Current-input promotion boundary
 
@@ -34,7 +53,7 @@ Filesystem/compiler/schema failures are collapsed to deterministic public-safe r
 
 ## Fail-closed cases
 
-Admission stops for malformed or stale parity/IR evidence, incorrect authority roles, disabled differential validation, noncanonical identities or paths, prototype-inherited evidence, duplicate target identities, evidence reuse across targets, symbolic or abbreviated source revisions, noncanonical artifact digests, missing required evidence, target/evidence runtime mismatches, stale receipt or IR IDs, blank generator/toolchain identities, non-passed ingress/egress results, or failure to freshly verify the retained Contract IR against current inputs.
+Admission stops for malformed or stale parity/IR evidence, incorrect authority roles, disabled differential validation, noncanonical identities or paths, prototype-inherited evidence, duplicate target identities, evidence reuse across targets, symbolic or abbreviated source revisions, noncanonical artifact digests, missing required evidence, target/evidence runtime mismatches, stale receipt or IR IDs, blank generator/toolchain identities, non-passed ingress/egress results, unknown fields in closed boundary envelopes, or failure to freshly verify the retained Contract IR against current inputs.
 
 The verifier returns `stopped_for_evaluation` with deterministic rule identifiers. Its `verificationId` is a SHA-256 digest over the canonical decision receipt. The digest is integrity metadata, not a signature or an independent attestation.
 
