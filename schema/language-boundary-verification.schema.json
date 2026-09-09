@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/language-boundary-verification/v1",
+  "title": "Cross-language runtime boundary verification receipt",
+  "type": "object",
+  "required": ["schema", "status", "zeroUnexplainedFindings", "binding", "counts", "findings", "verificationId"],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.language-boundary-verification/v1" },
+    "status": { "enum": ["passed", "stopped_for_evaluation"] },
+    "zeroUnexplainedFindings": { "type": "boolean" },
+    "binding": {
+      "type": "object",
+      "required": ["parityReceiptRunId", "contractIrId", "typeSpecAuthority", "jsonSchemaAuthority", "generatedWitnessRole"],
+      "properties": {
+        "parityReceiptRunId": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "contractIrId": { "oneOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "typeSpecAuthority": { "const": "peer" },
+        "jsonSchemaAuthority": { "const": "peer" },
+        "generatedWitnessRole": { "const": "evidence_only" }
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": ["targets", "requiredTargets", "distinctRequiredLanguages", "admittedEvidence", "findings"],
+      "properties": {
+        "targets": { "type": "integer", "minimum": 0 },
+        "requiredTargets": { "type": "integer", "minimum": 0 },
+        "distinctRequiredLanguages": { "type": "integer", "minimum": 0 },
+        "admittedEvidence": { "type": "integer", "minimum": 0 },
+        "findings": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "severity", "resolutionState", "comparison", "pointer", "message", "fingerprint"],
+        "properties": {
+          "ruleId": { "type": "string", "minLength": 1 },
+          "severity": { "const": "error" },
+          "resolutionState": { "const": "unexplained" },
+          "comparison": { "const": "language-runtime-boundary" },
+          "pointer": { "type": "string", "minLength": 1 },
+          "message": { "type": "string", "minLength": 1 },
+          "fingerprint": { "$ref": "#/$defs/sha256" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "verificationId": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
