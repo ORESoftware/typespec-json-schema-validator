@@ -37,11 +37,13 @@ const NON_ASSERTION_METADATA_KEYS = new Set([
 const EXECUTABLE_NORMALIZATION = Object.freeze({
   stripMetadata: false,
   normalizeReference: normalizeRef,
+  normalizeIntegralConstNumber: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
   stripMetadata: true,
   normalizeReference: normalizeComparisonRef,
+  normalizeIntegralConstNumber: true,
 });
 
 export function isPlainObject(value) {
@@ -170,6 +172,24 @@ function canCollapseSimpleTypeUnion(value) {
   return { type: types.sort() };
 }
 
+function normalizeIntegralConstNumber(value, options) {
+  if (!options.normalizeIntegralConstNumber || !isPlainObject(value)) return value;
+  // Under JSON Schema, an integral JSON number satisfies both `number` and
+  // `integer`. If `const` already fixes the only admissible numeric value, then
+  // `type: number` and `type: integer` are assertion-equivalent. Canonicalize
+  // that narrow case for cross-authority comparison only; executable schemas
+  // retain their original type so runtime behavior is never rewritten.
+  if (
+    value.type === 'number'
+    && typeof value.const === 'number'
+    && Number.isFinite(value.const)
+    && Number.isInteger(value.const)
+  ) {
+    return { ...value, type: 'integer' };
+  }
+  return value;
+}
+
 function sortJsonValues(values) {
   // Never deduplicate. In particular, repeated oneOf branches change validity.
   // Use code-unit ordering, not a locale-dependent comparator, for digests.
@@ -237,7 +257,8 @@ function normalizeSchemaNodeWith(value, options) {
     entries.push([targetKey, normalizeKeywordValue(key, value[key], options)]);
   }
   const result = Object.fromEntries(entries);
-  return canCollapseSimpleTypeUnion(result) ?? result;
+  const collapsed = canCollapseSimpleTypeUnion(result) ?? result;
+  return normalizeIntegralConstNumber(collapsed, options);
 }
 
 /**
