@@ -130,6 +130,45 @@ test('assertion differences remain visible after metadata normalization', () => 
   ]);
 });
 
+test('comparison normalization erases only redundant number/integer spelling for a safe integer const', () => {
+  const generated = normalizeSchemaNodeForComparison({ type: 'number', const: 1 });
+  const authored = normalizeSchemaNodeForComparison({ type: 'integer', const: 1 });
+  assert.deepEqual(generated, { const: 1 });
+  assert.deepEqual(authored, { const: 1 });
+  assert.equal(canonicalStringify(generated), canonicalStringify(authored));
+
+  assert.deepEqual(normalizeSchemaNode({ type: 'number', const: 1 }), { const: 1, type: 'number' });
+  assert.deepEqual(normalizeSchemaNode({ type: 'integer', const: 1 }), { const: 1, type: 'integer' });
+});
+
+test('safe integer const normalization applies recursively inside schema locations', () => {
+  const generated = normalizeSchemaNodeForComparison({
+    type: 'object',
+    properties: { schema_version: { type: 'number', const: 1 } },
+  });
+  const authored = normalizeSchemaNodeForComparison({
+    type: 'object',
+    properties: { schema_version: { type: 'integer', const: 1 } },
+  });
+  assert.equal(canonicalStringify(generated), canonicalStringify(authored));
+  assert.deepEqual(generated.properties.schema_version, { const: 1 });
+});
+
+test('number/integer differences remain visible without a provably equivalent safe integer const', () => {
+  const cases = [
+    [{ type: 'number' }, { type: 'integer' }],
+    [{ type: 'number', const: 1.5 }, { type: 'integer', const: 1.5 }],
+    [{ type: 'number', const: 9007199254740992 }, { type: 'integer', const: 9007199254740992 }],
+    [{ type: 'number', enum: [1] }, { type: 'integer', enum: [1] }],
+  ];
+  for (const [left, right] of cases) {
+    assert.notEqual(
+      canonicalStringify(normalizeSchemaNodeForComparison(left)),
+      canonicalStringify(normalizeSchemaNodeForComparison(right)),
+    );
+  }
+});
+
 test('simple nullable anyOf union normalizes to a type set', () => {
   assert.deepEqual(
     normalizeSchemaNode({ anyOf: [{ type: 'null' }, { type: 'string' }] }),
