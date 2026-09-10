@@ -63,14 +63,21 @@ jobs:
         with:
           toolchain: 1.88.0
 
-      - name: Install pinned TJSV closure and TypeScript evidence compiler
+      - name: Install pinned TJSV closure
         working-directory: tjsv
         shell: bash
         run: |
           set -euo pipefail
           npm ci
-          npm install --no-save --package-lock=false typescript@7.0.2
           node ./bin/typespec-json-schema-validator.mjs doctor
+
+      - name: Install isolated TypeScript evidence compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/shared-auth-ts-toolchain"
+          npm install --prefix "$prefix" --no-save --package-lock=false typescript@7.0.2
+          "$prefix/node_modules/.bin/tsc" --version
 
       - name: Run TJSV peer-authority parity and emit Contract IR
         shell: bash
@@ -102,8 +109,9 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/shared-auth-config-ts"
+          tsc="$RUNNER_TEMP/shared-auth-ts-toolchain/node_modules/.bin/tsc"
           mkdir -p "$out"
-          tjsv/node_modules/.bin/tsc \
+          "$tsc" \
             "$CONSUMER_DIR/contracts/shared-auth-config/runtime/typescript/shared-auth-config.ts" \
             --target ES2022 \
             --module ES2022 \
@@ -126,7 +134,8 @@ jobs:
         run: |
           set -euo pipefail
           cd "$CONSUMER_DIR"
-          node contracts/shared-auth-config/runtime/verify-language-boundaries.mjs
+          NODE_PATH="$GITHUB_WORKSPACE/tjsv/node_modules" \
+            node contracts/shared-auth-config/runtime/verify-language-boundaries.mjs
 
       - name: Require complete admission evidence
         shell: bash
