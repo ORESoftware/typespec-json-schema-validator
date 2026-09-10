@@ -247,7 +247,7 @@ test('Contract IR accepts only locally proven aliases for mapped cross-document 
   const values = referenceEvidence();
   const ir = createContractIr(values);
   const user = ir.declarations.find((declaration) => declaration.id === 'Example.User');
-  assert.equal(user.assertionSchema.properties.id.$ref, '#/$defs/Identifier');
+  assert.equal(user.assertionSchema.properties.id.$ref, 'urn:tsjsv:declaration:Identifier');
   assert.equal(ir.authorities.precedence, 'none');
 });
 
