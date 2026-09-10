@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "compatibility": {
+    "repository": "https://github.com/shared-auth/shared-auth-interfaces",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "factors": {
+    "two_factor": {
+      "required": false,
+      "methods": ["totp", "passkey", "security-key", "email-otp", "sms-otp", "backup-code"]
+    },
+    "three_factor": {
+      "enabled": true,
+      "methods": ["backup-code", "sms-otp", "email-otp"]
+    }
+  },
+  "pages": {
+    "show": ["sign-in", "sign-up", "challenge", "recovery", "consent", "error", "signed-out"]
+  },
+  "styling": {
+    "theme": "dark",
+    "brand_name": "Shared Auth Consumer",
+    "accent_color": "#aBc123"
+  }
+}
