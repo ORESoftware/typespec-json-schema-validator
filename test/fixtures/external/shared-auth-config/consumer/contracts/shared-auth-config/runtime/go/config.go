@@ -85,11 +85,11 @@ type StylingPolicy struct {
 }
 
 type SharedAuthConfigFile struct {
-	SchemaVersion int            `json:"schema_version"`
-	Compatibility Compatibility  `json:"compatibility"`
-	Factors       *FactorsPolicy `json:"factors,omitempty"`
-	Pages         *PagesPolicy   `json:"pages,omitempty"`
-	Styling       *StylingPolicy `json:"styling,omitempty"`
+	SchemaVersion int             `json:"schema_version"`
+	Compatibility Compatibility   `json:"compatibility"`
+	Factors       *FactorsPolicy  `json:"factors,omitempty"`
+	Pages         *PagesPolicy    `json:"pages,omitempty"`
+	Styling       *StylingPolicy  `json:"styling,omitempty"`
 }
 
 func ParseJSON(input []byte) (SharedAuthConfigFile, error) {
