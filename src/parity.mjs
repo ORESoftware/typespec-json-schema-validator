@@ -121,7 +121,31 @@ function schemaKindFamily(kind) {
   return kind === 'scalar' || kind === 'scalar-like' || kind === 'alias' ? 'scalar-like' : kind;
 }
 
-function compareExpectedToSchema(expectedDeclarations, schemaMap, lane, findings) {
+function expectedSchemaKindFamily(expected, generatedMap) {
+  const lexicalKind = declarationKindFamily(expected.declaration.kind);
+  if (lexicalKind !== 'model') {
+    return lexicalKind;
+  }
+
+  // TypeSpec permits a named model declaration to be an array model, e.g.
+  // `model Tags is Array<string>`. The lexical inventory correctly records the
+  // declaration keyword as `model`, while the official TypeSpec JSON Schema
+  // emitter necessarily represents that model as an array schema. Treat the
+  // exact generated witness as representation evidence only when it proves an
+  // array. Object models and every other scalar-like shape remain fail-closed.
+  const generated = generatedMap.get(expected.generatedName);
+  if (
+    generated &&
+    schemaKindFamily(generated.kind) === 'scalar-like' &&
+    generated.schema?.type === 'array'
+  ) {
+    return 'scalar-like';
+  }
+
+  return lexicalKind;
+}
+
+function compareExpectedToSchema(expectedDeclarations, schemaMap, lane, findings, generatedMap) {
   const expectedNames = new Set();
   for (const expected of expectedDeclarations.values()) {
     const schemaName = lane === 'generated' ? expected.generatedName : expected.authoredName;
@@ -145,7 +169,7 @@ function compareExpectedToSchema(expectedDeclarations, schemaMap, lane, findings
       );
       continue;
     }
-    const expectedKind = declarationKindFamily(expected.declaration.kind);
+    const expectedKind = expectedSchemaKindFamily(expected, generatedMap);
     const actualKind = schemaKindFamily(actual.kind);
     if (expectedKind !== actualKind) {
       findings.push(
@@ -442,8 +466,8 @@ export function compareParity({
   const generatedMap = buildSchemaMap(generatedCollection, mapping.ignore.generated);
   const authoredMap = buildSchemaMap(authoredCollection, mapping.ignore.authored);
 
-  compareExpectedToSchema(expected, generatedMap, 'generated', findings);
-  compareExpectedToSchema(expected, authoredMap, 'authored', findings);
+  compareExpectedToSchema(expected, generatedMap, 'generated', findings, generatedMap);
+  compareExpectedToSchema(expected, authoredMap, 'authored', findings, generatedMap);
   compareSchemaInventories(generatedMap, authoredMap, expected, findings);
   compareSemanticSchemas(
     generatedMap,
