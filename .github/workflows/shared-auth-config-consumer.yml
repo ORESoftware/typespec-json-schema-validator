@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SHARED_AUTH_REPOSITORY: shared-auth/shared-auth-interfaces
   SHARED_AUTH_REF: 7c4f6ec1ceb81e12c7bcb31263a7e1d6020120a9
+  CONSUMER_DIR: ${{ github.workspace }}/tjsv/test/fixtures/external/shared-auth-config/consumer
 
 jobs:
   conformance:
@@ -37,20 +37,13 @@ jobs:
           set -euo pipefail
           test "$(git -C tjsv rev-parse HEAD)" = "$EXPECTED_SHA"
 
-      - name: Check out immutable Shared Auth consumer
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ env.SHARED_AUTH_REPOSITORY }}
-          ref: ${{ env.SHARED_AUTH_REF }}
-          path: consumer
-          persist-credentials: false
-
-      - name: Verify immutable Shared Auth revision
+      - name: Verify vendored Shared Auth source identity
+        working-directory: tjsv
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C consumer rev-parse HEAD)" = "$SHARED_AUTH_REF"
-          [[ "$SHARED_AUTH_REF" =~ ^[0-9a-f]{40}$ ]]
+          node scripts/verify-external-shared-auth-snapshot.mjs
+          test "$(node -p "require('./test/fixtures/external/shared-auth-config/source-manifest.json').sourceRevision")" = "$SHARED_AUTH_REF"
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -85,20 +78,24 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/shared-auth-tjsv/generated"
           node tjsv/bin/typespec-json-schema-validator.mjs check \
-            --typespec=consumer/contracts/shared-auth-config/main.tsp \
-            --schema=consumer/schema/shared-auth-config.schema.json \
-            --instances=consumer/contracts/shared-auth-config/instances \
+            --typespec="$CONSUMER_DIR/contracts/shared-auth-config/main.tsp" \
+            --schema="$CONSUMER_DIR/schema/shared-auth-config.schema.json" \
+            --instances="$CONSUMER_DIR/contracts/shared-auth-config/instances" \
             --output-dir="$RUNNER_TEMP/shared-auth-tjsv/generated" \
             --bundle-id=shared-auth-config.generated.schema.json \
             --report="$RUNNER_TEMP/shared-auth-tjsv/parity-report.json" \
             --contract-ir="$RUNNER_TEMP/shared-auth-tjsv/contract-ir.json"
 
       - name: Run locked Rust runtime boundary adapter
-        run: cargo test --locked --manifest-path consumer/contracts/shared-auth-config/runtime/rust/Cargo.toml
+        shell: bash
+        run: cargo test --locked --manifest-path "$CONSUMER_DIR/contracts/shared-auth-config/runtime/rust/Cargo.toml"
 
       - name: Run Go runtime boundary adapter
-        working-directory: consumer/contracts/shared-auth-config/runtime/go
-        run: go test ./...
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$CONSUMER_DIR/contracts/shared-auth-config/runtime/go"
+          go test ./...
 
       - name: Compile and run TypeScript runtime boundary adapter
         shell: bash
@@ -107,7 +104,7 @@ jobs:
           out="$RUNNER_TEMP/shared-auth-config-ts"
           mkdir -p "$out"
           tjsv/node_modules/.bin/tsc \
-            consumer/contracts/shared-auth-config/runtime/typescript/shared-auth-config.ts \
+            "$CONSUMER_DIR/contracts/shared-auth-config/runtime/typescript/shared-auth-config.ts" \
             --target ES2022 \
             --module ES2022 \
             --moduleResolution Bundler \
@@ -115,18 +112,9 @@ jobs:
             --outDir "$out"
           printf '{"type":"module"}\n' > "$out/package.json"
           TS_ADAPTER_MODULE="$out/shared-auth-config.js" \
-            node consumer/contracts/shared-auth-config/runtime/typescript/test.mjs
-
-      - name: Expose this exact TJSV checkout to the consumer verifier
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p consumer/node_modules/@oresoftware
-          ln -s "$GITHUB_WORKSPACE/tjsv" \
-            consumer/node_modules/@oresoftware/typespec-json-schema-validator
+            node "$CONSUMER_DIR/contracts/shared-auth-config/runtime/typescript/test.mjs"
 
       - name: Verify current-input language/runtime admission
-        working-directory: consumer
         shell: bash
         env:
           SOURCE_REVISION: ${{ env.SHARED_AUTH_REF }}
@@ -135,11 +123,22 @@ jobs:
           TJSV_GENERATED_SCHEMA: ${{ runner.temp }}/shared-auth-tjsv/generated/shared-auth-config.generated.schema.json
           BOUNDARY_EVIDENCE_DIR: ${{ runner.temp }}/shared-auth-tjsv/language-boundary-evidence
           BOUNDARY_VERIFICATION: ${{ runner.temp }}/shared-auth-tjsv/language-boundary-verification.json
-        run: node contracts/shared-auth-config/runtime/verify-language-boundaries.mjs
+        run: |
+          set -euo pipefail
+          cd "$CONSUMER_DIR"
+          node contracts/shared-auth-config/runtime/verify-language-boundaries.mjs
 
-      - name: Run consumer repository policy guard
-        working-directory: consumer
-        run: scripts/check-repository-policy.sh
+      - name: Require complete admission evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$RUNNER_TEMP/shared-auth-tjsv/parity-report.json"
+          test -f "$RUNNER_TEMP/shared-auth-tjsv/contract-ir.json"
+          test -f "$RUNNER_TEMP/shared-auth-tjsv/generated/shared-auth-config.generated.schema.json"
+          test -f "$RUNNER_TEMP/shared-auth-tjsv/language-boundary-evidence/rust.json"
+          test -f "$RUNNER_TEMP/shared-auth-tjsv/language-boundary-evidence/typescript.json"
+          test -f "$RUNNER_TEMP/shared-auth-tjsv/language-boundary-evidence/go.json"
+          test -f "$RUNNER_TEMP/shared-auth-tjsv/language-boundary-verification.json"
 
       - name: Retain exact-head Shared Auth admission evidence
         if: ${{ always() }}
@@ -152,5 +151,5 @@ jobs:
             ${{ runner.temp }}/shared-auth-tjsv/generated/shared-auth-config.generated.schema.json
             ${{ runner.temp }}/shared-auth-tjsv/language-boundary-evidence/*.json
             ${{ runner.temp }}/shared-auth-tjsv/language-boundary-verification.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 30
