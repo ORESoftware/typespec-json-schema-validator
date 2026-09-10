@@ -124,7 +124,10 @@ pub struct StylingPolicy {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SharedAuthConfigFile {
-    pub schema_version: u32,
+    // `serde_json::Number` intentionally preserves JSON numeric wire semantics.
+    // Draft 2020-12 `integer` admits mathematically integral spellings such as
+    // `1.0`, while the canonical TOML surface still uses `schema_version = 1`.
+    pub schema_version: serde_json::Number,
     pub compatibility: Compatibility,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub factors: Option<FactorsPolicy>,
@@ -142,9 +145,7 @@ pub fn parse_shared_auth_config_json(input: &str) -> Result<SharedAuthConfigFile
 }
 
 fn validate(config: &SharedAuthConfigFile) -> Result<(), String> {
-    if config.schema_version != 1 {
-        return Err("schema_version must equal 1".into());
-    }
+    validate_schema_version(&config.schema_version)?;
     match &config.compatibility {
         Compatibility::Exact(value) => {
             validate_repository(&value.repository)?;
@@ -191,6 +192,19 @@ fn validate(config: &SharedAuthConfigFile) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn validate_schema_version(value: &serde_json::Number) -> Result<(), String> {
+    let admitted = value.as_u64() == Some(1)
+        || value.as_i64() == Some(1)
+        || value
+            .as_f64()
+            .is_some_and(|number| number == 1.0 && number.fract() == 0.0);
+    if admitted {
+        Ok(())
+    } else {
+        Err("schema_version must equal integer 1".into())
+    }
 }
 
 fn validate_repository(value: &str) -> Result<(), String> {
