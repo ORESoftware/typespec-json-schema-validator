@@ -122,6 +122,15 @@ jobs:
           TS_ADAPTER_MODULE="$out/shared-auth-config.js" \
             node "$CONSUMER_DIR/contracts/shared-auth-config/runtime/typescript/test.mjs"
 
+      - name: Expose exact TJSV package to the vendored ESM verifier
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$CONSUMER_DIR/node_modules/@oresoftware"
+          ln -s "$GITHUB_WORKSPACE/tjsv" \
+            "$CONSUMER_DIR/node_modules/@oresoftware/typespec-json-schema-validator"
+          test -f "$CONSUMER_DIR/node_modules/@oresoftware/typespec-json-schema-validator/package.json"
+
       - name: Verify current-input language/runtime admission
         shell: bash
         env:
@@ -134,8 +143,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$CONSUMER_DIR"
-          NODE_PATH="$GITHUB_WORKSPACE/tjsv/node_modules" \
-            node contracts/shared-auth-config/runtime/verify-language-boundaries.mjs
+          node contracts/shared-auth-config/runtime/verify-language-boundaries.mjs
 
       - name: Require complete admission evidence
         shell: bash
