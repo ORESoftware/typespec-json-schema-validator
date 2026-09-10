@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -112,11 +113,40 @@ function appendBounded(current, chunk, maxBytes) {
   return buffer.subarray(buffer.length - maxBytes).toString('utf8');
 }
 
+export function resolveCommandInvocation(command, args, options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const platform = options.platform ?? process.platform;
+  const fileExists = options.fileExists ?? existsSync;
+
+  if (platform === 'win32' && basename(command).toLowerCase() === 'tsp.cmd') {
+    const roots = [];
+    const commandDir = dirname(command);
+    if (basename(commandDir).toLowerCase() === '.bin') {
+      roots.push(dirname(commandDir));
+    }
+    roots.push(join(MODULE_ROOT, 'node_modules'), join(cwd, 'node_modules'));
+
+    for (const root of [...new Set(roots)]) {
+      const compilerCli = join(root, '@typespec', 'compiler', 'cmd', 'tsp.js');
+      if (fileExists(compilerCli)) {
+        return {
+          executable: process.execPath,
+          args: [compilerCli, ...args],
+          logicalCommand: command,
+        };
+      }
+    }
+  }
+
+  return { executable: command, args: [...args], logicalCommand: command };
+}
+
 export function runCommand(command, args, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const maxOutputBytes = options.maxOutputBytes ?? MAX_CAPTURE_BYTES;
+  const invocation = resolveCommandInvocation(command, args, { cwd });
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(invocation.executable, invocation.args, {
       cwd,
       env: options.env ?? process.env,
       shell: false,
