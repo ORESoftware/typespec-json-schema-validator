@@ -131,7 +131,7 @@
       "$id": "SharedAuthConfigFile",
       "type": "object",
       "properties": {
-        "schema_version": {"type": "integer", "const": 1},
+        "schema_version": {"type": "integer", "minimum": 1, "maximum": 1},
         "compatibility": {"$ref": "Compatibility"},
         "factors": {"$ref": "FactorsPolicy"},
         "pages": {"$ref": "PagesPolicy"},

@@ -1,8 +1,16 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashSet;
 use std::hash::Hash;
 
 const INTERFACES_REPOSITORY: &str = "https://github.com/shared-auth/shared-auth-interfaces";
+
+fn deserialize_present_non_null<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum FactorMethod {
@@ -79,58 +87,61 @@ pub enum Compatibility {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TwoFactorPolicy {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub required: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub methods: Option<Vec<FactorMethod>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ThreeFactorPolicy {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub methods: Option<Vec<FactorMethod>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FactorsPolicy {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub two_factor: Option<TwoFactorPolicy>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub three_factor: Option<ThreeFactorPolicy>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PagesPolicy {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub show: Option<Vec<AuthPage>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StylingPolicy {
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub theme: Option<Theme>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub brand_name: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub accent_color: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SharedAuthConfigFile {
-    pub schema_version: u32,
+    // `serde_json::Number` intentionally preserves JSON numeric wire semantics.
+    // Draft 2020-12 `integer` admits mathematically integral spellings such as
+    // `1.0`, while the canonical TOML surface still uses `schema_version = 1`.
+    pub schema_version: serde_json::Number,
     pub compatibility: Compatibility,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub factors: Option<FactorsPolicy>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub pages: Option<PagesPolicy>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_present_non_null", skip_serializing_if = "Option::is_none")]
     pub styling: Option<StylingPolicy>,
 }
 
@@ -142,9 +153,7 @@ pub fn parse_shared_auth_config_json(input: &str) -> Result<SharedAuthConfigFile
 }
 
 fn validate(config: &SharedAuthConfigFile) -> Result<(), String> {
-    if config.schema_version != 1 {
-        return Err("schema_version must equal 1".into());
-    }
+    validate_schema_version(&config.schema_version)?;
     match &config.compatibility {
         Compatibility::Exact(value) => {
             validate_repository(&value.repository)?;
@@ -191,6 +200,19 @@ fn validate(config: &SharedAuthConfigFile) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn validate_schema_version(value: &serde_json::Number) -> Result<(), String> {
+    let admitted = value.as_u64() == Some(1)
+        || value.as_i64() == Some(1)
+        || value
+            .as_f64()
+            .is_some_and(|number| number == 1.0 && number.fract() == 0.0);
+    if admitted {
+        Ok(())
+    } else {
+        Err("schema_version must equal integer 1".into())
+    }
 }
 
 fn validate_repository(value: &str) -> Result<(), String> {

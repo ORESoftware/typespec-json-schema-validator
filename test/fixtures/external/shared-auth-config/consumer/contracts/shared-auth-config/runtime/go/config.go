@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"unicode/utf8"
 )
@@ -85,7 +86,9 @@ type StylingPolicy struct {
 }
 
 type SharedAuthConfigFile struct {
-	SchemaVersion int             `json:"schema_version"`
+	// json.Number preserves the admitted JSON spelling for round-trip evidence.
+	// Draft 2020-12 integer semantics include mathematically integral 1.0.
+	SchemaVersion json.Number     `json:"schema_version"`
 	Compatibility Compatibility   `json:"compatibility"`
 	Factors       *FactorsPolicy  `json:"factors,omitempty"`
 	Pages         *PagesPolicy    `json:"pages,omitempty"`
@@ -93,8 +96,13 @@ type SharedAuthConfigFile struct {
 }
 
 func ParseJSON(input []byte) (SharedAuthConfigFile, error) {
+	if err := rejectExplicitNulls(input); err != nil {
+		return SharedAuthConfigFile{}, err
+	}
+
 	decoder := json.NewDecoder(bytes.NewReader(input))
 	decoder.DisallowUnknownFields()
+	decoder.UseNumber()
 
 	var config SharedAuthConfigFile
 	if err := decoder.Decode(&config); err != nil {
@@ -109,6 +117,69 @@ func ParseJSON(input []byte) (SharedAuthConfigFile, error) {
 	return config, nil
 }
 
+func rejectExplicitNulls(input []byte) error {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(input, &root); err != nil {
+		return err
+	}
+	if err := rejectNullFields(root, "config", "factors", "pages", "styling"); err != nil {
+		return err
+	}
+
+	if compatibility := rawObject(root["compatibility"]); compatibility != nil {
+		if err := rejectNullFields(compatibility, "compatibility", "commit", "range"); err != nil {
+			return err
+		}
+	}
+	if factors := rawObject(root["factors"]); factors != nil {
+		if err := rejectNullFields(factors, "factors", "two_factor", "three_factor"); err != nil {
+			return err
+		}
+		if twoFactor := rawObject(factors["two_factor"]); twoFactor != nil {
+			if err := rejectNullFields(twoFactor, "factors.two_factor", "required", "methods"); err != nil {
+				return err
+			}
+		}
+		if threeFactor := rawObject(factors["three_factor"]); threeFactor != nil {
+			if err := rejectNullFields(threeFactor, "factors.three_factor", "enabled", "methods"); err != nil {
+				return err
+			}
+		}
+	}
+	if pages := rawObject(root["pages"]); pages != nil {
+		if err := rejectNullFields(pages, "pages", "show"); err != nil {
+			return err
+		}
+	}
+	if styling := rawObject(root["styling"]); styling != nil {
+		if err := rejectNullFields(styling, "styling", "theme", "brand_name", "accent_color"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rawObject(raw json.RawMessage) map[string]json.RawMessage {
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return nil
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &object); err != nil {
+		return nil
+	}
+	return object
+}
+
+func rejectNullFields(object map[string]json.RawMessage, path string, fields ...string) error {
+	for _, field := range fields {
+		raw, present := object[field]
+		if present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+			return fmt.Errorf("%s.%s must not be null", path, field)
+		}
+	}
+	return nil
+}
+
 func requireEOF(decoder *json.Decoder) error {
 	var extra any
 	if err := decoder.Decode(&extra); errors.Is(err, io.EOF) {
@@ -120,8 +191,8 @@ func requireEOF(decoder *json.Decoder) error {
 }
 
 func (config SharedAuthConfigFile) Validate() error {
-	if config.SchemaVersion != 1 {
-		return errors.New("schema_version must equal 1")
+	if !validSchemaVersion(config.SchemaVersion) {
+		return errors.New("schema_version must equal integer 1")
 	}
 	if err := config.Compatibility.Validate(); err != nil {
 		return err
@@ -158,6 +229,11 @@ func (config SharedAuthConfigFile) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validSchemaVersion(value json.Number) bool {
+	parsed, err := value.Float64()
+	return err == nil && parsed == 1 && math.Trunc(parsed) == parsed
 }
 
 func (compat Compatibility) Validate() error {
