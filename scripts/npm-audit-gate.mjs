@@ -17,13 +17,17 @@ const receiptPath = resolve(
 );
 
 function commandText(command, args) {
-  const result = spawnSync(command, args, {
+  const npmCli = command === 'npm' && typeof process.env.npm_execpath === 'string'
+    ? process.env.npm_execpath.trim()
+    : '';
+  const executable = npmCli ? process.execPath : command;
+  const executableArgs = npmCli ? [npmCli, ...args] : args;
+  return spawnSync(executable, executableArgs, {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
     env: process.env,
   });
-  return result;
 }
 
 function cleanOutput(result) {
