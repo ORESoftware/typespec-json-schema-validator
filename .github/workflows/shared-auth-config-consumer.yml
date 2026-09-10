@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SHARED_AUTH_REF: 7c4f6ec1ceb81e12c7bcb31263a7e1d6020120a9
+  SHARED_AUTH_REF: b1ee362cbe69461ab23a38b8d6e25e277438965a
   CONSUMER_DIR: ${{ github.workspace }}/tjsv/test/fixtures/external/shared-auth-config/consumer
 
 jobs:
