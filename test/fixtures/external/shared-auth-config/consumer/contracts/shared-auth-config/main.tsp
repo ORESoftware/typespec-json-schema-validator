@@ -106,9 +106,7 @@ model StylingPolicy {
 
 @id("SharedAuthConfigFile")
 model SharedAuthConfigFile {
-  @minValue(1)
-  @maxValue(1)
-  schema_version: int32;
+  schema_version: 1;
   compatibility: Compatibility;
   factors?: FactorsPolicy;
   pages?: PagesPolicy;
