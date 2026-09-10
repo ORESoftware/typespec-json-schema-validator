@@ -1,12 +1,13 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
 const MODULE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_CAPTURE_BYTES = 256 * 1024;
+const WINDOWS_ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\)/u;
 
 function resolveJsonSchemaEmitter() {
   try {
@@ -113,21 +114,40 @@ function appendBounded(current, chunk, maxBytes) {
   return buffer.subarray(buffer.length - maxBytes).toString('utf8');
 }
 
+function commandPathApi(command, platform) {
+  // Unit tests deliberately exercise Windows routing from POSIX hosts, so use
+  // win32 path semantics only when the command itself is a drive/UNC path.
+  if (platform === 'win32' && WINDOWS_ABSOLUTE_PATH.test(command)) {
+    return win32;
+  }
+  return { basename, dirname, join };
+}
+
 export function resolveCommandInvocation(command, args, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const platform = options.platform ?? process.platform;
   const fileExists = options.fileExists ?? existsSync;
+  const commandPath = commandPathApi(command, platform);
 
-  if (platform === 'win32' && basename(command).toLowerCase() === 'tsp.cmd') {
-    const roots = [];
-    const commandDir = dirname(command);
-    if (basename(commandDir).toLowerCase() === '.bin') {
-      roots.push(dirname(commandDir));
+  if (platform === 'win32' && commandPath.basename(command).toLowerCase() === 'tsp.cmd') {
+    const candidates = [];
+    const commandDir = commandPath.dirname(command);
+    if (commandPath.basename(commandDir).toLowerCase() === '.bin') {
+      const nodeModulesRoot = commandPath.dirname(commandDir);
+      candidates.push(commandPath.join(
+        nodeModulesRoot,
+        '@typespec',
+        'compiler',
+        'cmd',
+        'tsp.js',
+      ));
     }
-    roots.push(join(MODULE_ROOT, 'node_modules'), join(cwd, 'node_modules'));
+    candidates.push(
+      join(MODULE_ROOT, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp.js'),
+      join(cwd, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp.js'),
+    );
 
-    for (const root of [...new Set(roots)]) {
-      const compilerCli = join(root, '@typespec', 'compiler', 'cmd', 'tsp.js');
+    for (const compilerCli of [...new Set(candidates)]) {
       if (fileExists(compilerCli)) {
         return {
           executable: process.execPath,
