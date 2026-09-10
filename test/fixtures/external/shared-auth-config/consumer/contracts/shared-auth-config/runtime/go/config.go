@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 	"unicode/utf8"
 )
@@ -85,11 +86,13 @@ type StylingPolicy struct {
 }
 
 type SharedAuthConfigFile struct {
-	SchemaVersion int             `json:"schema_version"`
-	Compatibility Compatibility   `json:"compatibility"`
-	Factors       *FactorsPolicy  `json:"factors,omitempty"`
-	Pages         *PagesPolicy    `json:"pages,omitempty"`
-	Styling       *StylingPolicy  `json:"styling,omitempty"`
+	// json.Number preserves the admitted JSON spelling for round-trip evidence.
+	// Draft 2020-12 integer semantics include mathematically integral 1.0.
+	SchemaVersion json.Number    `json:"schema_version"`
+	Compatibility Compatibility  `json:"compatibility"`
+	Factors       *FactorsPolicy `json:"factors,omitempty"`
+	Pages         *PagesPolicy   `json:"pages,omitempty"`
+	Styling       *StylingPolicy `json:"styling,omitempty"`
 }
 
 func ParseJSON(input []byte) (SharedAuthConfigFile, error) {
@@ -120,8 +123,8 @@ func requireEOF(decoder *json.Decoder) error {
 }
 
 func (config SharedAuthConfigFile) Validate() error {
-	if config.SchemaVersion != 1 {
-		return errors.New("schema_version must equal 1")
+	if !validSchemaVersion(config.SchemaVersion) {
+		return errors.New("schema_version must equal integer 1")
 	}
 	if err := config.Compatibility.Validate(); err != nil {
 		return err
@@ -158,6 +161,11 @@ func (config SharedAuthConfigFile) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validSchemaVersion(value json.Number) bool {
+	parsed, err := value.Float64()
+	return err == nil && parsed == 1 && math.Trunc(parsed) == parsed
 }
 
 func (compat Compatibility) Validate() error {
