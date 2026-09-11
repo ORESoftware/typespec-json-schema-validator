@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const actionUrl = new URL("../../action.yml", import.meta.url);
-const action = await readFile(actionUrl, "utf8");
+const action = (await readFile(actionUrl, "utf8")).replace(/\r\n?/gu, "\n");
 
 test("fleet action remains composite and lockfile-pinned", () => {
   assert.match(action, /runs:\n  using: composite/);
