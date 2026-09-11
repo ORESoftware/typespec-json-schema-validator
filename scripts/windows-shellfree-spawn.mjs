@@ -8,9 +8,14 @@ const PACKAGE_ALIASES = new Set([
   'typespec-json-schema-validator.cmd',
 ]);
 
+function isWindowsCommandShim(value) {
+  return typeof value === 'string' && /\.cmd$/iu.test(value);
+}
+
 /**
  * Translate only the Windows command shims owned by release preflight into
  * direct Node argv. No shell is enabled and no command string is interpolated.
+ * Any other .cmd shim fails closed in this dedicated preflight process.
  */
 export function normalizeWindowsShellFreeSpawn(command, args = [], options = {}) {
   const platform = options.platform ?? process.platform;
@@ -22,26 +27,40 @@ export function normalizeWindowsShellFreeSpawn(command, args = [], options = {})
 
   if (commandName === 'npm.cmd') {
     const npmExecPath = options.npmExecPath ?? process.env.npm_execpath;
-    if (typeof npmExecPath !== 'string' || !win32.isAbsolute(npmExecPath)) {
-      throw new Error('npm_execpath is unavailable or not absolute on Windows');
+    if (
+      typeof npmExecPath !== 'string'
+      || !win32.isAbsolute(npmExecPath)
+      || isWindowsCommandShim(npmExecPath)
+    ) {
+      throw new Error('npm_execpath must be an absolute non-.cmd entrypoint on Windows');
     }
     return { command: nodeExecutable, args: [npmExecPath, ...args] };
   }
 
-  if (PACKAGE_ALIASES.has(commandName) && win32.isAbsolute(commandText)) {
+  if (PACKAGE_ALIASES.has(commandName)) {
+    if (!win32.isAbsolute(commandText)) {
+      throw new Error(`package-owned Windows shim must be absolute: ${commandName}`);
+    }
     const binDirectory = win32.dirname(commandText);
-    if (win32.basename(binDirectory).toLowerCase() !== '.bin') {
-      return { command, args: [...args] };
+    const nodeModulesDirectory = win32.dirname(binDirectory);
+    if (
+      win32.basename(binDirectory).toLowerCase() !== '.bin'
+      || win32.basename(nodeModulesDirectory).toLowerCase() !== 'node_modules'
+    ) {
+      throw new Error(`package-owned Windows shim is outside node_modules\\.bin: ${commandName}`);
     }
     const packageBin = win32.join(
-      binDirectory,
-      '..',
+      nodeModulesDirectory,
       '@oresoftware',
       'typespec-json-schema-validator',
       'bin',
       'typespec-json-schema-validator.mjs',
     );
     return { command: nodeExecutable, args: [packageBin, ...args] };
+  }
+
+  if (isWindowsCommandShim(commandText)) {
+    throw new Error(`release preflight refuses unapproved Windows command shim: ${commandName}`);
   }
 
   return { command, args: [...args] };

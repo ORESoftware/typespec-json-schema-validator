@@ -43,13 +43,13 @@ test('Windows adapter recognizes all package-owned compatibility aliases', () =>
   }
 });
 
-test('non-owned commands and non-Windows platforms remain untouched', () => {
+test('ordinary executables and non-Windows platforms remain untouched', () => {
   assert.deepEqual(
-    normalizeWindowsShellFreeSpawn(String.raw`C:\tools\other.cmd`, ['x'], {
+    normalizeWindowsShellFreeSpawn(String.raw`C:\tools\node.exe`, ['x'], {
       platform: 'win32',
       nodeExecutable: String.raw`C:\node\node.exe`,
     }),
-    { command: String.raw`C:\tools\other.cmd`, args: ['x'] },
+    { command: String.raw`C:\tools\node.exe`, args: ['x'] },
   );
   assert.deepEqual(
     normalizeWindowsShellFreeSpawn('npm', ['pack'], { platform: 'linux' }),
@@ -57,15 +57,44 @@ test('non-owned commands and non-Windows platforms remain untouched', () => {
   );
 });
 
-test('Windows npm translation fails closed for explicitly invalid npm_execpath values', () => {
-  for (const npmExecPath of ['', 'node_modules/npm/bin/npm-cli.js']) {
+test('unapproved Windows command shims fail closed before spawn', () => {
+  assert.throws(
+    () => normalizeWindowsShellFreeSpawn(String.raw`C:\tools\other.cmd`, ['x'], {
+      platform: 'win32',
+      nodeExecutable: String.raw`C:\node\node.exe`,
+    }),
+    /refuses unapproved Windows command shim/u,
+  );
+});
+
+test('package-owned aliases fail closed outside node_modules .bin', () => {
+  for (const executable of [
+    String.raw`D:\consumer\.bin\tjsv.cmd`,
+    String.raw`tjsv.cmd`,
+  ]) {
+    assert.throws(
+      () => normalizeWindowsShellFreeSpawn(executable, ['doctor'], {
+        platform: 'win32',
+        nodeExecutable: String.raw`C:\node\node.exe`,
+      }),
+      /package-owned Windows shim/u,
+    );
+  }
+});
+
+test('Windows npm translation fails closed for invalid npm_execpath values', () => {
+  for (const npmExecPath of [
+    '',
+    'node_modules/npm/bin/npm-cli.js',
+    String.raw`C:\node\npm.cmd`,
+  ]) {
     assert.throws(
       () => normalizeWindowsShellFreeSpawn('npm.cmd', ['pack'], {
         platform: 'win32',
         nodeExecutable: String.raw`C:\node\node.exe`,
         npmExecPath,
       }),
-      /npm_execpath is unavailable or not absolute/u,
+      /npm_execpath must be an absolute non-\.cmd entrypoint/u,
     );
   }
 });
