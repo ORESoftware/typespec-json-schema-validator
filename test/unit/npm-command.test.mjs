@@ -12,7 +12,7 @@ test('non-Windows npm uses the direct command without shell mediation', () => {
     args: ['--version'],
     platform: 'linux',
     execPath: '/usr/bin/node',
-    npmExecPath: undefined,
+    npmExecPath: null,
     isFile: () => false,
   }), {
     executable: 'npm',
@@ -37,13 +37,13 @@ test('Windows prefers an explicit absolute npm_execpath when it exists', () => {
   assert.equal(result.error, null);
 });
 
-test('Windows falls back to setup-node adjacent npm-cli.js when npm_execpath is absent', () => {
+test('Windows falls back to setup-node adjacent npm-cli.js when npm_execpath is intentionally absent', () => {
   const result = resolveNpmInvocation({
     command: 'npm',
     args: ['--version'],
     platform: 'win32',
     execPath: WINDOWS_NODE,
-    npmExecPath: undefined,
+    npmExecPath: null,
     isFile: (path) => path === WINDOWS_NPM,
   });
   assert.equal(result.executable, WINDOWS_NODE);
@@ -65,13 +65,13 @@ test('Windows ignores a relative npm_execpath and still uses the adjacent immuta
   assert.equal(result.source, 'node-adjacent-npm-cli');
 });
 
-test('Windows fails closed when no npm JavaScript entrypoint is available', () => {
+test('Windows fails closed when no npm JavaScript entrypoint is intentionally available', () => {
   const result = resolveNpmInvocation({
     command: 'npm',
     args: ['--version'],
     platform: 'win32',
     execPath: WINDOWS_NODE,
-    npmExecPath: undefined,
+    npmExecPath: null,
     isFile: () => false,
   });
   assert.equal(result.executable, null);
