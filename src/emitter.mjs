@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
@@ -33,8 +33,6 @@ async function overlayNodeModulePath(path) {
 function createPinnedCompilerHost() {
   return {
     ...NodeHost,
-    // The subprocess compiler is intentionally quiet here. The outer CLI owns the receipt and
-    // human-readable summary; diagnostics are collected from the returned Program below.
     logSink: { log() {} },
     async stat(path) {
       return NodeHost.stat(await overlayNodeModulePath(path));
@@ -112,11 +110,36 @@ function appendBounded(current, chunk, maxBytes) {
   return buffer.subarray(buffer.length - maxBytes).toString('utf8');
 }
 
+/**
+ * Translate only npm's local Windows `tsp.cmd` shim into the pinned compiler's
+ * JavaScript entry point. Node cannot execute `.cmd` directly with `shell:false`
+ * on Windows, while enabling a general shell would widen the command boundary.
+ */
+export function normalizeSpawnCommand(command, args, options = {}) {
+  const platform = options.platform ?? process.platform;
+  const nodeExecutable = options.nodeExecutable ?? process.execPath;
+  if (platform === 'win32') {
+    const directory = win32.dirname(command);
+    if (
+      win32.isAbsolute(command)
+      && win32.basename(command).toLowerCase() === 'tsp.cmd'
+      && win32.basename(directory).toLowerCase() === '.bin'
+    ) {
+      return {
+        command: nodeExecutable,
+        args: [win32.join(directory, '..', '@typespec', 'compiler', 'cmd', 'tsp.js'), ...args],
+      };
+    }
+  }
+  return { command, args: [...args] };
+}
+
 export function runCommand(command, args, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const maxOutputBytes = options.maxOutputBytes ?? MAX_CAPTURE_BYTES;
+  const launch = normalizeSpawnCommand(command, args);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(launch.command, launch.args, {
       cwd,
       env: options.env ?? process.env,
       shell: false,
