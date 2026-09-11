@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join, normalize } from 'node:path';
-import { resolveCommandInvocation } from '../../src/emitter.mjs';
+import { overlayNodeModuleCandidate, resolveCommandInvocation } from '../../src/emitter.mjs';
 
 function assertInvocationPath(actual, expected) {
   assert.equal(normalize(actual), normalize(expected));
@@ -50,6 +50,26 @@ test('explicit JavaScript TypeSpec binaries run through Node on Windows', () => 
   assertInvocationPath(invocation.args[0], command);
   assert.deepEqual(invocation.args.slice(1), ['compile', 'contract.tsp']);
   assertInvocationPath(invocation.logicalCommand, command);
+});
+
+test('module overlays normalize Windows and mixed separators before mapping to pinned dependencies', () => {
+  for (const missing of [
+    String.raw`D:\temp\fixture\node_modules\@typespec\json-schema\package.json`,
+    'D:\\temp\\fixture/node_modules/@typespec/json-schema/package.json',
+  ]) {
+    const candidate = overlayNodeModuleCandidate(missing);
+    assert.ok(candidate);
+    assert.notEqual(candidate, missing);
+    assert.ok(
+      normalize(candidate).endsWith(normalize(join(
+        'node_modules',
+        '@typespec',
+        'json-schema',
+        'package.json',
+      ))),
+      candidate,
+    );
+  }
 });
 
 test('non-TypeSpec command shims are not routed through a shell or rewritten', () => {
