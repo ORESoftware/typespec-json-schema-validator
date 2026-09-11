@@ -46,11 +46,12 @@ test('Windows may use an existing npm_execpath only inside the active Node insta
 });
 
 test('Windows refuses an npm_execpath outside the active Node installation', () => {
+  const untrusted = 'D:\\untrusted\\npm-cli.js';
   assert.throws(() => resolveNpmLaunch(['audit'], {
     platform: 'win32',
     execPath: 'C:\\node\\22.16.0\\node.exe',
-    env: { npm_execpath: 'D:\\untrusted\\npm-cli.js' },
-    exists: () => true,
+    env: { npm_execpath: untrusted },
+    exists: (candidate) => candidate === untrusted,
   }), /npm CLI JS entry point is unavailable/u);
 });
 
