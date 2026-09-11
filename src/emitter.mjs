@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
@@ -20,17 +20,27 @@ function resolveJsonSchemaEmitter() {
   }
 }
 
+export function overlayNodeModuleCandidate(path) {
+  const normalized = path.replaceAll('\\', '/');
+  const marker = '/node_modules/';
+  const markerIndex = normalized.lastIndexOf(marker);
+  const suffix = markerIndex >= 0
+    ? normalized.slice(markerIndex + marker.length)
+    : normalized.startsWith('node_modules/')
+      ? normalized.slice('node_modules/'.length)
+      : undefined;
+  if (!suffix) {
+    return undefined;
+  }
+  return join(MODULE_ROOT, 'node_modules', ...suffix.split('/').filter(Boolean));
+}
+
 async function overlayNodeModulePath(path) {
   if (await exists(path)) {
     return path;
   }
-  const marker = `${sep}node_modules${sep}`;
-  const markerIndex = path.indexOf(marker);
-  if (markerIndex < 0) {
-    return path;
-  }
-  const candidate = join(MODULE_ROOT, 'node_modules', path.slice(markerIndex + marker.length));
-  return (await exists(candidate)) ? candidate : path;
+  const candidate = overlayNodeModuleCandidate(path);
+  return candidate && await exists(candidate) ? candidate : path;
 }
 
 function createPinnedCompilerHost() {
