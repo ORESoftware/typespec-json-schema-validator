@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import {
   evaluateAudit,
   failedAuditReceipt,
@@ -16,10 +17,34 @@ const receiptPath = resolve(
   process.env.TSJSV_NPM_AUDIT_RECEIPT || '.typespec-json-schema-validator/npm-audit-receipt.json',
 );
 
-function commandText(command, args) {
-  const npmCli = command === 'npm' && typeof process.env.npm_execpath === 'string'
+function npmCliCandidate() {
+  const configured = typeof process.env.npm_execpath === 'string'
     ? process.env.npm_execpath.trim()
     : '';
+  const candidates = [];
+
+  if (configured) {
+    if (/\.(?:cjs|mjs|js)$/iu.test(configured)) {
+      candidates.push(configured);
+    }
+    if (/\.(?:cmd|bat)$/iu.test(configured)) {
+      candidates.push(join(dirname(configured), 'node_modules', 'npm', 'bin', 'npm-cli.js'));
+    }
+  }
+
+  if (process.platform === 'win32') {
+    candidates.push(join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'));
+  } else {
+    candidates.push(
+      join(dirname(dirname(process.execPath)), 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    );
+  }
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+function commandText(command, args) {
+  const npmCli = command === 'npm' ? npmCliCandidate() : null;
   const executable = npmCli ? process.execPath : command;
   const executableArgs = npmCli ? [npmCli, ...args] : args;
   return spawnSync(executable, executableArgs, {
@@ -27,6 +52,7 @@ function commandText(command, args) {
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
     env: process.env,
+    shell: false,
   });
 }
 
