@@ -71,7 +71,7 @@
     "audit:prod": "node ./scripts/npm-audit-gate.mjs",
     "check": "node ./scripts/check.mjs",
     "flags:audit": "f2e audit ./.cli-flags.toml",
-    "release:preflight": "node ./scripts/release-preflight.mjs && node ./scripts/release-language-boundary-preflight.mjs",
+    "release:preflight": "node ./scripts/release-preflight-entry.mjs",
     "test": "node --test ./test/unit/*.test.mjs",
     "test:integration": "node --test ./test/integration/*.test.mjs",
     "test:all": "npm run check && npm run flags:audit && npm test && npm run test:integration"
