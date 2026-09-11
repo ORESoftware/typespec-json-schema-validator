@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import { nodeModuleOverlayCandidate, normalizeSpawnCommand } from '../../src/emitter.mjs';
@@ -49,8 +50,8 @@ test('non-TypeSpec commands and non-Windows platforms are left untouched', () =>
 });
 
 test('pinned module overlay accepts native and TypeSpec-normalized Windows separators', () => {
-  const moduleRoot = String.raw`C:\repo\tjsv`;
-  const expected = String.raw`C:\repo\tjsv\node_modules\@typespec\json-schema`;
+  const moduleRoot = join(process.cwd(), 'overlay-root');
+  const expected = join(moduleRoot, 'node_modules', '@typespec', 'json-schema');
 
   assert.equal(
     nodeModuleOverlayCandidate(String.raw`D:\consumer\node_modules\@typespec\json-schema`, moduleRoot),
