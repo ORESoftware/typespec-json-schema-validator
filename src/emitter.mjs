@@ -4,7 +4,6 @@ import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
-const MODULE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_CAPTURE_BYTES = 256 * 1024;
 
 function resolveJsonSchemaEmitter() {
@@ -18,9 +17,34 @@ function resolveJsonSchemaEmitter() {
 }
 
 /**
+ * Return the directory whose node_modules contains one resolved dependency.
+ *
+ * npm may either keep TJSV dependencies nested below the package or hoist them
+ * into the consuming installation's node_modules. Deriving this root from the
+ * dependency Node actually resolved keeps the pinned compiler fallback aligned
+ * with both layouts instead of assuming TJSV_PACKAGE/node_modules exists.
+ */
+export function dependencyInstallRoot(resolvedDependencyPath) {
+  let current = dirname(resolvedDependencyPath);
+  for (let depth = 0; depth < 32; depth += 1) {
+    if (basename(current).toLowerCase() === 'node_modules') {
+      return dirname(current);
+    }
+    const parent = dirname(current);
+    if (parent === current) {
+      break;
+    }
+    current = parent;
+  }
+  throw new Error('resolved TypeSpec dependency is not contained by a node_modules directory');
+}
+
+const MODULE_ROOT = dependencyInstallRoot(resolveJsonSchemaEmitter());
+
+/**
  * TypeSpec normalizes compiler paths to forward slashes on some Windows code paths.
  * Accept either separator here so the pinned fallback can map a missing consumer
- * node_modules probe into TJSV's own immutable dependency tree on every platform.
+ * node_modules probe into the same immutable dependency tree Node resolved for TJSV.
  */
 export function nodeModuleOverlayCandidate(path, moduleRoot = MODULE_ROOT) {
   const segments = String(path).split(/[\\/]+/u);
