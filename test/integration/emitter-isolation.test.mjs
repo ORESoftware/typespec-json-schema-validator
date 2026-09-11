@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
@@ -27,7 +28,7 @@ function run(args) {
 test('explicit JSON Schema emitter excludes project-configured OpenAPI emitters', async (t) => {
   // Keep the fixture below packageRoot so the normal tsp subprocess can resolve
   // the lockfile-pinned TypeSpec libraries by walking up to packageRoot/node_modules.
-  // A system tmp directory would exercise TJSV's pinned-compiler fallback instead.
+  // A system tmp directory exercises TJSV's pinned-compiler fallback instead.
   const temp = await mkdtemp(join(packageRoot, 'test', 'tmp-emitter-isolation-'));
   t.after(() => rm(temp, { recursive: true, force: true }));
   const typespec = join(temp, 'main.tsp');
@@ -64,5 +65,32 @@ test('explicit JSON Schema emitter excludes project-configured OpenAPI emitters'
   const receipt = JSON.parse(await readFile(report, 'utf8'));
   assert.equal(receipt.status, 'passed');
   assert.equal(receipt.configuration.executionMode, 'subprocess');
+  assert.equal(receipt.configuration.emitter, '@typespec/json-schema');
+});
+
+test('pinned compiler resolves TypeSpec packages for an external consumer workspace', async (t) => {
+  const temp = await mkdtemp(join(tmpdir(), 'tjsv-external-consumer-'));
+  t.after(() => rm(temp, { recursive: true, force: true }));
+  const typespec = join(temp, 'main.tsp');
+  const authored = join(temp, 'authored.schema.json');
+  const report = join(temp, 'report.json');
+  const generated = join(temp, 'generated');
+
+  await copyFile(resolve(fixtures, 'main.tsp'), typespec);
+  await copyFile(resolve(fixtures, 'authored.schema.json'), authored);
+
+  const result = await run([
+    'check',
+    `--typespec=${typespec}`,
+    `--schema=${authored}`,
+    `--output-dir=${generated}`,
+    `--report=${report}`,
+    '--quiet',
+  ]);
+
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  const receipt = JSON.parse(await readFile(report, 'utf8'));
+  assert.equal(receipt.status, 'passed');
+  assert.equal(receipt.configuration.executionMode, 'pinned-compiler-fallback');
   assert.equal(receipt.configuration.emitter, '@typespec/json-schema');
 });

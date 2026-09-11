@@ -10,7 +10,8 @@ test('tjsv is canonical while compatibility aliases remain', async () => {
 });
 
 test('Zed retains and binds the package-owned flags contract', async () => {
-  const manifest = await readFile(new URL('../../.zpkg.toml', import.meta.url), 'utf8');
+  const manifest = (await readFile(new URL('../../.zpkg.toml', import.meta.url), 'utf8'))
+    .replace(/\r\n?/gu, '\n');
   assert.ok(manifest.includes('[bin]'));
   assert.ok(manifest.includes('tjsv = "bin/typespec-json-schema-validator.mjs"'));
   assert.ok(manifest.includes('[interop.flags-2-env]'));

@@ -1,6 +1,8 @@
 import { relative, resolve } from 'node:path';
 import {
   canonicalStringify,
+  escapeJsonPointerSegment,
+  normalizeComparisonRef,
   normalizeSchemaNodeForComparison,
   sha256,
 } from './canonical.mjs';
@@ -14,6 +16,15 @@ export const CONTRACT_IR_VERIFICATION_SCHEMA =
   'ores.typespec-json-schema-validator.contract-ir-verification/v1';
 const REPORT_SCHEMA = 'ores.typespec-json-schema-validator.report/v1';
 const HEX_256 = /^[a-f0-9]{64}$/u;
+const SCHEMA_MAP_KEYS = new Set([
+  '$defs', 'definitions', 'properties', 'patternProperties', 'dependentSchemas',
+]);
+const SCHEMA_ARRAY_KEYS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
+const SCHEMA_SINGLE_KEYS = new Set([
+  'additionalItems', 'additionalProperties', 'contains', 'contentSchema', 'else',
+  'if', 'items', 'not', 'propertyNames', 'then', 'unevaluatedItems',
+  'unevaluatedProperties',
+]);
 
 function isObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -48,6 +59,120 @@ function schemaSource(collection, declaration) {
 
 function schemaKindFamily(kind) {
   return kind === 'scalar' || kind === 'scalar-like' || kind === 'alias' ? 'scalar-like' : kind;
+}
+
+function assertionSchemaKindFamily(typespec, generated) {
+  const lexicalKind = declarationKindFamily(typespec.kind);
+  if (lexicalKind !== 'model') {
+    return lexicalKind;
+  }
+
+  // TypeSpec permits a named model declaration to be an array model. Preserve
+  // the lexical TypeSpec kind in Contract IR, but use the exact generated
+  // witness as representation evidence only when it proves an array. This is
+  // the same narrow rule used by the parity gate; ordinary object models and
+  // every other scalar-like shape remain fail-closed.
+  if (
+    generated &&
+    schemaKindFamily(generated.kind) === 'scalar-like' &&
+    generated.schema?.type === 'array'
+  ) {
+    return 'scalar-like';
+  }
+
+  return lexicalKind;
+}
+
+function normalizedDeclarationRef(name) {
+  return normalizeComparisonRef(`#/$defs/${escapeJsonPointerSegment(name)}`);
+}
+
+function addReferenceAlias(aliases, ambiguous, source, target) {
+  if (typeof source !== 'string' || source.length === 0) return;
+  const normalizedSource = normalizeComparisonRef(source);
+  if (ambiguous.has(normalizedSource)) return;
+  const previous = aliases.get(normalizedSource);
+  if (previous !== undefined && previous !== target) {
+    aliases.delete(normalizedSource);
+    ambiguous.add(normalizedSource);
+    return;
+  }
+  aliases.set(normalizedSource, target);
+}
+
+function absoluteResourceDeclarationRef(document, pointer) {
+  const id = document?.$id;
+  if (typeof id !== 'string' || typeof pointer !== 'string' || !pointer.startsWith('#/')) return undefined;
+  let resource;
+  try {
+    resource = new URL(id);
+  } catch {
+    return undefined;
+  }
+  resource.hash = '';
+  return `${resource.href}${pointer}`;
+}
+
+function buildReferenceAliases(declarationMap, lane, collection, schemaMap) {
+  const aliases = new Map();
+  const ambiguous = new Set();
+  const documentsByPath = new Map(
+    (collection?.documents ?? []).map((document) => [document.path, document]),
+  );
+
+  for (const pair of declarationMap) {
+    const name = lane === 'generated' ? pair.generated : pair.authored;
+    const target = normalizedDeclarationRef(pair.typespec);
+    addReferenceAlias(aliases, ambiguous, normalizedDeclarationRef(name), target);
+
+    // A loaded multi-file authority can refer to another declaration by the
+    // containing document's canonical $id plus the declaration JSON Pointer.
+    // Admit only identities proven by this exact collection resource graph.
+    // Unknown external URLs remain literal and therefore fail closed.
+    const declaration = schemaMap.get(name);
+    const document = declaration ? documentsByPath.get(declaration.source) : undefined;
+    const resourceReference = declaration && document
+      ? absoluteResourceDeclarationRef(document.document, declaration.pointer)
+      : undefined;
+    addReferenceAlias(aliases, ambiguous, resourceReference, target);
+  }
+
+  return aliases;
+}
+
+/**
+ * Rewrite only comparison-normalized $refs that point at mapped top-level
+ * declarations. Literal JSON under const/enum/default/extensions is opaque and
+ * must never be interpreted as schema syntax. Executable schemas and the
+ * assertion schema persisted in Contract IR remain untouched.
+ */
+function aliasMappedDeclarationRefs(value, aliases) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => {
+    if (key === '$ref' && typeof child === 'string') {
+      return [key, aliases.get(child) ?? child];
+    }
+    if (SCHEMA_MAP_KEYS.has(key) && child !== null && typeof child === 'object' && !Array.isArray(child)) {
+      return [key, Object.fromEntries(Object.entries(child).map(([name, schema]) =>
+        [name, aliasMappedDeclarationRefs(schema, aliases)]))];
+    }
+    if (SCHEMA_ARRAY_KEYS.has(key) && Array.isArray(child)) {
+      return [key, child.map((schema) => aliasMappedDeclarationRefs(schema, aliases))];
+    }
+    if (SCHEMA_SINGLE_KEYS.has(key)) {
+      if (key === 'items' && Array.isArray(child)) {
+        return [key, child.map((schema) => aliasMappedDeclarationRefs(schema, aliases))];
+      }
+      return [key, aliasMappedDeclarationRefs(child, aliases)];
+    }
+    if (key === 'dependencies' && child !== null && typeof child === 'object' && !Array.isArray(child)) {
+      return [key, Object.fromEntries(Object.entries(child).map(([name, dependency]) => [
+        name,
+        Array.isArray(dependency) ? dependency : aliasMappedDeclarationRefs(dependency, aliases),
+      ]))];
+    }
+    return [key, child];
+  }));
 }
 
 function assertPassedReceipt(report) {
@@ -117,7 +242,7 @@ function declarationMaps(typespecInventory, generatedCollection, authoredCollect
   };
 }
 
-function buildDeclaration(pair, maps, inputs) {
+function buildDeclaration(pair, maps, inputs, referenceAliases) {
   requireCondition(isObject(pair), 'declarationMap entries must be objects');
   requireCondition(typeof pair.typespec === 'string' && pair.typespec !== '', 'mapped TypeSpec name is invalid');
   requireCondition(typeof pair.generated === 'string' && pair.generated !== '', `generated name for ${pair.typespec} is invalid`);
@@ -131,23 +256,32 @@ function buildDeclaration(pair, maps, inputs) {
   requireCondition(authored, `mapped authored declaration is missing: ${pair.authored}`);
 
   const family = declarationKindFamily(typespec.kind);
+  const assertionFamily = assertionSchemaKindFamily(typespec, generated);
   requireCondition(
     declarationKindFamily(pair.kind) === family,
     `receipt kind for ${pair.typespec} no longer matches the TypeSpec declaration`,
   );
   requireCondition(
-    schemaKindFamily(generated.kind) === family,
+    schemaKindFamily(generated.kind) === assertionFamily,
     `generated declaration kind for ${pair.typespec} no longer matches`,
   );
   requireCondition(
-    schemaKindFamily(authored.kind) === family,
+    schemaKindFamily(authored.kind) === assertionFamily,
     `authored declaration kind for ${pair.typespec} no longer matches`,
   );
 
   const generatedAssertionSchema = normalizeSchemaNodeForComparison(generated.schema);
   const authoredAssertionSchema = normalizeSchemaNodeForComparison(authored.schema);
+  const comparableGeneratedAssertionSchema = aliasMappedDeclarationRefs(
+    generatedAssertionSchema,
+    referenceAliases.generated,
+  );
+  const comparableAuthoredAssertionSchema = aliasMappedDeclarationRefs(
+    authoredAssertionSchema,
+    referenceAliases.authored,
+  );
   requireCondition(
-    canonicalStringify(generatedAssertionSchema) === canonicalStringify(authoredAssertionSchema),
+    canonicalStringify(comparableGeneratedAssertionSchema) === canonicalStringify(comparableAuthoredAssertionSchema),
     `generated and authored assertion schemas no longer converge for ${pair.typespec}`,
   );
 
@@ -282,9 +416,13 @@ export function createContractIr({ report, typespecInventory, generatedCollectio
     generated: generatedCollection,
     authored: authoredCollection,
   };
+  const referenceAliases = {
+    generated: buildReferenceAliases(report.declarationMap, 'generated', generatedCollection, maps.generated),
+    authored: buildReferenceAliases(report.declarationMap, 'authored', authoredCollection, maps.authored),
+  };
   const declarations = [...report.declarationMap]
     .sort((left, right) => left.typespec.localeCompare(right.typespec))
-    .map((pair) => buildDeclaration(pair, maps, inputs));
+    .map((pair) => buildDeclaration(pair, maps, inputs, referenceAliases));
   const excluded = excludedDeclarations(report, inputs);
   const outOfScope = outOfScopeDeclarations(typespecInventory);
   const receipt = {

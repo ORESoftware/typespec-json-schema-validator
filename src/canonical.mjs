@@ -37,13 +37,13 @@ const NON_ASSERTION_METADATA_KEYS = new Set([
 const EXECUTABLE_NORMALIZATION = Object.freeze({
   stripMetadata: false,
   normalizeReference: normalizeRef,
-  normalizeIntegralConstNumber: false,
+  collapseSafeIntegerConstType: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
   stripMetadata: true,
   normalizeReference: normalizeComparisonRef,
-  normalizeIntegralConstNumber: true,
+  collapseSafeIntegerConstType: true,
 });
 
 export function isPlainObject(value) {
@@ -172,24 +172,26 @@ function canCollapseSimpleTypeUnion(value) {
   return { type: types.sort() };
 }
 
-function normalizeIntegralConstNumber(value, options) {
-  if (!options.normalizeIntegralConstNumber || !isPlainObject(value)) return value;
-  // Under JSON Schema, an integral JSON number satisfies both `number` and
-  // `integer`. If `const` already fixes the only admissible numeric value, then
-  // `type: number` and `type: integer` are assertion-equivalent. Canonicalize
-  // that narrow case for cross-authority comparison only; executable schemas
-  // retain their original type so runtime behavior is never rewritten.
-  if (
-    value.type === 'number'
-    && typeof value.const === 'number'
-    && Number.isFinite(value.const)
-    && Number.isInteger(value.const)
-  ) {
-    return { ...value, type: 'integer' };
+function collapseRedundantSafeIntegerConstType(value, options) {
+  if (!options.collapseSafeIntegerConstType || !isPlainObject(value)) {
+    return value;
   }
-  return value;
-}
+  if (!Object.hasOwn(value, 'const') || !Number.isSafeInteger(value.const)) {
+    return value;
+  }
+  if (value.type !== 'number' && value.type !== 'integer') {
+    return value;
+  }
 
+  // Draft 2020-12 defines integer as the mathematical integer subset of number.
+  // Once `const` fixes the only accepted JSON numeric value to a safely
+  // representable integer, `type: number` and `type: integer` accept exactly the
+  // same instance. Erase only that redundant spelling in the comparison lane.
+  // Keep executable schemas untouched, and keep unsafe/non-integral constants
+  // distinct because JavaScript number parsing cannot prove exact equivalence.
+  const { type: _redundantType, ...rest } = value;
+  return rest;
+}
 function sortJsonValues(values) {
   // Never deduplicate. In particular, repeated oneOf branches change validity.
   // Use code-unit ordering, not a locale-dependent comparator, for digests.
@@ -257,8 +259,8 @@ function normalizeSchemaNodeWith(value, options) {
     entries.push([targetKey, normalizeKeywordValue(key, value[key], options)]);
   }
   const result = Object.fromEntries(entries);
-  const collapsed = canCollapseSimpleTypeUnion(result) ?? result;
-  return normalizeIntegralConstNumber(collapsed, options);
+  const normalizedUnion = canCollapseSimpleTypeUnion(result) ?? result;
+  return collapseRedundantSafeIntegerConstType(normalizedUnion, options);
 }
 
 /**
