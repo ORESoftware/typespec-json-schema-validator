@@ -21,12 +21,12 @@ async function overlayNodeModulePath(path) {
   if (await exists(path)) {
     return path;
   }
-  const marker = `${sep}node_modules${sep}`;
-  const markerIndex = path.indexOf(marker);
-  if (markerIndex < 0) {
+  const segments = path.split(sep);
+  const nodeModulesIndex = segments.lastIndexOf('node_modules');
+  if (nodeModulesIndex < 0) {
     return path;
   }
-  const candidate = join(MODULE_ROOT, 'node_modules', path.slice(markerIndex + marker.length));
+  const candidate = join(MODULE_ROOT, 'node_modules', ...segments.slice(nodeModulesIndex + 1));
   return (await exists(candidate)) ? candidate : path;
 }
 
