@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { canonicalStringify } from '../src/canonical.mjs';
 import { runGitHubFleetAudit } from '../src/github-fleet-audit.mjs';
 
@@ -19,6 +19,7 @@ if (!token) {
 
 const scope = JSON.parse(await readFile(scopePath, 'utf8'));
 const receipt = await runGitHubFleetAudit({ scope, admittedRevision, token });
+await mkdir(dirname(receiptPath), { recursive: true });
 await writeFile(receiptPath, `${canonicalStringify(receipt, 2)}\n`, { encoding: 'utf8', flag: 'w' });
 process.stdout.write(`${canonicalStringify({
   schema: receipt.schema,
