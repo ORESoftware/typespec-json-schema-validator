@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 
 import {
   dependencyInstallRoot,
   nodeModuleOverlayCandidate,
   normalizeSpawnCommand,
+  resolveCompilerForEmitter,
 } from '../../src/emitter.mjs';
 
 test('Windows npm tsp.cmd is executed through node without a shell', () => {
@@ -94,4 +96,10 @@ test('dependency installation root also supports package-local nested dependenci
     'index.js',
   );
   assert.equal(dependencyInstallRoot(emitter), packageRoot);
+});
+
+test('fallback compiler resolves from the same dependency install root as the emitter', () => {
+  const emitter = fileURLToPath(import.meta.resolve('@typespec/json-schema'));
+  const compiler = resolveCompilerForEmitter(emitter);
+  assert.equal(dependencyInstallRoot(compiler), dependencyInstallRoot(emitter));
 });
