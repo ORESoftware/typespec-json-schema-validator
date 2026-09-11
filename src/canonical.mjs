@@ -37,13 +37,13 @@ const NON_ASSERTION_METADATA_KEYS = new Set([
 const EXECUTABLE_NORMALIZATION = Object.freeze({
   stripMetadata: false,
   normalizeReference: normalizeRef,
-  collapseSafeIntegerConstType: false,
+  collapseRedundantConstType: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
   stripMetadata: true,
   normalizeReference: normalizeComparisonRef,
-  collapseSafeIntegerConstType: true,
+  collapseRedundantConstType: true,
 });
 
 export function isPlainObject(value) {
@@ -172,23 +172,36 @@ function canCollapseSimpleTypeUnion(value) {
   return { type: types.sort() };
 }
 
-function collapseRedundantSafeIntegerConstType(value, options) {
-  if (!options.collapseSafeIntegerConstType || !isPlainObject(value)) {
+function jsonTypeOf(value) {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'array';
+  if (typeof value === 'object') return 'object';
+  return typeof value;
+}
+
+function collapseRedundantConstType(value, options) {
+  if (!options.collapseRedundantConstType || !isPlainObject(value)) {
     return value;
   }
-  if (!Object.hasOwn(value, 'const') || !Number.isSafeInteger(value.const)) {
-    return value;
-  }
-  if (value.type !== 'number' && value.type !== 'integer') {
+  if (!Object.hasOwn(value, 'const') || typeof value.type !== 'string') {
     return value;
   }
 
-  // Draft 2020-12 defines integer as the mathematical integer subset of number.
-  // Once `const` fixes the only accepted JSON numeric value to a safely
-  // representable integer, `type: number` and `type: integer` accept exactly the
-  // same instance. Erase only that redundant spelling in the comparison lane.
-  // Keep executable schemas untouched, and keep unsafe/non-integral constants
-  // distinct because JavaScript number parsing cannot prove exact equivalence.
+  const constType = jsonTypeOf(value.const);
+  let redundant = value.type === constType;
+  if (constType === 'number') {
+    // Every JSON numeric const already proves `type: number`. `type: integer`
+    // is also redundant only where JavaScript can prove the literal is an exact
+    // safe integer. Retain unsafe integer assertions rather than guessing across
+    // parsers or silently turning an unsatisfiable non-integral integer const
+    // into a satisfiable schema.
+    redundant = value.type === 'number'
+      || (value.type === 'integer' && Number.isSafeInteger(value.const));
+  }
+  if (!redundant) {
+    return value;
+  }
+
   const { type: _redundantType, ...rest } = value;
   return rest;
 }
@@ -261,7 +274,7 @@ function normalizeSchemaNodeWith(value, options) {
   }
   const result = Object.fromEntries(entries);
   const normalizedUnion = canCollapseSimpleTypeUnion(result) ?? result;
-  return collapseRedundantSafeIntegerConstType(normalizedUnion, options);
+  return collapseRedundantConstType(normalizedUnion, options);
 }
 
 /**
