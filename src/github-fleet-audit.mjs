@@ -5,8 +5,12 @@ const DEFAULT_FILE_LIMIT = 256 * 1024;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_RATE_FLOOR = 100;
 
-const GENERATED_SEGMENTS = new Set([
+const NON_AUTHORITY_SEGMENTS = new Set([
   'build', 'coverage', 'dist', 'generated', 'node_modules', 'target', 'tmp', 'vendor',
+]);
+
+const GENERATED_EVIDENCE_SEGMENTS = new Set([
+  'build', 'coverage', 'dist', 'generated', 'target', 'tmp',
 ]);
 
 function assertObject(value, label) {
@@ -94,7 +98,7 @@ export function classifyRepositoryTree(paths) {
 
   const authoredCandidates = normalized.filter((path) => {
     const segments = sourcePathSegments(path);
-    return !segments.some((segment) => GENERATED_SEGMENTS.has(segment));
+    return !segments.some((segment) => NON_AUTHORITY_SEGMENTS.has(segment));
   });
 
   const typeSpecFiles = authoredCandidates.filter((path) => path.toLowerCase().endsWith('.tsp'));
@@ -108,7 +112,7 @@ export function classifyRepositoryTree(paths) {
   const generatedJsonSchemaFiles = normalized.filter((path) => {
     if (!path.toLowerCase().endsWith('.json')) return false;
     const segments = sourcePathSegments(path);
-    return segments.some((segment) => GENERATED_SEGMENTS.has(segment));
+    return segments.some((segment) => GENERATED_EVIDENCE_SEGMENTS.has(segment));
   });
 
   return {
