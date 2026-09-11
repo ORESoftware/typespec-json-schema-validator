@@ -111,6 +111,68 @@ test('explicit mappings pair differently named generated and authored declaratio
   assert.equal(result.findingCount, 0);
 });
 
+test('TypeSpec named array models use the official emitter witness for representation kind', () => {
+  const schema = {
+    type: 'array',
+    maxItems: 100,
+    uniqueItems: true,
+    items: { type: 'string', minLength: 1, maxLength: 128 },
+  };
+  const result = compareParity({
+    typespecInventory: {
+      declarations: [{ kind: 'model', name: 'TicketTags', qualifiedName: 'Example.TicketTags' }],
+      errors: [],
+      ambiguities: [],
+    },
+    generatedCollection: {
+      findings: [],
+      declarations: [{ name: 'TicketTags', kind: 'scalar-like', schema, pointer: '#/$defs/TicketTags' }],
+    },
+    authoredCollection: {
+      findings: [],
+      declarations: [{ name: 'TicketTags', kind: 'scalar-like', schema, pointer: '#/$defs/TicketTags' }],
+    },
+    mapping: {
+      declarations: [],
+      ignore: { typespec: [], generated: [], authored: [] },
+    },
+  });
+  assert.equal(result.findingCount, 0, canonicalStringify(result.findings));
+});
+
+test('emitter witness does not relax ordinary TypeSpec object models into scalar-like declarations', () => {
+  const generatedSchema = {
+    type: 'object',
+    properties: { id: { type: 'string' } },
+    required: ['id'],
+    unevaluatedProperties: false,
+  };
+  const authoredSchema = { type: 'array', items: { type: 'string' } };
+  const result = compareParity({
+    typespecInventory: {
+      declarations: [{ kind: 'model', name: 'Item', qualifiedName: 'Example.Item' }],
+      errors: [],
+      ambiguities: [],
+    },
+    generatedCollection: {
+      findings: [],
+      declarations: [{ name: 'Item', kind: 'model', schema: generatedSchema, pointer: '#/$defs/Item' }],
+    },
+    authoredCollection: {
+      findings: [],
+      declarations: [{ name: 'Item', kind: 'scalar-like', schema: authoredSchema, pointer: '#/$defs/Item' }],
+    },
+    mapping: {
+      declarations: [],
+      ignore: { typespec: [], generated: [], authored: [] },
+    },
+  });
+  assert.ok(
+    result.findings.some(({ ruleId }) => ruleId === 'authored-declaration-kind-mismatch'),
+    canonicalStringify(result.findings),
+  );
+});
+
 test('declaration mappings also pair internal top-level declaration references', () => {
   const generatedUser = {
     type: 'object',

@@ -1,0 +1,7 @@
+{
+  "schema_version": 1.0,
+  "compatibility": {
+    "repository": "https://github.com/shared-auth/shared-auth-interfaces",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  }
+}

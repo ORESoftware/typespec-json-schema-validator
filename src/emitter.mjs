@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
@@ -17,24 +17,31 @@ function resolveJsonSchemaEmitter() {
   }
 }
 
+/**
+ * TypeSpec normalizes compiler paths to forward slashes on some Windows code paths.
+ * Accept either separator here so the pinned fallback can map a missing consumer
+ * node_modules probe into TJSV's own immutable dependency tree on every platform.
+ */
+export function nodeModuleOverlayCandidate(path, moduleRoot = MODULE_ROOT) {
+  const segments = String(path).split(/[\\/]+/u);
+  const nodeModulesIndex = segments.lastIndexOf('node_modules');
+  if (nodeModulesIndex < 0) {
+    return null;
+  }
+  return join(moduleRoot, 'node_modules', ...segments.slice(nodeModulesIndex + 1));
+}
+
 async function overlayNodeModulePath(path) {
   if (await exists(path)) {
     return path;
   }
-  const marker = `${sep}node_modules${sep}`;
-  const markerIndex = path.indexOf(marker);
-  if (markerIndex < 0) {
-    return path;
-  }
-  const candidate = join(MODULE_ROOT, 'node_modules', path.slice(markerIndex + marker.length));
-  return (await exists(candidate)) ? candidate : path;
+  const candidate = nodeModuleOverlayCandidate(path);
+  return candidate && await exists(candidate) ? candidate : path;
 }
 
 function createPinnedCompilerHost() {
   return {
     ...NodeHost,
-    // The subprocess compiler is intentionally quiet here. The outer CLI owns the receipt and
-    // human-readable summary; diagnostics are collected from the returned Program below.
     logSink: { log() {} },
     async stat(path) {
       return NodeHost.stat(await overlayNodeModulePath(path));
@@ -112,11 +119,41 @@ function appendBounded(current, chunk, maxBytes) {
   return buffer.subarray(buffer.length - maxBytes).toString('utf8');
 }
 
+/**
+ * Keep Windows execution shell-free while translating the two executable forms
+ * TJSV legitimately owns: npm's local tsp.cmd shim and explicit Node scripts
+ * used as a TypeSpec command in tests/consumers. All argv remains tokenized.
+ */
+export function normalizeSpawnCommand(command, args, options = {}) {
+  const platform = options.platform ?? process.platform;
+  const nodeExecutable = options.nodeExecutable ?? process.execPath;
+  if (platform !== 'win32') return { command, args: [...args] };
+
+  const extension = win32.extname(command).toLowerCase();
+  if (win32.isAbsolute(command) && ['.js', '.mjs', '.cjs'].includes(extension)) {
+    return { command: nodeExecutable, args: [command, ...args] };
+  }
+
+  const directory = win32.dirname(command);
+  if (
+    win32.isAbsolute(command)
+    && win32.basename(command).toLowerCase() === 'tsp.cmd'
+    && win32.basename(directory).toLowerCase() === '.bin'
+  ) {
+    return {
+      command: nodeExecutable,
+      args: [win32.join(directory, '..', '@typespec', 'compiler', 'cmd', 'tsp.js'), ...args],
+    };
+  }
+  return { command, args: [...args] };
+}
+
 export function runCommand(command, args, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const maxOutputBytes = options.maxOutputBytes ?? MAX_CAPTURE_BYTES;
+  const launch = normalizeSpawnCommand(command, args);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(launch.command, launch.args, {
       cwd,
       env: options.env ?? process.env,
       shell: false,

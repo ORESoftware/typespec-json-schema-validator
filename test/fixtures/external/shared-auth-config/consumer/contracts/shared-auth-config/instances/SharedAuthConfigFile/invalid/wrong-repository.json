@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "compatibility": {
+    "repository": "https://github.com/example/not-shared-auth",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  }
+}

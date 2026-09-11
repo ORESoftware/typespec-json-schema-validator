@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const action = await readFile(
+const action = (await readFile(
   new URL('../../actions/verify-contract-ir/action.yml', import.meta.url),
   'utf8',
-);
+)).replace(/\r\n?/gu, '\n');
 
 test('consumer verification action is composite and lockfile-pinned', () => {
   assert.match(action, /runs:\n  using: composite/);
