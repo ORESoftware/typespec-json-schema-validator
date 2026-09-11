@@ -196,8 +196,10 @@ export function runCommand(command, args, options = {}) {
     });
     child.once('close', (code, signal) => {
       resolvePromise({
-        command,
-        args: [...args],
+        command: launch.command,
+        args: [...launch.args],
+        requestedCommand: command,
+        requestedArgs: [...args],
         cwd,
         code: code ?? -1,
         signal: signal ?? null,
