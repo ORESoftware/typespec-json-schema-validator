@@ -1,0 +1,22 @@
+{
+  "schema": "tjsv-github-fleet-scope/v1",
+  "minimumOrganizations": 11,
+  "minimumRepositories": 100,
+  "includeArchived": false,
+  "organizations": [
+    "claritas-viz",
+    "elenkos-systems",
+    "fiducia-cloud",
+    "gha-indie-worker",
+    "messaging-intel",
+    "opto-sync",
+    "ores-chat",
+    "ores-forms",
+    "ores-legal",
+    "ores-rate-limit",
+    "ores-redis-lru-cache",
+    "shared-auth",
+    "zed-pkg"
+  ],
+  "excludedRepositories": []
+}
