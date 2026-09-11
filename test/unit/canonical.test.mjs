@@ -130,35 +130,61 @@ test('assertion differences remain visible after metadata normalization', () => 
   ]);
 });
 
-test('comparison normalization erases only redundant number/integer spelling for a safe integer const', () => {
-  const generated = normalizeSchemaNodeForComparison({ type: 'number', const: 1 });
-  const authored = normalizeSchemaNodeForComparison({ type: 'integer', const: 1 });
-  assert.deepEqual(generated, { const: 1 });
-  assert.deepEqual(authored, { const: 1 });
-  assert.equal(canonicalStringify(generated), canonicalStringify(authored));
+test('comparison normalization erases redundant type assertions proven by const', () => {
+  const cases = [
+    [{ type: 'string', const: 'accepted' }, { const: 'accepted' }],
+    [{ type: 'boolean', const: true }, { const: true }],
+    [{ type: 'null', const: null }, { const: null }],
+    [{ type: 'array', const: ['x'] }, { const: ['x'] }],
+    [{ type: 'object', const: { x: 1 } }, { const: { x: 1 } }],
+    [{ type: 'number', const: 1.5 }, { const: 1.5 }],
+    [{ type: 'number', const: 1 }, { type: 'integer', const: 1 }],
+  ];
+  for (const [left, right] of cases) {
+    assert.equal(
+      canonicalStringify(normalizeSchemaNodeForComparison(left)),
+      canonicalStringify(normalizeSchemaNodeForComparison(right)),
+    );
+  }
 
-  assert.deepEqual(normalizeSchemaNode({ type: 'number', const: 1 }), { const: 1, type: 'number' });
-  assert.deepEqual(normalizeSchemaNode({ type: 'integer', const: 1 }), { const: 1, type: 'integer' });
+  // Executable normalization must retain the authored shape; this equivalence
+  // exists only in the comparison lane.
+  assert.deepEqual(normalizeSchemaNode({ type: 'string', const: 'accepted' }), {
+    const: 'accepted',
+    type: 'string',
+  });
+  assert.deepEqual(normalizeSchemaNode({ type: 'integer', const: 1 }), {
+    const: 1,
+    type: 'integer',
+  });
 });
 
-test('safe integer const normalization applies recursively inside schema locations', () => {
+test('redundant const-type normalization applies recursively inside schema locations', () => {
   const generated = normalizeSchemaNodeForComparison({
     type: 'object',
-    properties: { schema_version: { type: 'number', const: 1 } },
+    properties: {
+      protocol: { type: 'string', const: 'ecmad.daemon.v1' },
+      schema_version: { type: 'number', const: 1 },
+    },
   });
   const authored = normalizeSchemaNodeForComparison({
     type: 'object',
-    properties: { schema_version: { type: 'integer', const: 1 } },
+    properties: {
+      protocol: { const: 'ecmad.daemon.v1' },
+      schema_version: { type: 'integer', const: 1 },
+    },
   });
   assert.equal(canonicalStringify(generated), canonicalStringify(authored));
+  assert.deepEqual(generated.properties.protocol, { const: 'ecmad.daemon.v1' });
   assert.deepEqual(generated.properties.schema_version, { const: 1 });
 });
 
-test('number/integer differences remain visible without a provably equivalent safe integer const', () => {
+test('const/type differences remain visible when the type is not provably redundant', () => {
   const cases = [
     [{ type: 'number' }, { type: 'integer' }],
-    [{ type: 'number', const: 1.5 }, { type: 'integer', const: 1.5 }],
-    [{ type: 'number', const: 9007199254740992 }, { type: 'integer', const: 9007199254740992 }],
+    [{ type: 'integer', const: 1.5 }, { const: 1.5 }],
+    [{ type: 'integer', const: 9007199254740992 }, { const: 9007199254740992 }],
+    [{ type: 'string', const: 1 }, { const: 1 }],
     [{ type: 'number', enum: [1] }, { type: 'integer', enum: [1] }],
   ];
   for (const [left, right] of cases) {
