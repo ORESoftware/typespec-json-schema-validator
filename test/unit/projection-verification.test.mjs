@@ -262,7 +262,8 @@ test('flags-2-env parses verify-projection and preserves source, policy, and rec
 });
 
 test('projection action binds inputs through env and keeps every shell body free of expressions', async () => {
-  const action = await readFile(new URL('../../actions/verify-projection/action.yml', import.meta.url), 'utf8');
+  const action = (await readFile(new URL('../../actions/verify-projection/action.yml', import.meta.url), 'utf8'))
+    .replace(/\r\n?/gu, '\n');
   assert.match(action, /TSJSV_COMMAND: verify-projection/u);
   assert.match(action, /TSJSV_PROJECTION_MANIFEST: \$\{\{ inputs\.projection_manifest \}\}/u);
   assert.match(action, /TSJSV_PROJECTION_POLICY: \$\{\{ inputs\.policy \}\}/u);
