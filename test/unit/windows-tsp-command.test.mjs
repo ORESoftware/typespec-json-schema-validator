@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeSpawnCommand } from '../../src/emitter.mjs';
+import { nodeModuleOverlayCandidate, normalizeSpawnCommand } from '../../src/emitter.mjs';
 
 test('Windows npm tsp.cmd is executed through node without a shell', () => {
   const original = String.raw`D:\tools\node_modules\.bin\tsp.cmd`;
@@ -46,4 +46,19 @@ test('non-TypeSpec commands and non-Windows platforms are left untouched', () =>
     normalizeSpawnCommand(other, ['x'], { platform: 'win32', nodeExecutable: 'node.exe' }),
     { command: other, args: ['x'] },
   );
+});
+
+test('pinned module overlay accepts native and TypeSpec-normalized Windows separators', () => {
+  const moduleRoot = String.raw`C:\repo\tjsv`;
+  const expected = String.raw`C:\repo\tjsv\node_modules\@typespec\json-schema`;
+
+  assert.equal(
+    nodeModuleOverlayCandidate(String.raw`D:\consumer\node_modules\@typespec\json-schema`, moduleRoot),
+    expected,
+  );
+  assert.equal(
+    nodeModuleOverlayCandidate('D:/consumer/node_modules/@typespec/json-schema', moduleRoot),
+    expected,
+  );
+  assert.equal(nodeModuleOverlayCandidate(String.raw`D:\consumer\src\main.tsp`, moduleRoot), null);
 });
