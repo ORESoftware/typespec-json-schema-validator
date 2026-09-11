@@ -10,12 +10,16 @@ export function fileLimit(value, name) {
 }
 
 function sameIdentity(left, right) {
-  return left.dev === right.dev && left.ino === right.ino && left.mode === right.mode;
+  return left.dev === right.dev && left.ino === right.ino;
 }
 
-function sameFile(left, right) {
+function samePathFile(left, right) {
   return sameIdentity(left, right) && left.nlink === right.nlink && left.size === right.size
-    && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
+    && left.mtimeNs === right.mtimeNs;
+}
+
+function sameOpenedFile(left, right) {
+  return samePathFile(left, right) && left.mode === right.mode && left.ctimeNs === right.ctimeNs;
 }
 
 async function inspectPath(absolute) {
@@ -55,7 +59,11 @@ export async function readProjectionFile(path, maxBytes) {
   const handle = await open(absolute, flags);
   try {
     const opened = await handle.stat({ bigint: true });
-    if (!sameFile(before.file, opened)) throw new Error('projection evidence file changed before it was read');
+    // Windows can expose different mode/ctime metadata for path-based lstat and
+    // handle-based fstat of the same file. Device/inode/link/size/mtime remain
+    // the portable cross-view identity and snapshot checks; stricter metadata
+    // is still compared between two handle-based stats below.
+    if (!samePathFile(before.file, opened)) throw new Error('projection evidence file changed before it was read');
     const bytes = Buffer.alloc(Number(opened.size));
     let offset = 0;
     while (offset < bytes.length) {
@@ -67,7 +75,7 @@ export async function readProjectionFile(path, maxBytes) {
     const extra = await handle.read(Buffer.alloc(1), 0, 1, offset);
     const after = await handle.stat({ bigint: true });
     const current = await inspectPath(absolute);
-    if (extra.bytesRead !== 0 || !sameFile(opened, after) || !sameFile(after, current.file)
+    if (extra.bytesRead !== 0 || !sameOpenedFile(opened, after) || !samePathFile(after, current.file)
       || before.directories.length !== current.directories.length
       || before.directories.some((directory, index) =>
         directory.path !== current.directories[index].path
