@@ -8,8 +8,23 @@ import test from 'node:test';
 const packageRoot = resolve(import.meta.dirname, '../..');
 const fixtures = resolve(packageRoot, 'test/fixtures/pass');
 
-function npmExecutable() {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm';
+/**
+ * Keep the packaged-consumer integration shell-free on Windows.
+ *
+ * npm is exposed as npm.cmd there, and spawning a .cmd shim directly is not a
+ * portable shell-free process boundary. npm itself publishes the JavaScript
+ * entrypoint used to launch the current npm process as npm_execpath, so execute
+ * that exact pinned CLI with the current Node runtime rather than introducing a
+ * command shell or reconstructing an npm installation path.
+ */
+function npmInvocation(args) {
+  if (process.platform !== 'win32') {
+    return { command: 'npm', args: [...args] };
+  }
+
+  const npmCli = process.env.npm_execpath;
+  assert.ok(npmCli, 'Windows packaged-consumer tests require npm_execpath from the npm test lifecycle');
+  return { command: process.execPath, args: [npmCli, ...args] };
 }
 
 function run(command, args, cwd) {
@@ -44,6 +59,11 @@ async function runChecked(command, args, cwd, label) {
   return result;
 }
 
+async function runNpmChecked(args, cwd, label) {
+  const invocation = npmInvocation(args);
+  return runChecked(invocation.command, invocation.args, cwd, label);
+}
+
 async function exists(path) {
   try {
     await access(path);
@@ -64,8 +84,7 @@ test('packed TJSV validates external authorities across legal npm dependency lay
   await mkdir(installDirectory, { recursive: true });
   await mkdir(externalDirectory, { recursive: true });
 
-  const packed = await runChecked(
-    npmExecutable(),
+  const packed = await runNpmChecked(
     ['pack', '--json', '--ignore-scripts', '--pack-destination', packDirectory],
     packageRoot,
     'npm pack',
@@ -78,8 +97,7 @@ test('packed TJSV validates external authorities across legal npm dependency lay
     join(installDirectory, 'package.json'),
     `${JSON.stringify({ name: 'tjsv-packaged-external-consumer', private: true }, null, 2)}\n`,
   );
-  await runChecked(
-    npmExecutable(),
+  await runNpmChecked(
     [
       'install',
       '--ignore-scripts',
@@ -92,8 +110,7 @@ test('packed TJSV validates external authorities across legal npm dependency lay
     installDirectory,
     'clean packaged installation',
   );
-  await runChecked(
-    npmExecutable(),
+  await runNpmChecked(
     ['rebuild', '@oresoftware/f2e', '--foreground-scripts', '--no-audit', '--no-fund'],
     installDirectory,
     'approved flags-2-env native rebuild',
