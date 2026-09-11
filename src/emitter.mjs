@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
@@ -19,17 +19,21 @@ function resolveJsonSchemaEmitter() {
   }
 }
 
+export function nodeModuleOverlayCandidate(path, moduleRoot = MODULE_ROOT) {
+  const segments = String(path).split(/[\\/]+/u);
+  const nodeModulesIndex = segments.lastIndexOf('node_modules');
+  if (nodeModulesIndex < 0) {
+    return null;
+  }
+  return join(moduleRoot, 'node_modules', ...segments.slice(nodeModulesIndex + 1));
+}
+
 async function overlayNodeModulePath(path) {
   if (await exists(path)) {
     return path;
   }
-  const segments = path.split(sep);
-  const nodeModulesIndex = segments.lastIndexOf('node_modules');
-  if (nodeModulesIndex < 0) {
-    return path;
-  }
-  const candidate = join(MODULE_ROOT, 'node_modules', ...segments.slice(nodeModulesIndex + 1));
-  return (await exists(candidate)) ? candidate : path;
+  const candidate = nodeModuleOverlayCandidate(path);
+  return candidate && await exists(candidate) ? candidate : path;
 }
 
 function createPinnedCompilerHost() {
