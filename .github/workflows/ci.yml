@@ -108,4 +108,23 @@ jobs:
         run: npm run test:integration
 
       - name: Audit package boundary and execute clean consumer acceptance
+        if: runner.os != 'Windows'
         run: npm run release:preflight
+
+      - name: Audit package boundary and capture Windows clean-consumer diagnostics
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          npm run release:preflight *> "$env:RUNNER_TEMP\windows-release-preflight.log"
+          $exitCode = $LASTEXITCODE
+          Get-Content "$env:RUNNER_TEMP\windows-release-preflight.log"
+          exit $exitCode
+
+      - name: Retain Windows release preflight diagnostics
+        if: ${{ always() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: windows-release-preflight-diagnostics
+          path: ${{ runner.temp }}/windows-release-preflight.log
+          if-no-files-found: error
+          retention-days: 30
