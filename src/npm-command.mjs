@@ -1,5 +1,5 @@
 import { statSync } from 'node:fs';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { win32 } from 'node:path';
 
 function defaultIsFile(path) {
   try {
@@ -23,7 +23,7 @@ export function resolveNpmInvocation({
     return { executable: command, argv: [...args], source: 'direct-command', error: null };
   }
 
-  if (typeof execPath !== 'string' || !isAbsolute(execPath)) {
+  if (typeof execPath !== 'string' || !win32.isAbsolute(execPath)) {
     return {
       executable: null,
       argv: [],
@@ -33,18 +33,23 @@ export function resolveNpmInvocation({
   }
 
   const candidates = [];
-  if (typeof npmExecPath === 'string' && npmExecPath.trim() !== '' && isAbsolute(npmExecPath)) {
-    candidates.push({ path: npmExecPath, source: 'npm_execpath' });
+  if (
+    typeof npmExecPath === 'string' &&
+    npmExecPath.trim() !== '' &&
+    win32.isAbsolute(npmExecPath)
+  ) {
+    candidates.push({ path: win32.normalize(npmExecPath), source: 'npm_execpath' });
   }
   candidates.push({
-    path: resolve(dirname(execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path: win32.resolve(win32.dirname(execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
     source: 'node-adjacent-npm-cli',
   });
 
   const seen = new Set();
   for (const candidate of candidates) {
-    if (seen.has(candidate.path)) continue;
-    seen.add(candidate.path);
+    const dedupeKey = candidate.path.toLowerCase();
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
     if (!isFile(candidate.path)) continue;
     return {
       executable: execPath,
