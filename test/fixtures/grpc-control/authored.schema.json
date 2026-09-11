@@ -34,7 +34,7 @@
       "unevaluatedProperties": false,
       "required": ["kind", "witness", "databaseAlias", "schema", "table", "column", "expected", "actual"],
       "properties": {
-        "kind": { "$ref": "DriftKind" },
+        "kind": { "$ref": "#/$defs/DriftKind" },
         "witness": { "type": "string" },
         "databaseAlias": { "type": "string" },
         "schema": { "type": "string" },
@@ -68,7 +68,7 @@
       "unevaluatedProperties": false,
       "required": ["target", "balanced", "witnessCount", "driftCount"],
       "properties": {
-        "target": { "$ref": "DatabaseTarget" },
+        "target": { "$ref": "#/$defs/DatabaseTarget" },
         "balanced": { "type": "boolean" },
         "witnessCount": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
         "driftCount": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
