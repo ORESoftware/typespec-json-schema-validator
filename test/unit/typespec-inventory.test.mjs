@@ -47,7 +47,7 @@ test('inventory separates JSON-Schema data declarations from operations', () => 
   assert.deepEqual(inventory.outOfScopeDeclarations.map((item) => item.qualifiedName), ['Demo.Api']);
 });
 
-test('qualified nested namespaces preserve absolute identity while relative namespaces extend the parent', () => {
+test('nested compact namespaces compose lexically even when a child repeats the parent prefix', () => {
   const source = `
     namespace Demo {
       model OuterModel {}
@@ -63,11 +63,11 @@ test('qualified nested namespaces preserve absolute identity while relative name
   assert.deepEqual(inventory.errors, []);
   assert.deepEqual(
     inventory.declarations.map((item) => item.qualifiedName),
-    ['Demo.OuterModel', 'Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
+    ['Demo.OuterModel', 'Demo.Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
   );
 });
 
-test('qualified nested namespace detection is segment-aware and stable at multiple depths', () => {
+test('nested compact namespace composition stays lexical and segment-aware at multiple depths', () => {
   const source = `
     namespace Demo {
       namespace Demo2 {
@@ -89,8 +89,8 @@ test('qualified nested namespace detection is segment-aware and stable at multip
     inventory.declarations.map((item) => item.qualifiedName),
     [
       'Demo.Demo2.PrefixCollision',
-      'Demo.Inner.Deep.FullyQualifiedDeep',
-      'Demo.Inner.Innerish.RelativeDeep',
+      'Demo.Demo.Inner.Demo.Inner.Deep.FullyQualifiedDeep',
+      'Demo.Demo.Inner.Innerish.RelativeDeep',
     ],
   );
 });
