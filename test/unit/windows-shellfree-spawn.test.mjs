@@ -57,8 +57,8 @@ test('non-owned commands and non-Windows platforms remain untouched', () => {
   );
 });
 
-test('Windows npm translation fails closed when npm_execpath is absent or relative', () => {
-  for (const npmExecPath of [undefined, 'node_modules/npm/bin/npm-cli.js']) {
+test('Windows npm translation fails closed for explicitly invalid npm_execpath values', () => {
+  for (const npmExecPath of ['', 'node_modules/npm/bin/npm-cli.js']) {
     assert.throws(
       () => normalizeWindowsShellFreeSpawn('npm.cmd', ['pack'], {
         platform: 'win32',
