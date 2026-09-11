@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "compatibility": {
+    "repository": "https://github.com/shared-auth/shared-auth-interfaces",
+    "range": {
+      "base": "0123456789abcdef0123456789abcdef01234567",
+      "head": "89abcdef0123456789abcdef0123456789abcdef"
+    }
+  },
+  "factors": {
+    "two_factor": {
+      "methods": ["totp", "passkey"]
+    }
+  },
+  "pages": {
+    "show": ["sign-in", "challenge"]
+  }
+}

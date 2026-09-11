@@ -192,7 +192,6 @@ function collapseRedundantSafeIntegerConstType(value, options) {
   const { type: _redundantType, ...rest } = value;
   return rest;
 }
-
 function sortJsonValues(values) {
   // Never deduplicate. In particular, repeated oneOf branches change validity.
   // Use code-unit ordering, not a locale-dependent comparator, for digests.

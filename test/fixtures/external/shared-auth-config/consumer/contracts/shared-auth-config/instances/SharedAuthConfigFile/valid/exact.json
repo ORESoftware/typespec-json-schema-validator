@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "compatibility": {
+    "repository": "https://github.com/shared-auth/shared-auth-interfaces",
+    "commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "factors": {
+    "two_factor": {
+      "required": true,
+      "methods": ["totp", "passkey", "security-key"]
+    },
+    "three_factor": {
+      "enabled": false,
+      "methods": ["totp", "passkey", "security-key"]
+    }
+  },
+  "pages": {
+    "show": ["sign-in", "challenge", "recovery", "error", "signed-out"]
+  },
+  "styling": {
+    "theme": "system",
+    "brand_name": "Shared Auth",
+    "accent_color": "#4F46E5"
+  }
+}

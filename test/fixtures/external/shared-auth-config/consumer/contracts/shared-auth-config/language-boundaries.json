@@ -1,0 +1,35 @@
+{
+  "schema": "ores.typespec-json-schema-validator.language-boundaries/v1",
+  "minimumDistinctLanguages": 3,
+  "authorities": {
+    "typeSpec": "peer",
+    "jsonSchema": "peer",
+    "generatedWitness": "evidence_only"
+  },
+  "targets": [
+    {
+      "language": "rust",
+      "runtime": "rust-1.88.0",
+      "required": true,
+      "ingress": true,
+      "egress": true,
+      "evidence": "contracts/shared-auth-config/runtime/evidence/rust.json"
+    },
+    {
+      "language": "typescript",
+      "runtime": "node-22.16.0",
+      "required": true,
+      "ingress": true,
+      "egress": true,
+      "evidence": "contracts/shared-auth-config/runtime/evidence/typescript.json"
+    },
+    {
+      "language": "go",
+      "runtime": "go-1.23.2",
+      "required": true,
+      "ingress": true,
+      "egress": true,
+      "evidence": "contracts/shared-auth-config/runtime/evidence/go.json"
+    }
+  ]
+}
