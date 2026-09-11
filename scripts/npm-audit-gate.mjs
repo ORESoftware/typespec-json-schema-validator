@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
+import { resolveNpmInvocation } from './npm-command.mjs';
 import {
   evaluateAudit,
   failedAuditReceipt,
@@ -15,17 +16,16 @@ const exceptionPath = resolve(root, 'security/npm-audit-exceptions.json');
 const receiptPath = resolve(
   process.env.TSJSV_NPM_AUDIT_RECEIPT || '.typespec-json-schema-validator/npm-audit-receipt.json',
 );
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-function commandText(command, args) {
-  const result = spawnSync(command, args, {
+function commandText(args) {
+  const invocation = resolveNpmInvocation(args);
+  return spawnSync(invocation.executable, invocation.args, {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
     env: process.env,
     shell: false,
   });
-  return result;
 }
 
 function cleanOutput(result) {
@@ -40,8 +40,8 @@ const [packageJsonText, packageLockText, exceptionText] = await Promise.all([
 const packageJsonDigest = sha256Utf8(packageJsonText);
 const packageLockDigest = sha256Utf8(packageLockText);
 
-const npmVersionResult = commandText(npmCommand, ['--version']);
-const registryResult = commandText(npmCommand, ['config', 'get', 'registry']);
+const npmVersionResult = commandText(['--version']);
+const registryResult = commandText(['config', 'get', 'registry']);
 const rawNpmVersion = npmVersionResult.status === 0 ? cleanOutput(npmVersionResult) : 'unavailable';
 const rawRegistry = registryResult.status === 0 ? cleanOutput(registryResult) : 'unavailable';
 let npmVersion = 'unavailable';
@@ -55,7 +55,7 @@ try {
   environmentFailure = `npm audit environment collection failed: ${error.message}`;
 }
 
-const audit = commandText(npmCommand, ['audit', '--omit=dev', '--json', '--audit-level=high']);
+const audit = commandText(['audit', '--omit=dev', '--json', '--audit-level=high']);
 let receipt;
 let auditDocument = null;
 let parseFailure = environmentFailure;
