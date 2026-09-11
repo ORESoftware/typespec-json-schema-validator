@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { dirname, isAbsolute, resolve } from 'node:path';
 import {
   evaluateAudit,
   failedAuditReceipt,
@@ -17,13 +17,32 @@ const receiptPath = resolve(
 );
 
 function commandText(command, args) {
-  const result = spawnSync(command, args, {
+  let executable = command;
+  let argv = args;
+  // `npm` is a .cmd shim on Windows and cannot be executed directly with
+  // shell:false. npm exposes the exact JavaScript CLI that launched this script
+  // through npm_execpath, so invoke that file with the current Node executable
+  // instead of enabling a general shell or re-parsing an interpolated command.
+  if (command === 'npm' && process.platform === 'win32') {
+    const npmExecPath = process.env.npm_execpath;
+    if (typeof npmExecPath !== 'string' || !isAbsolute(npmExecPath)) {
+      return {
+        status: null,
+        stdout: '',
+        stderr: '',
+        error: new Error('npm_execpath is unavailable or not absolute on Windows'),
+      };
+    }
+    executable = process.execPath;
+    argv = [npmExecPath, ...args];
+  }
+  return spawnSync(executable, argv, {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
     env: process.env,
+    shell: false,
   });
-  return result;
 }
 
 function cleanOutput(result) {
