@@ -26,6 +26,16 @@ test('Windows translation preserves TypeSpec argv as separate tokens', () => {
   assert.deepEqual(result.args.slice(1), args);
 });
 
+test('explicit JavaScript TypeSpec commands use Node on Windows', () => {
+  const script = String.raw`D:\work\test helpers\fake-tsp.mjs`;
+  const result = normalizeSpawnCommand(script, ['compile', 'main.tsp'], {
+    platform: 'win32',
+    nodeExecutable: String.raw`C:\node\node.exe`,
+  });
+  assert.equal(result.command, String.raw`C:\node\node.exe`);
+  assert.deepEqual(result.args, [script, 'compile', 'main.tsp']);
+});
+
 test('non-TypeSpec commands and non-Windows platforms are left untouched', () => {
   assert.deepEqual(
     normalizeSpawnCommand('/usr/bin/tsp', ['--version'], { platform: 'linux' }),
