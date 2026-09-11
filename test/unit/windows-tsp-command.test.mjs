@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { nodeModuleOverlayCandidate, normalizeSpawnCommand } from '../../src/emitter.mjs';
+import {
+  dependencyInstallRoot,
+  nodeModuleOverlayCandidate,
+  normalizeSpawnCommand,
+} from '../../src/emitter.mjs';
 
 test('Windows npm tsp.cmd is executed through node without a shell', () => {
   const original = String.raw`D:\tools\node_modules\.bin\tsp.cmd`;
@@ -62,4 +66,32 @@ test('pinned module overlay accepts native and TypeSpec-normalized Windows separ
     expected,
   );
   assert.equal(nodeModuleOverlayCandidate(String.raw`D:\consumer\src\main.tsp`, moduleRoot), null);
+});
+
+test('dependency installation root follows the node_modules that actually owns a hoisted emitter', () => {
+  const installRoot = join(process.cwd(), 'consumer-install');
+  const emitter = join(
+    installRoot,
+    'node_modules',
+    '@typespec',
+    'json-schema',
+    'dist',
+    'src',
+    'index.js',
+  );
+  assert.equal(dependencyInstallRoot(emitter), installRoot);
+});
+
+test('dependency installation root also supports package-local nested dependencies', () => {
+  const packageRoot = join(process.cwd(), 'consumer-install', 'node_modules', '@oresoftware', 'typespec-json-schema-validator');
+  const emitter = join(
+    packageRoot,
+    'node_modules',
+    '@typespec',
+    'json-schema',
+    'dist',
+    'src',
+    'index.js',
+  );
+  assert.equal(dependencyInstallRoot(emitter), packageRoot);
 });
