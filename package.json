@@ -68,6 +68,7 @@
     "src"
   ],
   "scripts": {
+    "audit:fleet": "node ./scripts/github-fleet-audit.mjs",
     "audit:prod": "node ./scripts/npm-audit-gate.mjs",
     "check": "node ./scripts/check.mjs",
     "flags:audit": "f2e audit ./.cli-flags.toml",
