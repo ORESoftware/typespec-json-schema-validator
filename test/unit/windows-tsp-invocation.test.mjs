@@ -23,6 +23,24 @@ test('Windows tsp.cmd shims run through the pinned TypeSpec JavaScript CLI witho
   assertInvocationPath(invocation.logicalCommand, shim);
 });
 
+test('Windows tsp.cmd routing preserves argv tokens containing spaces', () => {
+  const root = join('C:', 'workspace with spaces', 'node_modules');
+  const shim = join(root, '.bin', 'tsp.cmd');
+  const compilerCli = join(root, '@typespec', 'compiler', 'cmd', 'tsp.js');
+  const args = ['compile', join('C:', 'contract fixtures', 'main.tsp'), '--warn-as-error'];
+  const invocation = resolveCommandInvocation(shim, args, {
+    platform: 'win32',
+    cwd: join('C:', 'workspace with spaces'),
+    fileExists: (candidate) => normalize(candidate) === normalize(compilerCli),
+  });
+
+  assert.equal(invocation.executable, process.execPath);
+  assertInvocationPath(invocation.args[0], compilerCli);
+  assert.deepEqual(invocation.args.slice(1), args);
+  assert.notEqual(invocation.args, args);
+  assertInvocationPath(invocation.logicalCommand, shim);
+});
+
 test('bare tsp.cmd from PATH resolves through the pinned local TypeSpec JavaScript CLI', () => {
   const cwd = join('C:', 'workspace');
   const compilerCli = join(cwd, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp.js');
