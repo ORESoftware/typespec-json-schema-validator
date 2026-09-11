@@ -290,9 +290,6 @@ function combineNamespace(parent, child) {
   if (!child) {
     return parent;
   }
-  if (child === parent || child.startsWith(`${parent}.`)) {
-    return child;
-  }
   return `${parent}.${child}`;
 }
 
