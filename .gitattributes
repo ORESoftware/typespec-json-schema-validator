@@ -1,0 +1,9 @@
+* text=auto
+
+# Contract/config fixtures must be byte-stable across hosted runners.
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.tsp text eol=lf
+*.sh text eol=lf
