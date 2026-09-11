@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -7,6 +8,8 @@ import {
   assertSafePackPath,
   normalizePackPath,
   packManifestDigest,
+  resolveInstalledAliasInvocation,
+  resolveNpmInvocation,
   validatePackMetadata,
 } from '../../scripts/release-preflight.mjs';
 
@@ -176,5 +179,76 @@ test('pack admission refuses ambiguous and internally inconsistent npm output', 
   assert.throws(
     () => validatePackMetadata(packageJson, [packResult({ integrity: 'sha256-nope' })]),
     /valid SHA-512/u,
+  );
+});
+
+test('Windows npm execution routes the npm JavaScript CLI through Node without a shell', () => {
+  const npmExecPath = String.raw`C:\Program Files\nodejs\node_modules\npm\bin\npm-cli.js`;
+  const nodeExecutable = String.raw`C:\Program Files\nodejs\node.exe`;
+  assert.deepEqual(
+    resolveNpmInvocation(['pack', '--json'], {
+      platform: 'win32',
+      npmExecPath,
+      nodeExecutable,
+    }),
+    {
+      command: nodeExecutable,
+      args: [npmExecPath, 'pack', '--json'],
+    },
+  );
+  assert.throws(
+    () => resolveNpmInvocation(['pack'], {
+      platform: 'win32',
+      npmExecPath: 'node_modules/npm/bin/npm-cli.js',
+      nodeExecutable,
+    }),
+    /npm_execpath must be an absolute path/u,
+  );
+});
+
+test('POSIX npm execution remains a direct argv-only npm invocation', () => {
+  assert.deepEqual(
+    resolveNpmInvocation(['pack', '--json'], { platform: 'linux' }),
+    { command: 'npm', args: ['pack', '--json'] },
+  );
+});
+
+test('Windows installed CLI aliases keep their shim proof but execute the canonical JS bin through Node', () => {
+  const consumerDirectory = join('C:', 'consumer with spaces');
+  const nodeExecutable = String.raw`C:\node\node.exe`;
+  const invocation = resolveInstalledAliasInvocation(
+    consumerDirectory,
+    'tjsv',
+    ['doctor', '--quiet'],
+    { platform: 'win32', nodeExecutable },
+  );
+  assert.equal(invocation.command, nodeExecutable);
+  assert.equal(
+    invocation.args[0],
+    join(
+      consumerDirectory,
+      'node_modules',
+      '@oresoftware',
+      'typespec-json-schema-validator',
+      'bin',
+      'typespec-json-schema-validator.mjs',
+    ),
+  );
+  assert.deepEqual(invocation.args.slice(1), ['doctor', '--quiet']);
+});
+
+test('POSIX installed CLI aliases execute the installed shim directly', () => {
+  const consumerDirectory = '/tmp/tjsv-consumer';
+  assert.deepEqual(
+    resolveInstalledAliasInvocation(
+      consumerDirectory,
+      'tsjsv',
+      ['doctor', '--quiet'],
+      { platform: 'linux' },
+    ),
+    {
+      command: join(consumerDirectory, 'node_modules', '.bin', 'tsjsv'),
+      args: ['doctor', '--quiet'],
+    },
   );
 });
