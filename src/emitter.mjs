@@ -1,11 +1,13 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
 const MODULE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_CAPTURE_BYTES = 256 * 1024;
+const NODE_SCRIPT = /\.(?:cjs|mjs|js)$/iu;
 
 function resolveJsonSchemaEmitter() {
   try {
@@ -112,11 +114,67 @@ function appendBounded(current, chunk, maxBytes) {
   return buffer.subarray(buffer.length - maxBytes).toString('utf8');
 }
 
+function commandPathApi(platform) {
+  return platform === 'win32' ? win32 : { basename, dirname, join };
+}
+
+export function resolveCommandInvocation(command, args, options = {}) {
+  const cwd = options.cwd ?? process.cwd();
+  const platform = options.platform ?? process.platform;
+  const fileExists = options.fileExists ?? existsSync;
+  const pathApi = commandPathApi(platform);
+  const commandName = pathApi.basename(command).toLowerCase();
+
+  // Windows cannot directly spawn npm's .cmd shims with shell:false. Keep shell
+  // interpolation disabled and invoke the pinned JavaScript entrypoint through Node.
+  if (platform === 'win32' && commandName === 'tsp.cmd') {
+    const candidates = [];
+    const commandDir = pathApi.dirname(command);
+    if (pathApi.basename(commandDir).toLowerCase() === '.bin') {
+      const nodeModulesRoot = pathApi.dirname(commandDir);
+      candidates.push(pathApi.join(
+        nodeModulesRoot,
+        '@typespec',
+        'compiler',
+        'cmd',
+        'tsp.js',
+      ));
+    }
+    candidates.push(
+      pathApi.join(MODULE_ROOT, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp.js'),
+      pathApi.join(cwd, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp.js'),
+    );
+
+    for (const compilerCli of [...new Set(candidates)]) {
+      if (fileExists(compilerCli)) {
+        return {
+          executable: process.execPath,
+          args: [compilerCli, ...args],
+          logicalCommand: command,
+        };
+      }
+    }
+  }
+
+  // Explicit JavaScript TypeSpec test/helpers or callers are also safe to run
+  // directly through Node on Windows without enabling a command shell.
+  if (platform === 'win32' && NODE_SCRIPT.test(commandName) && fileExists(command)) {
+    return {
+      executable: process.execPath,
+      args: [command, ...args],
+      logicalCommand: command,
+    };
+  }
+
+  return { executable: command, args: [...args], logicalCommand: command };
+}
+
 export function runCommand(command, args, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const maxOutputBytes = options.maxOutputBytes ?? MAX_CAPTURE_BYTES;
+  const invocation = resolveCommandInvocation(command, args, { cwd });
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, {
+    const child = spawn(invocation.executable, invocation.args, {
       cwd,
       env: options.env ?? process.env,
       shell: false,
