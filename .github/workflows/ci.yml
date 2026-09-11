@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-14]
+        os: [ubuntu-24.04, macos-14, windows-2025]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
@@ -61,8 +61,17 @@ jobs:
       - name: Install pinned dependencies
         run: npm ci
 
-      - name: Run syntax, CLI-contract, unit, and compiler-backed integration gates
-        run: npm run test:all
+      - name: Run static and CLI contract checks
+        run: npm run check
+
+      - name: Audit flags-2-env contract
+        run: npm run flags:audit
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run compiler-backed integration tests
+        run: npm run test:integration
 
       - name: Audit package boundary and execute clean consumer acceptance
         run: npm run release:preflight

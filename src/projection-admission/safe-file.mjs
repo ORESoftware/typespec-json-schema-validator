@@ -10,12 +10,21 @@ export function fileLimit(value, name) {
 }
 
 function sameIdentity(left, right) {
-  return left.dev === right.dev && left.ino === right.ino && left.mode === right.mode;
+  if (left.ino !== right.ino) return false;
+  // Windows path-based lstat/stat can report dev=0 while handle-based fstat
+  // reports the volume id for the same file. Preserve strict file-id matching,
+  // and preserve strict device matching whenever both views provide it.
+  if (left.dev !== 0n && right.dev !== 0n && left.dev !== right.dev) return false;
+  return true;
 }
 
-function sameFile(left, right) {
+function samePathFile(left, right) {
   return sameIdentity(left, right) && left.nlink === right.nlink && left.size === right.size
-    && left.mtimeNs === right.mtimeNs && left.ctimeNs === right.ctimeNs;
+    && left.mtimeNs === right.mtimeNs;
+}
+
+function sameOpenedFile(left, right) {
+  return samePathFile(left, right) && left.mode === right.mode && left.ctimeNs === right.ctimeNs;
 }
 
 async function inspectPath(absolute) {
@@ -55,7 +64,10 @@ export async function readProjectionFile(path, maxBytes) {
   const handle = await open(absolute, flags);
   try {
     const opened = await handle.stat({ bigint: true });
-    if (!sameFile(before.file, opened)) throw new Error('projection evidence file changed before it was read');
+    // Path-based and handle-based stat metadata are not byte-for-byte portable
+    // on Windows. Identity/link/size/mtime are the cross-view snapshot checks;
+    // stricter mode/ctime checks still apply between handle stats below.
+    if (!samePathFile(before.file, opened)) throw new Error('projection evidence file changed before it was read');
     const bytes = Buffer.alloc(Number(opened.size));
     let offset = 0;
     while (offset < bytes.length) {
@@ -67,7 +79,7 @@ export async function readProjectionFile(path, maxBytes) {
     const extra = await handle.read(Buffer.alloc(1), 0, 1, offset);
     const after = await handle.stat({ bigint: true });
     const current = await inspectPath(absolute);
-    if (extra.bytesRead !== 0 || !sameFile(opened, after) || !sameFile(after, current.file)
+    if (extra.bytesRead !== 0 || !sameOpenedFile(opened, after) || !samePathFile(after, current.file)
       || before.directories.length !== current.directories.length
       || before.directories.some((directory, index) =>
         directory.path !== current.directories[index].path
