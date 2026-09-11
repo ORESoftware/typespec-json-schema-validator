@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const MAX_CAPTURE_BYTES = 256 * 1024;
 
@@ -42,6 +42,45 @@ export function dependencyInstallRoot(resolvedDependencyPath) {
 const MODULE_ROOT = dependencyInstallRoot(resolveJsonSchemaEmitter());
 
 /**
+ * Resolve the compiler from the emitter's package context rather than TJSV's.
+ *
+ * npm can legally hoist @typespec/json-schema while retaining TJSV's direct
+ * @typespec/compiler dependency below the TJSV package because the emitter's
+ * compiler dependency has a wider compatible range. Mixing those two trees
+ * triggers TypeSpec's compiler-version-mismatch guard. The compiler used for
+ * fallback compilation must therefore be the compiler the resolved emitter
+ * itself sees, and both dependencies must belong to the same installation root.
+ */
+export function resolveCompilerForEmitter(resolvedEmitterPath = resolveJsonSchemaEmitter()) {
+  let compilerPath;
+  try {
+    compilerPath = createRequire(resolvedEmitterPath).resolve('@typespec/compiler');
+  } catch (error) {
+    throw new Error(`the TypeSpec compiler adjacent to the resolved emitter could not be resolved: ${error.message}`, {
+      cause: error,
+    });
+  }
+
+  const emitterRoot = dependencyInstallRoot(resolvedEmitterPath);
+  const compilerRoot = dependencyInstallRoot(compilerPath);
+  if (resolve(emitterRoot) !== resolve(compilerRoot)) {
+    throw new Error('the resolved TypeSpec compiler is not in the emitter dependency installation root');
+  }
+  return compilerPath;
+}
+
+async function loadPinnedCompilerApi(emitterPath) {
+  const compilerPath = resolveCompilerForEmitter(emitterPath);
+  const compiler = await import(pathToFileURL(compilerPath).href);
+  for (const exportName of ['compile', 'formatDiagnostic', 'NodeHost', 'resolveCompilerOptions']) {
+    if (!(exportName in compiler)) {
+      throw new Error(`the resolved TypeSpec compiler does not export ${exportName}`);
+    }
+  }
+  return compiler;
+}
+
+/**
  * TypeSpec normalizes compiler paths to forward slashes on some Windows code paths.
  * Accept either separator here so the pinned fallback can map a missing consumer
  * node_modules probe into the same immutable dependency tree Node resolved for TJSV.
@@ -63,7 +102,7 @@ async function overlayNodeModulePath(path) {
   return candidate && await exists(candidate) ? candidate : path;
 }
 
-function createPinnedCompilerHost() {
+function createPinnedCompilerHost(NodeHost) {
   return {
     ...NodeHost,
     logSink: { log() {} },
@@ -85,20 +124,26 @@ function createPinnedCompilerHost() {
   };
 }
 
-function formatCompilerDiagnostics(diagnostics, pathRelativeTo) {
+function formatCompilerDiagnostics(formatDiagnostic, diagnostics, pathRelativeTo) {
   return diagnostics
     .map((diagnostic) => formatDiagnostic(diagnostic, { pretty: false, pathRelativeTo }))
     .join('\n');
 }
 
 async function emitWithPinnedCompiler({ entry, cwd, outputDir, emitterPath, emitterOptions }) {
-  const host = createPinnedCompilerHost();
+  const {
+    compile,
+    formatDiagnostic,
+    NodeHost,
+    resolveCompilerOptions,
+  } = await loadPinnedCompilerApi(emitterPath);
+  const host = createPinnedCompilerHost(NodeHost);
   const [resolvedOptions, configDiagnostics] = await resolveCompilerOptions(host, {
     entrypoint: entry,
     cwd,
   });
   if (configDiagnostics.length > 0) {
-    throw new Error(formatCompilerDiagnostics(configDiagnostics, cwd));
+    throw new Error(formatCompilerDiagnostics(formatDiagnostic, configDiagnostics, cwd));
   }
 
   const options = {
@@ -116,7 +161,7 @@ async function emitWithPinnedCompiler({ entry, cwd, outputDir, emitterPath, emit
   };
   const program = await compile(host, entry, options);
   if (program.hasError()) {
-    throw new Error(formatCompilerDiagnostics(program.diagnostics, cwd));
+    throw new Error(formatCompilerDiagnostics(formatDiagnostic, program.diagnostics, cwd));
   }
   return program;
 }
