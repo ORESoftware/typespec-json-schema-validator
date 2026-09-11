@@ -8,6 +8,7 @@ import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@ty
 const MODULE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_CAPTURE_BYTES = 256 * 1024;
 const WINDOWS_ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\)/u;
+const NODE_SCRIPT = /\.(?:cjs|mjs|js)$/iu;
 
 function resolveJsonSchemaEmitter() {
   try {
@@ -128,8 +129,17 @@ export function resolveCommandInvocation(command, args, options = {}) {
   const platform = options.platform ?? process.platform;
   const fileExists = options.fileExists ?? existsSync;
   const commandPath = commandPathApi(command, platform);
+  const commandName = commandPath.basename(command).toLowerCase();
 
-  if (platform === 'win32' && commandPath.basename(command).toLowerCase() === 'tsp.cmd') {
+  if (platform === 'win32' && NODE_SCRIPT.test(commandName) && fileExists(command)) {
+    return {
+      executable: process.execPath,
+      args: [command, ...args],
+      logicalCommand: command,
+    };
+  }
+
+  if (platform === 'win32' && commandName === 'tsp.cmd') {
     const candidates = [];
     const commandDir = commandPath.dirname(command);
     if (commandPath.basename(commandDir).toLowerCase() === '.bin') {
