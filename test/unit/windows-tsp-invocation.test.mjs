@@ -18,6 +18,20 @@ test('Windows tsp.cmd shims run through the pinned TypeSpec JavaScript CLI witho
   assert.equal(invocation.logicalCommand, shim);
 });
 
+test('bare tsp.cmd from PATH resolves through the pinned local TypeSpec JavaScript CLI', () => {
+  const cwd = join('C:', 'workspace');
+  const compilerCli = join(cwd, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp.js');
+  const invocation = resolveCommandInvocation('tsp.cmd', ['compile', 'contract.tsp'], {
+    platform: 'win32',
+    cwd,
+    fileExists: (candidate) => candidate === compilerCli,
+  });
+
+  assert.equal(invocation.executable, process.execPath);
+  assert.deepEqual(invocation.args, [compilerCli, 'compile', 'contract.tsp']);
+  assert.equal(invocation.logicalCommand, 'tsp.cmd');
+});
+
 test('non-TypeSpec command shims are not routed through a shell or rewritten', () => {
   const command = join('C:', 'workspace', 'node_modules', '.bin', 'other.cmd');
   const invocation = resolveCommandInvocation(command, ['--version'], {
