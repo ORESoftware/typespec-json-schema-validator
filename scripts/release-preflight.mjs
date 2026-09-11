@@ -12,7 +12,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join, relative, resolve } from 'node:path';
+import { basename, join, relative, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -277,17 +277,59 @@ async function fileDigest(path, algorithm, encoding = 'hex') {
   return createHash(algorithm).update(bytes).digest(encoding);
 }
 
-function npmExecutable() {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm';
+export function resolveNpmInvocation(args, options = {}) {
+  const platform = options.platform ?? process.platform;
+  if (platform !== 'win32') {
+    return { command: 'npm', args: [...args] };
+  }
+
+  const npmExecPath = options.npmExecPath ?? process.env.npm_execpath;
+  if (typeof npmExecPath !== 'string' || !win32.isAbsolute(npmExecPath)) {
+    throw new Error('npm_execpath must be an absolute path for shell-free Windows npm execution');
+  }
+  return {
+    command: options.nodeExecutable ?? process.execPath,
+    args: [npmExecPath, ...args],
+  };
 }
 
-function installedBin(consumerDirectory, name) {
+async function runNpmChecked(args, cwd, label) {
+  const invocation = resolveNpmInvocation(args);
+  return runChecked(invocation.command, invocation.args, cwd, label);
+}
+
+function installedBin(consumerDirectory, name, platform = process.platform) {
   return join(
     consumerDirectory,
     'node_modules',
     '.bin',
-    process.platform === 'win32' ? `${name}.cmd` : name,
+    platform === 'win32' ? `${name}.cmd` : name,
   );
+}
+
+function installedCanonicalBin(consumerDirectory) {
+  return join(
+    consumerDirectory,
+    'node_modules',
+    '@oresoftware',
+    'typespec-json-schema-validator',
+    'bin',
+    'typespec-json-schema-validator.mjs',
+  );
+}
+
+export function resolveInstalledAliasInvocation(consumerDirectory, alias, args, options = {}) {
+  const platform = options.platform ?? process.platform;
+  if (platform !== 'win32') {
+    return {
+      command: installedBin(consumerDirectory, alias, platform),
+      args: [...args],
+    };
+  }
+  return {
+    command: options.nodeExecutable ?? process.execPath,
+    args: [installedCanonicalBin(consumerDirectory), ...args],
+  };
 }
 
 function describeDoctorFailure(alias, result) {
@@ -310,8 +352,7 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
     `${JSON.stringify({ name: 'tjsv-release-preflight-consumer', private: true, type: 'module' }, null, 2)}\n`,
     { mode: 0o600 },
   );
-  await runChecked(
-    npmExecutable(),
+  await runNpmChecked(
     [
       'install',
       '--ignore-scripts',
@@ -330,8 +371,7 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
   // Zed package contract and preventing unrelated transitive scripts from
   // executing implicitly.
   for (const packageName of APPROVED_LIFECYCLE_REBUILDS) {
-    await runChecked(
-      npmExecutable(),
+    await runNpmChecked(
       ['rebuild', packageName, '--foreground-scripts', '--no-audit', '--no-fund'],
       consumerDirectory,
       `approved lifecycle rebuild for ${packageName}`,
@@ -354,6 +394,12 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
     'public package import probe',
   );
 
+  const canonicalExecutable = installedCanonicalBin(consumerDirectory);
+  const canonicalInfo = await stat(canonicalExecutable);
+  if (!canonicalInfo.isFile()) {
+    throw new Error('installed canonical CLI entrypoint is not a regular file');
+  }
+
   const aliases = ['tjsv', 'tsjsv', 'typespec-json-schema-validator'];
   for (const alias of aliases) {
     const executable = installedBin(consumerDirectory, alias);
@@ -361,9 +407,14 @@ async function verifyCleanConsumer(consumerDirectory, tarballPath) {
     if (!info.isFile()) {
       throw new Error(`installed CLI alias is not a regular file: ${alias}`);
     }
-    const result = await runProcess(
-      executable,
+    const invocation = resolveInstalledAliasInvocation(
+      consumerDirectory,
+      alias,
       ['doctor', '--quiet'],
+    );
+    const result = await runProcess(
+      invocation.command,
+      invocation.args,
       consumerDirectory,
       `${alias} doctor`,
     );
@@ -413,8 +464,7 @@ export async function runReleasePreflight() {
     const packDirectory = join(workspace, 'pack');
     const consumerDirectory = join(workspace, 'consumer');
     await mkdir(packDirectory, { recursive: true, mode: 0o700 });
-    const packed = await runChecked(
-      npmExecutable(),
+    const packed = await runNpmChecked(
       ['pack', '--json', '--ignore-scripts', '--pack-destination', packDirectory],
       ROOT,
       'npm pack',
