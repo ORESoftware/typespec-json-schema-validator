@@ -44,8 +44,8 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Audit pinned production dependency closure
-        run: npm run audit:prod
+      - name: Audit pinned production dependency closure through direct action boundary
+        run: node ./scripts/npm-audit-gate.mjs
         env:
           TSJSV_NPM_AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
 
