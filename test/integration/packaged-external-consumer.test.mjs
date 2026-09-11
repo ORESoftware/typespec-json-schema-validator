@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
+import { normalizeWindowsShellFreeSpawn } from '../../scripts/windows-shellfree-spawn.mjs';
+
 const packageRoot = resolve(import.meta.dirname, '../..');
 const fixtures = resolve(packageRoot, 'test/fixtures/pass');
 
@@ -14,7 +16,8 @@ function npmExecutable() {
 
 function run(command, args, cwd) {
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(command, args, {
+    const launch = normalizeWindowsShellFreeSpawn(command, args);
+    const child = spawn(launch.command, launch.args, {
       cwd,
       env: {
         ...process.env,
