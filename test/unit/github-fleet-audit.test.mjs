@@ -29,7 +29,7 @@ function scope(overrides = {}) {
 function repo(fullName, { archived = false, privateRepo = false } = {}) {
   const [owner, name] = fullName.split('/');
   return {
-    id: Math.floor(Math.random() * 1_000_000),
+    id: [...fullName].reduce((sum, character) => sum + character.codePointAt(0), 0),
     name,
     full_name: fullName,
     archived,
@@ -85,7 +85,7 @@ test('current immutable action pin does not emit pin-drift finding', () => {
   const result = snapshot({
     files: [{
       path: '.github/workflows/contracts.yml',
-      text: `jobs:\n  parity:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest, macos-latest, windows-2025]\n    steps:\n      - uses: ORESoftware/typespec-json-schema-validator@${CURRENT}\n      - run: test -f report.json\n`,
+      text: `jobs:\n  parity:\n    runs-on: \${{ matrix.os }}\n    strategy:\n      matrix:\n        os: [ubuntu-latest, macos-latest, windows-2025]\n    steps:\n      - uses: ORESoftware/typespec-json-schema-validator@${CURRENT}\n      - run: test -f report.json\n`,
     }],
   });
   assert.equal(result.findings.some((entry) => entry.rule === 'tjsv-floating-action-ref'), false);
