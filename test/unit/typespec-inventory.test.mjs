@@ -188,11 +188,17 @@ test('official TypeSpec compiler and TJSV inventory agree on lexical nested name
   const sameNameInventory = inventoryTypeSpecSource(sameNameSource, 'compiler-same-name.tsp');
   const blocklessInventory = inventoryTypeSpecSource(blocklessSource, 'compiler-blockless.tsp');
 
-  // One compiler program independently resolves all fixtures while keeping the
-  // official-compiler oracle bounded under the macOS node:test worker budget.
+  // Keep ordinary block-scoped fixtures in one compiler program, but isolate the
+  // blockless fixture because a blockless namespace governs the rest of its file
+  // and cannot legally follow declarations. Two bounded compiler programs preserve
+  // the official-compiler oracle without manufacturing invalid TypeSpec source.
   const compilerProgram = await compileTypeSpecSource(
-    `${basicSource}\n${deepSource}\n${sameNameSource}\n${blocklessSource}`,
+    `${basicSource}\n${deepSource}\n${sameNameSource}`,
     'compiler-namespace-lockstep.tsp',
+  );
+  const blocklessCompilerProgram = await compileTypeSpecSource(
+    blocklessSource,
+    'compiler-blockless-lockstep.tsp',
   );
 
   for (const reference of [
@@ -203,20 +209,20 @@ test('official TypeSpec compiler and TJSV inventory agree on lexical nested name
     'Demo.Demo.Inner.Demo.Inner.Deep.FullyQualifiedDeep',
     'Demo.Demo.Inner.Innerish.RelativeDeep',
     'Same.Same',
-    'Root.Space.Root.Space.Area.Item',
   ]) {
     requireCompilerModel(compilerProgram, reference);
   }
+  requireCompilerModel(blocklessCompilerProgram, 'Root.Space.Root.Space.Area.Item');
 
   for (const reference of [
     'Demo.Inner.WeatherReading',
     'Demo.Inner.Deep.FullyQualifiedDeep',
     'Demo.Inner.Innerish.RelativeDeep',
     'Same',
-    'Root.Space.Area.Item',
   ]) {
     requireCompilerReferenceAbsent(compilerProgram, reference);
   }
+  requireCompilerReferenceAbsent(blocklessCompilerProgram, 'Root.Space.Area.Item');
 
   assert.deepEqual(
     basicInventory.declarations.map((item) => item.qualifiedName),
