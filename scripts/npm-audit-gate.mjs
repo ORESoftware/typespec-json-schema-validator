@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import {
   evaluateAudit,
   failedAuditReceipt,
   sha256Utf8,
   validateAuditEnvironment,
 } from '../src/npm-audit-policy.mjs';
+import { resolveNpmLaunch } from '../src/npm-command.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const packageJsonPath = resolve(root, 'package.json');
@@ -20,22 +21,19 @@ function commandText(command, args) {
   let executable = command;
   let argv = args;
 
-  // npm is a .cmd shim on Windows and cannot be executed directly with
-  // shell:false. npm exposes the exact JS CLI for the current invocation via
-  // npm_execpath, so execute that immutable argv target through this Node
-  // process instead of enabling cmd.exe or interpolating a shell command.
-  if (command === 'npm' && process.platform === 'win32') {
-    const npmExecPath = process.env.npm_execpath;
-    if (typeof npmExecPath !== 'string' || !isAbsolute(npmExecPath)) {
+  if (command === 'npm') {
+    try {
+      const launch = resolveNpmLaunch(args);
+      executable = launch.command;
+      argv = launch.args;
+    } catch (error) {
       return {
         status: null,
         stdout: '',
         stderr: '',
-        error: new Error('npm_execpath is unavailable or not absolute on Windows'),
+        error: error instanceof Error ? error : new Error(String(error)),
       };
     }
-    executable = process.execPath;
-    argv = [npmExecPath, ...args];
   }
 
   return spawnSync(executable, argv, {
