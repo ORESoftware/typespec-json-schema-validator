@@ -61,8 +61,17 @@ jobs:
       - name: Install pinned dependencies
         run: npm ci
 
-      - name: Run syntax, CLI-contract, unit, and compiler-backed integration gates
-        run: npm run test:all
+      - name: Check JavaScript syntax
+        run: npm run check
+
+      - name: Audit CLI contract
+        run: npm run flags:audit
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Run compiler-backed integration tests
+        run: npm run test:integration
 
       - name: Audit package boundary and execute clean consumer acceptance
         run: npm run release:preflight
