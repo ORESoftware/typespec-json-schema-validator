@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { win32 } from 'node:path';
-import { resolveCommandInvocation } from '../../src/emitter.mjs';
+import { join, win32 } from 'node:path';
+import { nodeModuleOverlayCandidate, resolveCommandInvocation } from '../../src/emitter.mjs';
 
 function sameWindowsPath(left, right) {
   return win32.normalize(left).toLowerCase() === win32.normalize(right).toLowerCase();
@@ -109,4 +109,19 @@ test('POSIX TypeSpec launch remains unchanged', () => {
   assert.equal(invocation.executable, command);
   assert.deepEqual(invocation.args, ['--version']);
   assert.equal(invocation.logicalCommand, command);
+});
+
+test('pinned fallback maps Windows-native and forward-slash-normalized module probes identically', () => {
+  const moduleRoot = join(process.cwd(), 'overlay-root');
+  const expected = join(moduleRoot, 'node_modules', '@typespec', 'json-schema');
+
+  assert.equal(
+    nodeModuleOverlayCandidate(String.raw`D:\consumer\node_modules\@typespec\json-schema`, moduleRoot),
+    expected,
+  );
+  assert.equal(
+    nodeModuleOverlayCandidate('D:/consumer/node_modules/@typespec/json-schema', moduleRoot),
+    expected,
+  );
+  assert.equal(nodeModuleOverlayCandidate(String.raw`D:\consumer\main.tsp`, moduleRoot), null);
 });
