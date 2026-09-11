@@ -1,12 +1,13 @@
 import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { dirname, isAbsolute, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import {
   evaluateAudit,
   failedAuditReceipt,
   sha256Utf8,
   validateAuditEnvironment,
 } from '../src/npm-audit-policy.mjs';
+import { resolveNpmInvocation } from '../src/npm-command.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const packageJsonPath = resolve(root, 'package.json');
@@ -17,28 +18,21 @@ const receiptPath = resolve(
 );
 
 function commandText(command, args) {
-  let executable = command;
-  let argv = args;
-
-  // npm is a .cmd shim on Windows and cannot be executed directly with
-  // shell:false. npm exposes the exact JS CLI for the current invocation via
-  // npm_execpath, so execute that immutable argv target through this Node
-  // process instead of enabling cmd.exe or interpolating a shell command.
-  if (command === 'npm' && process.platform === 'win32') {
-    const npmExecPath = process.env.npm_execpath;
-    if (typeof npmExecPath !== 'string' || !isAbsolute(npmExecPath)) {
-      return {
-        status: null,
-        stdout: '',
-        stderr: '',
-        error: new Error('npm_execpath is unavailable or not absolute on Windows'),
-      };
-    }
-    executable = process.execPath;
-    argv = [npmExecPath, ...args];
+  // Windows npm is a .cmd shim, so invoke its JavaScript CLI entrypoint through
+  // the current Node executable. The resolver prefers npm_execpath when a
+  // parent npm process supplied it and otherwise falls back to setup-node's
+  // node-adjacent npm-cli.js without enabling cmd.exe or shell interpolation.
+  const invocation = resolveNpmInvocation({ command, args });
+  if (invocation.error) {
+    return {
+      status: null,
+      stdout: '',
+      stderr: '',
+      error: invocation.error,
+    };
   }
 
-  return spawnSync(executable, argv, {
+  return spawnSync(invocation.executable, invocation.argv, {
     cwd: root,
     encoding: 'utf8',
     maxBuffer: 16 * 1024 * 1024,
