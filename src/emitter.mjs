@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
@@ -17,17 +17,26 @@ function resolveJsonSchemaEmitter() {
   }
 }
 
+/**
+ * TypeSpec normalizes compiler paths to forward slashes on some Windows code paths.
+ * Accept either separator here so the pinned fallback can map a missing consumer
+ * node_modules probe into TJSV's own immutable dependency tree on every platform.
+ */
+export function nodeModuleOverlayCandidate(path, moduleRoot = MODULE_ROOT) {
+  const segments = String(path).split(/[\\/]+/u);
+  const nodeModulesIndex = segments.lastIndexOf('node_modules');
+  if (nodeModulesIndex < 0) {
+    return null;
+  }
+  return join(moduleRoot, 'node_modules', ...segments.slice(nodeModulesIndex + 1));
+}
+
 async function overlayNodeModulePath(path) {
   if (await exists(path)) {
     return path;
   }
-  const segments = path.split(sep);
-  const nodeModulesIndex = segments.lastIndexOf('node_modules');
-  if (nodeModulesIndex < 0) {
-    return path;
-  }
-  const candidate = join(MODULE_ROOT, 'node_modules', ...segments.slice(nodeModulesIndex + 1));
-  return (await exists(candidate)) ? candidate : path;
+  const candidate = nodeModuleOverlayCandidate(path);
+  return candidate && await exists(candidate) ? candidate : path;
 }
 
 function createPinnedCompilerHost() {
