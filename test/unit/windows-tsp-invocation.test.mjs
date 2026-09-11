@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { join } from 'node:path';
+import { join, normalize } from 'node:path';
 import { resolveCommandInvocation } from '../../src/emitter.mjs';
+
+function assertInvocationPath(actual, expected) {
+  assert.equal(normalize(actual), normalize(expected));
+}
 
 test('Windows tsp.cmd shims run through the pinned TypeSpec JavaScript CLI without a shell', () => {
   const root = join('C:', 'workspace', 'node_modules');
@@ -10,12 +14,13 @@ test('Windows tsp.cmd shims run through the pinned TypeSpec JavaScript CLI witho
   const invocation = resolveCommandInvocation(shim, ['--version'], {
     platform: 'win32',
     cwd: join('C:', 'workspace'),
-    fileExists: (candidate) => candidate === compilerCli,
+    fileExists: (candidate) => normalize(candidate) === normalize(compilerCli),
   });
 
   assert.equal(invocation.executable, process.execPath);
-  assert.deepEqual(invocation.args, [compilerCli, '--version']);
-  assert.equal(invocation.logicalCommand, shim);
+  assertInvocationPath(invocation.args[0], compilerCli);
+  assert.deepEqual(invocation.args.slice(1), ['--version']);
+  assertInvocationPath(invocation.logicalCommand, shim);
 });
 
 test('bare tsp.cmd from PATH resolves through the pinned local TypeSpec JavaScript CLI', () => {
@@ -24,11 +29,12 @@ test('bare tsp.cmd from PATH resolves through the pinned local TypeSpec JavaScri
   const invocation = resolveCommandInvocation('tsp.cmd', ['compile', 'contract.tsp'], {
     platform: 'win32',
     cwd,
-    fileExists: (candidate) => candidate === compilerCli,
+    fileExists: (candidate) => normalize(candidate) === normalize(compilerCli),
   });
 
   assert.equal(invocation.executable, process.execPath);
-  assert.deepEqual(invocation.args, [compilerCli, 'compile', 'contract.tsp']);
+  assertInvocationPath(invocation.args[0], compilerCli);
+  assert.deepEqual(invocation.args.slice(1), ['compile', 'contract.tsp']);
   assert.equal(invocation.logicalCommand, 'tsp.cmd');
 });
 
