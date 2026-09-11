@@ -59,7 +59,6 @@ runs:
       id: verify
       shell: bash
       env:
-        TSJSV_COMMAND: verify-projection
         TSJSV_PROJECTION_ROOT: ${{ inputs.root }}
         TSJSV_PROJECTION_MANIFEST: ${{ inputs.projection_manifest }}
         TSJSV_CONTRACT_IR: ${{ inputs.contract_ir }}
@@ -72,11 +71,15 @@ runs:
         TSJSV_QUIET: ${{ inputs.quiet }}
       run: |
         set -euo pipefail
-        node "${GITHUB_ACTION_PATH}/../../bin/typespec-json-schema-validator.mjs"
+        node "${GITHUB_ACTION_PATH}/../../bin/typespec-json-schema-validator.mjs" verify-projection
         receipt_path="${TSJSV_PROJECTION_ROOT%/}/${TSJSV_PROJECTION_VERIFICATION}"
+        test -s "${receipt_path}"
         status="$(node -e '
           const fs = require("node:fs");
           const receipt = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+          if (receipt.status !== "passed" || receipt.admissible !== true) {
+            throw new Error("projection verification receipt is not admissible");
+          }
           process.stdout.write(receipt.status);
         ' "${receipt_path}")"
         printf 'verification=%s\n' "${receipt_path}" >> "${GITHUB_OUTPUT}"
