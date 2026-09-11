@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
@@ -111,25 +111,30 @@ function appendBounded(current, chunk, maxBytes) {
 }
 
 /**
- * Translate only npm's local Windows `tsp.cmd` shim into the pinned compiler's
- * JavaScript entry point. Node cannot execute `.cmd` directly with `shell:false`
- * on Windows, while enabling a general shell would widen the command boundary.
+ * Keep Windows execution shell-free while translating the two executable forms
+ * TJSV legitimately owns: npm's local tsp.cmd shim and explicit Node scripts
+ * used as a TypeSpec command in tests/consumers. All argv remains tokenized.
  */
 export function normalizeSpawnCommand(command, args, options = {}) {
   const platform = options.platform ?? process.platform;
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
-  if (platform === 'win32') {
-    const directory = win32.dirname(command);
-    if (
-      win32.isAbsolute(command)
-      && win32.basename(command).toLowerCase() === 'tsp.cmd'
-      && win32.basename(directory).toLowerCase() === '.bin'
-    ) {
-      return {
-        command: nodeExecutable,
-        args: [win32.join(directory, '..', '@typespec', 'compiler', 'cmd', 'tsp.js'), ...args],
-      };
-    }
+  if (platform !== 'win32') return { command, args: [...args] };
+
+  const extension = extname(command).toLowerCase();
+  if (isAbsolute(command) && ['.js', '.mjs', '.cjs'].includes(extension)) {
+    return { command: nodeExecutable, args: [command, ...args] };
+  }
+
+  const directory = win32.dirname(command);
+  if (
+    win32.isAbsolute(command)
+    && win32.basename(command).toLowerCase() === 'tsp.cmd'
+    && win32.basename(directory).toLowerCase() === '.bin'
+  ) {
+    return {
+      command: nodeExecutable,
+      args: [win32.join(directory, '..', '@typespec', 'compiler', 'cmd', 'tsp.js'), ...args],
+    };
   }
   return { command, args: [...args] };
 }
