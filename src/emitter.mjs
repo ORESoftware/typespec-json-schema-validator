@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
-import { basename, dirname, extname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compile, formatDiagnostic, NodeHost, resolveCompilerOptions } from '@typespec/compiler';
 
@@ -120,8 +120,8 @@ export function normalizeSpawnCommand(command, args, options = {}) {
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
   if (platform !== 'win32') return { command, args: [...args] };
 
-  const extension = extname(command).toLowerCase();
-  if (isAbsolute(command) && ['.js', '.mjs', '.cjs'].includes(extension)) {
+  const extension = win32.extname(command).toLowerCase();
+  if (win32.isAbsolute(command) && ['.js', '.mjs', '.cjs'].includes(extension)) {
     return { command: nodeExecutable, args: [command, ...args] };
   }
 
