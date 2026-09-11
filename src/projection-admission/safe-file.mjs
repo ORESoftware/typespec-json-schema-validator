@@ -10,7 +10,12 @@ export function fileLimit(value, name) {
 }
 
 function sameIdentity(left, right) {
-  return left.dev === right.dev && left.ino === right.ino;
+  if (left.ino !== right.ino) return false;
+  // On Windows, path-based lstat/stat can report dev=0 while handle-based
+  // fstat reports the real volume serial for the same file. Keep inode/file-id
+  // strict everywhere, and keep device strict whenever both views provide it.
+  if (left.dev !== 0n && right.dev !== 0n && left.dev !== right.dev) return false;
+  return true;
 }
 
 function samePathFile(left, right) {
@@ -59,10 +64,10 @@ export async function readProjectionFile(path, maxBytes) {
   const handle = await open(absolute, flags);
   try {
     const opened = await handle.stat({ bigint: true });
-    // Windows can expose different mode/ctime metadata for path-based lstat and
-    // handle-based fstat of the same file. Device/inode/link/size/mtime remain
-    // the portable cross-view identity and snapshot checks; stricter metadata
-    // is still compared between two handle-based stats below.
+    // Windows can expose different mode/ctime metadata and a zero path-based
+    // device id for the same file. Identity plus link/size/mtime remain the
+    // portable cross-view snapshot checks; stricter metadata is still compared
+    // between two handle-based stats below.
     if (!samePathFile(before.file, opened)) throw new Error('projection evidence file changed before it was read');
     const bytes = Buffer.alloc(Number(opened.size));
     let offset = 0;
