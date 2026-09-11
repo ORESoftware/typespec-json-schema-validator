@@ -38,6 +38,20 @@ test('bare tsp.cmd from PATH resolves through the pinned local TypeSpec JavaScri
   assert.equal(invocation.logicalCommand, 'tsp.cmd');
 });
 
+test('explicit JavaScript TypeSpec binaries run through Node on Windows', () => {
+  const command = join('C:', 'workspace', 'test', 'helpers', 'fake-tsp.mjs');
+  const invocation = resolveCommandInvocation(command, ['compile', 'contract.tsp'], {
+    platform: 'win32',
+    cwd: join('C:', 'workspace'),
+    fileExists: (candidate) => normalize(candidate) === normalize(command),
+  });
+
+  assert.equal(invocation.executable, process.execPath);
+  assertInvocationPath(invocation.args[0], command);
+  assert.deepEqual(invocation.args.slice(1), ['compile', 'contract.tsp']);
+  assertInvocationPath(invocation.logicalCommand, command);
+});
+
 test('non-TypeSpec command shims are not routed through a shell or rewritten', () => {
   const command = join('C:', 'workspace', 'node_modules', '.bin', 'other.cmd');
   const invocation = resolveCommandInvocation(command, ['--version'], {
