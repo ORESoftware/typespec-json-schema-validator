@@ -1,5 +1,6 @@
 import { escapeJsonPointerSegment, isPlainObject } from './canonical.mjs';
 import { SchemaResolver } from './instance-validator.mjs';
+import { JSON_SCHEMA_DRAFT_2020_12 } from './json-schema.mjs';
 
 const MAPS = new Set(['$defs', 'definitions', 'properties', 'patternProperties', 'dependentSchemas']);
 const ARRAYS = new Set(['allOf', 'anyOf', 'oneOf', 'prefixItems']);
@@ -39,6 +40,9 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
     return Object.fromEntries(Object.entries(node).map(([key, value]) => {
       const childPointer = `${pointer}/${escapeJsonPointerSegment(key)}`;
+      if (key === '$schema' && value !== JSON_SCHEMA_DRAFT_2020_12) {
+        report('json-schema-unsupported-dialect', declaration, childPointer, 'static comparison requires Draft 2020-12 for every declared resource dialect');
+      }
       if (DYNAMIC.has(key)) {
         report('json-schema-unsupported-reference', declaration, childPointer, `static reference comparison cannot evaluate ${key}`);
       }

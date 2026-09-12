@@ -15,8 +15,8 @@ definition cannot silently become the top-level `Value` declaration just because
 their simple names agree. Different resource URIs can still compare equally when
 they identify the same paired schema locations.
 
-Unresolved references, targets outside the compared declarations, and unsupported
-dynamic-reference/vocabulary semantics stop static admission. This also applies
+Unresolved references, targets outside the compared declarations, unsupported
+resource dialects, and dynamic-reference/vocabulary semantics stop static admission. This also applies
 to optional properties and when instance probes are disabled. The graph is local;
 the comparator performs no network retrieval. Reference-looking JSON within
 `const`, `enum`, examples, defaults and extensions remains literal data.
@@ -33,7 +33,8 @@ Resolver entries retain both the inherited URI base and the base after applying
 the target's own `$id`. Evaluation applies relative identifiers exactly once.
 Document-relative pointers, embedded-resource pointers, percent-encoded pointers,
 anchors and boolean schemas recover the registered target's scope and source
-location. A directory-bearing identifier cannot redirect a reference into a
+location. Identifiers that cannot resolve against their inherited base are
+refused without partially registering a document. A directory-bearing identifier cannot redirect a reference into a
 similarly named decoy resource through double application.
 
 ## Refusal is distinct from rejection
@@ -57,6 +58,8 @@ literal JSON, dangling and dynamic references, exact target scope, directory
 decoys, finite recursion, branch isolation, evaluation limits, and refused-lane
 receipts. Run these with the existing reference-identity and validator tests, then
 run `npm run test:all` and `npm run release:preflight` on the exact candidate head.
+`test/integration/reference-admission.test.mjs` also verifies actual CLI refusal
+receipts, immutable source files, and non-admissible Contract IR tombstones.
 
 Draft 2020-12 specifies [reference resolution against the current URI base](https://json-schema.org/draft/2020-12/json-schema-core#section-8.2.3.1)
 and [guards against infinite recursion](https://json-schema.org/draft/2020-12/json-schema-core#section-9.4.1).

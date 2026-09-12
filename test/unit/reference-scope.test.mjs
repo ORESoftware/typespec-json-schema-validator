@@ -42,6 +42,15 @@ test('a relative root ID containing directories is resolved once at registration
   assert.equal(validateInstance({ schema: document, instance: 'wrong', resolver, base }).valid, false);
 });
 
+test('an unresolvable embedded ID is refused without partially registering its document', () => {
+  const resolver = new SchemaResolver([{ document: { $id: 'https://example.test/retained', type: 'string' }, path: 'retained.json' }]);
+  const document = { $id: 'urn:example:root', $defs: { Child: { $id: 'child.json', type: 'integer' } } };
+  assert.throws(() => resolver.addDocument(document, 'invalid-scope.json'), (error) => error.name === 'SchemaResolutionError');
+  assert.equal(resolver.documents.length, 1);
+  assert.equal(resolver.resolve('urn:example:root', 'https://example.test/'), undefined);
+  assert.equal(resolver.resolve('https://example.test/retained', 'https://example.test/').schema.type, 'string');
+});
+
 test('resource-relative and document-relative pointers retain the same target scope and location', () => {
   const document = scopedDocument();
   const resolver = new SchemaResolver([{ document, path: 'scope.json' }]);

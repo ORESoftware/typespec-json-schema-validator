@@ -61,6 +61,13 @@ test('sibling references do not leave stale recursion frames behind', () => {
   assert.equal(check(schema, 'wrong').valid, false);
 });
 
+test('unsupported resource dialects are refused rather than evaluated as Draft 2020-12', () => {
+  const oldDialect = { $schema: 'http://json-schema.org/draft-07/schema#', type: 'integer' };
+  for (const schema of [oldDialect, { not: oldDialect }]) {
+    assert.throws(() => check(schema, 1), (error) => error.name === 'UnsupportedKeywordError' && error.keyword === '$schema');
+  }
+});
+
 test('two unfinished lanes cannot manufacture behavioral agreement', () => {
   const document = { $defs: { Loop: { not: { $ref: '#/$defs/Loop' } } } };
   const collection = {

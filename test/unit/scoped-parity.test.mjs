@@ -78,6 +78,13 @@ test('unsupported dynamic reference scope cannot disappear in static comparison'
   assert.ok(result.findings.some(({ ruleId }) => ruleId === 'json-schema-unsupported-reference'), canonicalStringify(result.findings));
 });
 
+test('an embedded unsupported dialect cannot disappear as presentation metadata', () => {
+  const document = schema('nested.json');
+  document.$defs.Payload.$schema = 'http://json-schema.org/draft-07/schema#';
+  const result = compare(document, structuredClone(document));
+  assert.ok(result.findings.some(({ ruleId }) => ruleId === 'json-schema-unsupported-dialect'), canonicalStringify(result.findings));
+});
+
 test('references outside the compared declaration set stop static admission', () => {
   const document = schema();
   document.$defs.Payload.properties.value = { $ref: '#' };

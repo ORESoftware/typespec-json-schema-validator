@@ -14,6 +14,7 @@
  */
 
 import { isPlainObject, escapeJsonPointerSegment, unescapeJsonPointerSegment } from './canonical.mjs';
+import { JSON_SCHEMA_DRAFT_2020_12 } from './json-schema.mjs';
 import { registerSchemaUri } from './schema-uri-index.mjs';
 import { FORMAT_ASSERTIONS } from './format-assertions.mjs';
 export { SchemaIdentityError } from './schema-uri-index.mjs';
@@ -236,6 +237,7 @@ export class SchemaResolver {
     let currentBase = base;
     if (typeof node.$id === 'string') {
       const resolved = resolveUri(node.$id, base);
+      if (!resolved) throw new SchemaResolutionError(node.$id, `${pointer}/$id`, base);
       if (resolved) {
         currentBase = resolved.split('#')[0];
         registerSchemaUri(pending, this.#byUri, currentBase, { schema: node, base: currentBase, parentBase: base, record, pointer });
@@ -421,6 +423,9 @@ class ValidationContext {
  * dynamic-reference family genuinely can change a verdict and is therefore refused.
  */
 function assertKnownKeywords(schema, schemaPointer, source) {
+  if (schema.$schema !== undefined && schema.$schema !== JSON_SCHEMA_DRAFT_2020_12) {
+    throw new UnsupportedKeywordError('$schema', schemaPointer, source);
+  }
   for (const keyword of Object.keys(schema)) {
     if (REFUSED_KEYWORDS.has(keyword)) {
       throw new UnsupportedKeywordError(keyword, schemaPointer, source);
@@ -453,6 +458,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
   let currentBase = base;
   if (typeof schema.$id === 'string') {
     const resolved = resolveUri(schema.$id, base);
+    if (!resolved) throw new SchemaResolutionError(schema.$id, `${schemaPointer}/$id`, base);
     if (resolved) {
       currentBase = resolved.split('#')[0];
     }
