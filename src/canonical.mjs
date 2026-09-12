@@ -17,6 +17,15 @@ const JSON_SCHEMA_TYPES = new Set([
   'array', 'boolean', 'integer', 'null', 'number', 'object', 'string',
 ]);
 
+// additionalProperties and unevaluatedProperties differ when annotations can
+// arrive through composition or reference boundaries. Only simple object
+// schemas with none of these boundaries are eligible for comparison-only
+// spelling equivalence.
+const EVALUATED_PROPERTY_COMPOSITION_KEYS = new Set([
+  '$ref', '$dynamicRef', '$recursiveRef', 'allOf', 'anyOf', 'oneOf',
+  'if', 'then', 'else', 'dependentSchemas', 'dependencies', 'not',
+]);
+
 // These keywords do not assert whether an instance is valid. They may still be
 // essential while executing a schema: $id builds the resource graph, examples
 // and defaults seed probes, and title can identify a root declaration. They are
@@ -38,12 +47,14 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   stripMetadata: false,
   normalizeReference: normalizeRef,
   collapseSafeIntegerConstType: false,
+  collapseSimpleClosedObjectKeyword: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
   stripMetadata: true,
   normalizeReference: normalizeComparisonRef,
   collapseSafeIntegerConstType: true,
+  collapseSimpleClosedObjectKeyword: true,
 });
 
 export function isPlainObject(value) {
@@ -192,6 +203,42 @@ function collapseRedundantSafeIntegerConstType(value, options) {
   const { type: _redundantType, ...rest } = value;
   return rest;
 }
+
+function collapseEquivalentSimpleClosedObjectKeyword(value, options) {
+  if (!options.collapseSimpleClosedObjectKeyword || !isPlainObject(value) || value.type !== 'object') {
+    return value;
+  }
+
+  const hasAdditional = Object.hasOwn(value, 'additionalProperties');
+  const hasUnevaluated = Object.hasOwn(value, 'unevaluatedProperties');
+  // Both spellings together may carry intentionally redundant evidence. Neither
+  // spelling has nothing to normalize.
+  if (hasAdditional === hasUnevaluated) {
+    return value;
+  }
+
+  const closureKey = hasAdditional ? 'additionalProperties' : 'unevaluatedProperties';
+  if (value[closureKey] !== false) {
+    return value;
+  }
+  if ([...EVALUATED_PROPERTY_COMPOSITION_KEYS].some((key) => Object.hasOwn(value, key))) {
+    return value;
+  }
+
+  // Without composition/reference annotations, both keywords reject exactly the
+  // properties not covered by this object's properties/patternProperties. Use
+  // additionalProperties:false as a comparison-only common spelling. The
+  // executable lane and both authored source documents remain untouched.
+  if (closureKey === 'additionalProperties') {
+    return value;
+  }
+  const entries = Object.entries(value)
+    .filter(([key]) => key !== 'unevaluatedProperties');
+  entries.push(['additionalProperties', false]);
+  entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  return Object.fromEntries(entries);
+}
+
 function sortJsonValues(values) {
   // Never deduplicate. In particular, repeated oneOf branches change validity.
   // Use code-unit ordering, not a locale-dependent comparator, for digests.
@@ -260,7 +307,8 @@ function normalizeSchemaNodeWith(value, options) {
   }
   const result = Object.fromEntries(entries);
   const normalizedUnion = canCollapseSimpleTypeUnion(result) ?? result;
-  return collapseRedundantSafeIntegerConstType(normalizedUnion, options);
+  const normalizedClosedObject = collapseEquivalentSimpleClosedObjectKeyword(normalizedUnion, options);
+  return collapseRedundantSafeIntegerConstType(normalizedClosedObject, options);
 }
 
 /**
