@@ -16,6 +16,16 @@ const SCHEMA_SINGLE_KEYS = new Set([
 const JSON_SCHEMA_TYPES = new Set([
   'array', 'boolean', 'integer', 'null', 'number', 'object', 'string',
 ]);
+const SAFE_LITERAL_UNION_TYPES = new Set(['boolean', 'null', 'string']);
+
+// additionalProperties and unevaluatedProperties differ when annotations can
+// arrive through composition or reference boundaries. Only simple object
+// schemas with none of these boundaries are eligible for comparison-only
+// spelling equivalence.
+const EVALUATED_PROPERTY_COMPOSITION_KEYS = new Set([
+  '$ref', '$dynamicRef', '$recursiveRef', 'allOf', 'anyOf', 'oneOf',
+  'if', 'then', 'else', 'dependentSchemas', 'dependencies', 'not',
+]);
 
 // These keywords do not assert whether an instance is valid. They may still be
 // essential while executing a schema: $id builds the resource graph, examples
@@ -38,12 +48,18 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   stripMetadata: false,
   normalizeReference: normalizeRef,
   collapseSafeIntegerConstType: false,
+  collapseSimpleClosedObjectKeyword: false,
+  collapseSafeLiteralUnion: false,
+  collapseSafeSingletonEnum: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
   stripMetadata: true,
   normalizeReference: normalizeComparisonRef,
   collapseSafeIntegerConstType: true,
+  collapseSimpleClosedObjectKeyword: true,
+  collapseSafeLiteralUnion: true,
+  collapseSafeSingletonEnum: true,
 });
 
 export function isPlainObject(value) {
@@ -172,6 +188,88 @@ function canCollapseSimpleTypeUnion(value) {
   return { type: types.sort() };
 }
 
+function literalMatchesType(value, type) {
+  if (type === 'null') return value === null;
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'boolean') return typeof value === 'boolean';
+  return false;
+}
+
+function canCollapseSafeLiteralUnion(value, options) {
+  if (!options.collapseSafeLiteralUnion || !isPlainObject(value)) {
+    return null;
+  }
+  const keys = Object.keys(value);
+  const unionKey = keys.includes('anyOf') ? 'anyOf' : keys.includes('oneOf') ? 'oneOf' : null;
+  if (!unionKey || keys.length !== 1) {
+    return null;
+  }
+  const branches = value[unionKey];
+  if (!Array.isArray(branches) || branches.length === 0) {
+    return null;
+  }
+
+  let type;
+  const values = [];
+  const seen = new Set();
+  for (const branch of branches) {
+    if (!isPlainObject(branch)) return null;
+    const branchKeys = Object.keys(branch).sort();
+    if (branchKeys.length !== 2 || branchKeys[0] !== 'const' || branchKeys[1] !== 'type') {
+      return null;
+    }
+    if (typeof branch.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(branch.type)) {
+      return null;
+    }
+    if (type !== undefined && branch.type !== type) {
+      return null;
+    }
+    if (!literalMatchesType(branch.const, branch.type)) {
+      return null;
+    }
+    type = branch.type;
+    const identity = canonicalStringify(branch.const);
+    if (unionKey === 'oneOf' && seen.has(identity)) {
+      // A repeated oneOf branch makes that literal match more than one branch,
+      // so the XOR rejects it. An enum would accept it; do not erase that fact.
+      return null;
+    }
+    if (!seen.has(identity)) {
+      seen.add(identity);
+      values.push(canonicalizeJson(branch.const));
+    }
+  }
+
+  return {
+    enum: sortJsonValues(values),
+    type,
+  };
+}
+
+function canCollapseSafeSingletonEnum(value, options) {
+  if (!options.collapseSafeSingletonEnum || !isPlainObject(value)) {
+    return null;
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'enum' || keys[1] !== 'type') {
+    return null;
+  }
+  if (typeof value.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(value.type)) {
+    return null;
+  }
+  if (!Array.isArray(value.enum) || value.enum.length !== 1) {
+    return null;
+  }
+  const literal = value.enum[0];
+  if (!literalMatchesType(literal, value.type)) {
+    return null;
+  }
+  return {
+    const: canonicalizeJson(literal),
+    type: value.type,
+  };
+}
+
 function collapseRedundantSafeIntegerConstType(value, options) {
   if (!options.collapseSafeIntegerConstType || !isPlainObject(value)) {
     return value;
@@ -192,6 +290,42 @@ function collapseRedundantSafeIntegerConstType(value, options) {
   const { type: _redundantType, ...rest } = value;
   return rest;
 }
+
+function collapseEquivalentSimpleClosedObjectKeyword(value, options) {
+  if (!options.collapseSimpleClosedObjectKeyword || !isPlainObject(value) || value.type !== 'object') {
+    return value;
+  }
+
+  const hasAdditional = Object.hasOwn(value, 'additionalProperties');
+  const hasUnevaluated = Object.hasOwn(value, 'unevaluatedProperties');
+  // Both spellings together may carry intentionally redundant evidence. Neither
+  // spelling has nothing to normalize.
+  if (hasAdditional === hasUnevaluated) {
+    return value;
+  }
+
+  const closureKey = hasAdditional ? 'additionalProperties' : 'unevaluatedProperties';
+  if (value[closureKey] !== false) {
+    return value;
+  }
+  if ([...EVALUATED_PROPERTY_COMPOSITION_KEYS].some((key) => Object.hasOwn(value, key))) {
+    return value;
+  }
+
+  // Without composition/reference annotations, both keywords reject exactly the
+  // properties not covered by this object's properties/patternProperties. Use
+  // additionalProperties:false as a comparison-only common spelling. The
+  // executable lane and both authored source documents remain untouched.
+  if (closureKey === 'additionalProperties') {
+    return value;
+  }
+  const entries = Object.entries(value)
+    .filter(([key]) => key !== 'unevaluatedProperties');
+  entries.push(['additionalProperties', false]);
+  entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  return Object.fromEntries(entries);
+}
+
 function sortJsonValues(values) {
   // Never deduplicate. In particular, repeated oneOf branches change validity.
   // Use code-unit ordering, not a locale-dependent comparator, for digests.
@@ -259,8 +393,11 @@ function normalizeSchemaNodeWith(value, options) {
     entries.push([targetKey, normalizeKeywordValue(key, value[key], options)]);
   }
   const result = Object.fromEntries(entries);
-  const normalizedUnion = canCollapseSimpleTypeUnion(result) ?? result;
-  return collapseRedundantSafeIntegerConstType(normalizedUnion, options);
+  const normalizedLiteralUnion = canCollapseSafeLiteralUnion(result, options) ?? result;
+  const normalizedSingletonEnum = canCollapseSafeSingletonEnum(normalizedLiteralUnion, options) ?? normalizedLiteralUnion;
+  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedSingletonEnum) ?? normalizedSingletonEnum;
+  const normalizedClosedObject = collapseEquivalentSimpleClosedObjectKeyword(normalizedUnion, options);
+  return collapseRedundantSafeIntegerConstType(normalizedClosedObject, options);
 }
 
 /**

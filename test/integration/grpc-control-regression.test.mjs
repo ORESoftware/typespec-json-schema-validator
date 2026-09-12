@@ -206,6 +206,24 @@ test('gRPC control enum drift stops promotion and emits only a non-admissible Co
   }, 'tjsv-grpc-control-enum-drift-');
 });
 
+test('gRPC opaque URN with an unresolved relative reference refuses admission', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tjsv-grpc-control-unresolved-'));
+  const authored = JSON.parse(await readFile(authoredSchemaPath, 'utf8'));
+  // A URN cannot supply the hierarchical base needed by this relative URI.
+  authored.$defs.CheckTargetSummary.properties.target.$ref = 'DatabaseTarget';
+  const schemaPath = join(temp, 'unresolved.schema.json');
+  await writeFile(schemaPath, `${JSON.stringify(authored, null, 2)}\n`);
+
+  const result = await run(checkArgs(temp, schemaPath));
+  assert.equal(result.code, 2);
+  const report = JSON.parse(await readFile(join(temp, 'report.json'), 'utf8'));
+  assert.equal(report.status, 'stopped_for_evaluation');
+  assert.ok(report.differential.summary.refusals > 0);
+  const ir = JSON.parse(await readFile(join(temp, 'contract-ir.json'), 'utf8'));
+  assert.equal(ir.admissible, false);
+  assert.deepEqual(ir.declarations, []);
+});
+
 test('gRPC control requiredness drift stops promotion and emits only a non-admissible Contract IR tombstone', async () => {
   await assertStoppedForDrift((authored) => {
     authored.$defs.Drift.required = authored.$defs.Drift.required.filter((name) => name !== 'actual');

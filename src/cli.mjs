@@ -32,6 +32,7 @@ import {
 } from './run.mjs';
 import { writeSarif } from './sarif.mjs';
 import { inventoryTypeSpec } from './typespec-inventory.mjs';
+import { runLegalRollout, writeLegalRolloutReceipt, renderLegalRolloutSummary } from './legal-rollout/index.mjs';
 
 function writeJson(value) {
   process.stdout.write(`${canonicalStringify(value, 2)}\n`);
@@ -261,6 +262,13 @@ export async function main(argv = process.argv) {
     }
     if (configuration.command === 'doctor') return doctor(configuration);
 
+    if (configuration.command === 'legal-rollout') {
+      const receipt = await runLegalRollout(configuration);
+      await writeLegalRolloutReceipt(configuration.report, receipt);
+      if (!configuration.quiet) process.stdout.write(renderLegalRolloutSummary(receipt));
+      return EXIT_CODES[receipt.status];
+    }
+
     if (configuration.command === 'inventory') {
       const inventory = await inventoryTypeSpec(configuration.typespec);
       const status = inventory.errors.length === 0 && inventory.ambiguities.length === 0
@@ -318,6 +326,12 @@ export async function main(argv = process.argv) {
     return EXIT_CODES[report.status];
   } catch (error) {
     const command = commandHint(argv, configuration, error);
+    if (command === 'legal-rollout') {
+      // Contract IR and parity receipts are inputs to this command. A usage or
+      // output error must never route through the producer's tombstone writer.
+      process.stderr.write(`Legal rollout admission failed: ${error.message}\n`);
+      return EXIT_CODES.failed;
+    }
     if (command === 'verify-ir') {
       const verificationPath =
         configuration?.verification

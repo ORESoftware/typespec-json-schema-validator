@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/legal-rollout-manifest.v1.schema.json",
+  "$defs": {
+    "LegalClassification": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "LegalClassification",
+      "type": "string",
+      "enum": ["internal", "external"]
+    },
+    "LegalDocumentStatus": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "LegalDocumentStatus",
+      "type": "string",
+      "enum": ["draft", "approved", "expired", "superseded"]
+    },
+    "LegalDocument": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "LegalDocument",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "path": { "type": "string" },
+        "classification": { "$ref": "LegalClassification" },
+        "agreementType": { "type": "string" },
+        "sha256": { "type": "string" },
+        "status": { "$ref": "LegalDocumentStatus" },
+        "required": { "type": "boolean" },
+        "effectiveDate": { "type": "string" },
+        "approvalRecord": { "type": "string" }
+      },
+      "required": [
+        "id",
+        "path",
+        "classification",
+        "agreementType",
+        "sha256",
+        "status",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "LegalRolloutManifest": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "LegalRolloutManifest",
+      "type": "object",
+      "properties": {
+        "schema": { "type": "string" },
+        "repository": { "type": "string" },
+        "legalRoot": { "type": "string" },
+        "releaseApproved": { "type": "boolean" },
+        "documents": {
+          "type": "array",
+          "items": { "$ref": "LegalDocument" }
+        }
+      },
+      "required": ["schema", "repository", "legalRoot", "releaseApproved", "documents"],
+      "additionalProperties": false
+    }
+  }
+}
