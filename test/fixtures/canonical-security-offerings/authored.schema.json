@@ -3,26 +3,38 @@
   "$id": "urn:canonical-cloud:security-offerings:v1",
   "$defs": {
     "SecurityOfferCode": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "SecurityOfferCode",
       "type": "string",
       "enum": ["security_review", "penetration_test", "continuous_security"]
     },
     "BillingUnit": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "BillingUnit",
       "type": "string",
       "enum": ["fixed", "monthly"]
     },
     "CustomerSegment": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CustomerSegment",
       "type": "string",
       "enum": ["business_to_business"]
     },
     "PricingCurrency": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "PricingCurrency",
       "type": "string",
       "enum": ["USD"]
     },
     "CommercialAuthority": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "CommercialAuthority",
       "type": "string",
       "enum": ["signed_sow"]
     },
     "SecurityIndustryProfile": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "SecurityIndustryProfile",
       "type": "string",
       "enum": [
         "financial_services",
@@ -33,15 +45,17 @@
       ]
     },
     "SecurityOffering": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "SecurityOffering",
       "type": "object",
       "properties": {
-        "rank": { "type": "integer", "format": "int32" },
-        "code": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/SecurityOfferCode" },
+        "rank": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "code": { "$ref": "SecurityOfferCode" },
         "name": { "type": "string" },
-        "priceMinUsd": { "type": "integer", "format": "int32" },
-        "priceMaxUsd": { "type": "integer", "format": "int32" },
-        "billingUnit": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/BillingUnit" },
-        "minimumTermMonths": { "type": "integer", "format": "int32" },
+        "priceMinUsd": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "priceMaxUsd": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "billingUnit": { "$ref": "BillingUnit" },
+        "minimumTermMonths": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
         "deliveryWindow": { "type": "string" },
         "coreOffer": { "type": "string" },
         "activeTesting": { "type": "boolean" },
@@ -60,7 +74,7 @@
         },
         "industryProfiles": {
           "type": "array",
-          "items": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/SecurityIndustryProfile" }
+          "items": { "$ref": "SecurityIndustryProfile" }
         }
       },
       "required": [
@@ -82,18 +96,20 @@
       "unevaluatedProperties": false
     },
     "SecurityOfferingCatalog": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$id": "SecurityOfferingCatalog",
       "type": "object",
       "properties": {
         "schemaVersion": { "type": "string" },
-        "customerSegment": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/CustomerSegment" },
-        "currency": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/PricingCurrency" },
-        "commercialAuthority": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/CommercialAuthority" },
+        "customerSegment": { "$ref": "CustomerSegment" },
+        "currency": { "$ref": "PricingCurrency" },
+        "commercialAuthority": { "$ref": "CommercialAuthority" },
         "pricingStatus": { "type": "string" },
         "effectiveDate": { "type": "string" },
         "sourceDocument": { "type": "string" },
         "offers": {
           "type": "array",
-          "items": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/SecurityOffering" }
+          "items": { "$ref": "SecurityOffering" }
         }
       },
       "required": [
