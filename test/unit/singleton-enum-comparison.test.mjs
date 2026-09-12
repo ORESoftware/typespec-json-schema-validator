@@ -49,6 +49,26 @@ test('singleton enum parity composes recursively with simple closed-object parit
   assert.equal(normalized(authored), normalized(generated));
 });
 
+test('comparison strips non-assertion metadata before singleton enum equivalence', () => {
+  const authored = {
+    type: 'string',
+    enum: ['push'],
+    description: 'independently authored documentation',
+  };
+  const generated = {
+    const: 'push',
+    type: 'string',
+    title: 'generated comparison witness',
+  };
+
+  assert.equal(normalized(authored), normalized(generated));
+  assert.deepEqual(normalizeSchemaNode(authored), {
+    description: 'independently authored documentation',
+    enum: ['push'],
+    type: 'string',
+  });
+});
+
 test('executable normalization preserves singleton enum spelling', () => {
   const authored = { type: 'string', enum: ['push'] };
   assert.deepEqual(normalizeSchemaNode(authored), authored);
