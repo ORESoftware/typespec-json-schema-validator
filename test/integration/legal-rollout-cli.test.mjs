@@ -91,8 +91,8 @@ test('CLI admits exact peer authorities and rejects later document tampering', a
       '--report', receipt,
       '--quiet',
     ], root);
-    assert.equal(admitted.status, 0, `admission failed\nstdout:\n${admitted.stdout}\nstderr:\n${admitted.stderr}`);
     const passed = JSON.parse(await readFile(receipt, 'utf8'));
+    assert.equal(admitted.status, 0, `admission failed: ${JSON.stringify(passed.findings)}`);
     assert.equal(passed.schema, 'ores.legal-rollout.receipt/v1');
     assert.equal(passed.status, 'passed');
     assert.equal(passed.admission.contractIr.admissible, true);
@@ -161,5 +161,27 @@ test('CLI release mode fails closed while required documents remain draft', asyn
     assert.ok(stopped.findings.some((item) => item.ruleId === 'legal-rollout-release-not-approved'));
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('legal CLI rejects invalid options without rewriting its evidence inputs', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'tsjsv-legal-usage-'));
+  const evidence = join(root, 'evidence.json');
+  const receipt = join(root, 'receipt.json');
+  const original = '{"sentinel":"input evidence must remain intact"}\n';
+  await writeFile(evidence, original);
+  t.after(() => rm(root, { recursive: true, force: true }));
+  for (const option of [
+    '--min-external=-1', '--min-internal=1.5',
+    '--min-external=9007199254740993', '--release=perhaps', '--unknown-legal-option=1',
+  ]) {
+    const result = run([
+      'legal-rollout', '--manifest', evidence, '--parity-report', evidence,
+      '--contract-ir', evidence, '--typespec', typespec, '--schema', schema,
+      '--project-root', root, '--report', receipt, option, '--quiet',
+    ], root);
+    assert.equal(result.status, 3, `${option}: ${result.stderr}`);
+    assert.equal(await readFile(evidence, 'utf8'), original);
+    await assert.rejects(readFile(receipt), { code: 'ENOENT' });
   }
 });

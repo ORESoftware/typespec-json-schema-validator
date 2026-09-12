@@ -133,15 +133,16 @@ test('official TypeSpec compiler and TJSV inventory agree on qualified nested na
   const basicInventory = inventoryTypeSpecSource(basicSource, 'compiler-basic.tsp');
   const basicGlobal = await compileTypeSpecSource(basicSource, 'compiler-basic.tsp');
   const basicDemo = requireNamespace(basicGlobal, 'Demo', 'Demo');
-  const basicInner = requireNamespace(basicDemo, 'Inner', 'Demo.Inner');
+  const basicRepeatedDemo = requireNamespace(basicDemo, 'Demo', 'Demo.Demo');
+  const basicInner = requireNamespace(basicRepeatedDemo, 'Inner', 'Demo.Demo.Inner');
   const basicRelative = requireNamespace(basicDemo, 'Relative', 'Demo.Relative');
   assert.ok(basicDemo.models.has('OuterModel'));
   assert.ok(basicInner.models.has('WeatherReading'));
   assert.ok(basicRelative.models.has('LocalReading'));
-  assert.equal(basicDemo.namespaces.has('Demo'), false, 'qualified child must not duplicate its parent');
+  assert.equal(basicDemo.namespaces.has('Inner'), false, 'nested dotted namespace must remain lexical');
   assert.deepEqual(
     basicInventory.declarations.map((item) => item.qualifiedName),
-    ['Demo.OuterModel', 'Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
+    ['Demo.OuterModel', 'Demo.Demo.Inner.WeatherReading', 'Demo.Relative.LocalReading'],
   );
 
   const deepSource = `
@@ -163,19 +164,22 @@ test('official TypeSpec compiler and TJSV inventory agree on qualified nested na
   const deepGlobal = await compileTypeSpecSource(deepSource, 'compiler-deep.tsp');
   const deepDemo = requireNamespace(deepGlobal, 'Demo', 'Demo');
   const demo2 = requireNamespace(deepDemo, 'Demo2', 'Demo.Demo2');
-  const deepInner = requireNamespace(deepDemo, 'Inner', 'Demo.Inner');
-  const deep = requireNamespace(deepInner, 'Deep', 'Demo.Inner.Deep');
-  const innerish = requireNamespace(deepInner, 'Innerish', 'Demo.Inner.Innerish');
+  const deepRepeatedDemo = requireNamespace(deepDemo, 'Demo', 'Demo.Demo');
+  const deepInner = requireNamespace(deepRepeatedDemo, 'Inner', 'Demo.Demo.Inner');
+  const repeatedRoot = requireNamespace(deepInner, 'Demo', 'Demo.Demo.Inner.Demo');
+  const repeatedInner = requireNamespace(repeatedRoot, 'Inner', 'Demo.Demo.Inner.Demo.Inner');
+  const deep = requireNamespace(repeatedInner, 'Deep', 'Demo.Demo.Inner.Demo.Inner.Deep');
+  const innerish = requireNamespace(deepInner, 'Innerish', 'Demo.Demo.Inner.Innerish');
   assert.ok(demo2.models.has('PrefixCollision'));
   assert.ok(deep.models.has('FullyQualifiedDeep'));
   assert.ok(innerish.models.has('RelativeDeep'));
-  assert.equal(deepInner.namespaces.has('Demo'), false, 'deep qualified child must not repeat its root');
+  assert.equal(deepInner.namespaces.has('Deep'), false, 'deep dotted namespace must retain every lexical segment');
   assert.deepEqual(
     deepInventory.declarations.map((item) => item.qualifiedName),
     [
       'Demo.Demo2.PrefixCollision',
-      'Demo.Inner.Deep.FullyQualifiedDeep',
-      'Demo.Inner.Innerish.RelativeDeep',
+      'Demo.Demo.Inner.Demo.Inner.Deep.FullyQualifiedDeep',
+      'Demo.Demo.Inner.Innerish.RelativeDeep',
     ],
   );
 });

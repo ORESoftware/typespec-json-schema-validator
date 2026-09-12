@@ -19,14 +19,15 @@ test('legal rollout action compiles peer authorities before admission', () => {
 
 test('legal rollout action exposes receipt and Contract IR evidence', () => {
   assert.match(action, /^outputs:/mu);
-  assert.match(action, /receipt=\%s/u);
-  assert.match(action, /parity_report=\%s/u);
-  assert.match(action, /contract_ir=\%s/u);
+  assert.match(action, /printf 'receipt=%s\\n'/u);
+  assert.match(action, /printf 'parity_report=%s\\n'/u);
+  assert.match(action, /printf 'contract_ir=%s\\n'/u);
 });
 
 test('legal rollout action is shell-safe and validates untrusted scalar inputs', () => {
   assert.doesNotMatch(action, /\beval\b/u);
   assert.match(action, /case "\$INPUT_RELEASE" in/u);
-  assert.match(action, /INPUT_MIN_EXTERNAL.*\^\(0\|\[1-9\]\[0-9\]\*\)\$/su);
+  assert.match(action, /min_external must be a non-negative integer/u);
+  assert.match(action, /min_internal must be a non-negative integer/u);
   assert.match(action, /legal_args=\(/u);
 });
