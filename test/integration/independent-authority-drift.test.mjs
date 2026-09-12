@@ -121,6 +121,6 @@ test('unchanged independent peer authorities pass and emit Schema B only as evid
   assert.equal(report.coverage.differentialInstanceValidation, true);
   assert.equal(report.differential.summary.divergences, 0);
   assert.ok(report.differential.summary.probesEvaluated > 0);
-  assert.equal(report.inputs.typespec.endsWith('main.tsp'), true);
-  assert.equal(report.inputs.authoredSchema.endsWith('authored.schema.json'), true);
+  assert.equal(report.inputs.typespec.input.endsWith('main.tsp'), true);
+  assert.equal(report.inputs.authoredJsonSchema.input.endsWith('authored.schema.json'), true);
 });
