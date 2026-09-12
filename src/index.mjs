@@ -36,6 +36,7 @@ export {
 } from './differential.mjs';
 export {
   jsonEquals,
+  SchemaEvaluationError,
   SchemaResolutionError,
   SchemaResolver,
   UnsupportedKeywordError,

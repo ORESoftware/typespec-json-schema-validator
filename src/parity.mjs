@@ -14,6 +14,7 @@ import {
   validateAndNormalizeMapping,
 } from './mapping-integrity.mjs';
 import { declarationKindFamily } from './typespec-inventory.mjs';
+import { createScopedSchemaComparison } from './reference-comparison.mjs';
 
 export const MAPPING_SCHEMA = 'ores.typespec-json-schema-validator.mapping/v1';
 
@@ -358,6 +359,9 @@ function compareSemanticSchemas(
     authoredCollection,
     authoredMap,
   );
+  const scopeOptions = { expectedDeclarations, onFinding: (input) => findings.push(makeFinding(input)) };
+  const generatedComparison = createScopedSchemaComparison({ ...scopeOptions, collection: generatedCollection, schemaMap: generatedMap, lane: 'generated' });
+  const authoredComparison = createScopedSchemaComparison({ ...scopeOptions, collection: authoredCollection, schemaMap: authoredMap, lane: 'authored' });
   for (const pair of expected) {
     if (findings.length >= maxFindings) {
       break;
@@ -373,11 +377,11 @@ function compareSemanticSchemas(
     // Executable collections remain untouched so their $id resource graphs and
     // probe annotations continue to resolve using each authority's own names.
     const left = aliasMappedDeclarationRefs(
-      normalizeSchemaNodeForComparison(generated.schema),
+      normalizeSchemaNodeForComparison(generatedComparison ? generatedComparison(generated) : generated.schema),
       generatedAliases,
     );
     const right = aliasMappedDeclarationRefs(
-      normalizeSchemaNodeForComparison(authored.schema),
+      normalizeSchemaNodeForComparison(authoredComparison ? authoredComparison(authored) : authored.schema),
       authoredAliases,
     );
     const remaining = Math.max(1, maxFindings - findings.length);

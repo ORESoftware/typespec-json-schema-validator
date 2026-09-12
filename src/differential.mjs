@@ -17,6 +17,7 @@ import { basename, join, relative, resolve } from 'node:path';
 import { canonicalStringify, isPlainObject, stableFindingFingerprint } from './canonical.mjs';
 import { assertFindingLimit } from './finding-limit.mjs';
 import {
+  SchemaEvaluationError,
   SchemaResolver,
   SchemaResolutionError,
   UnsupportedKeywordError,
@@ -54,7 +55,9 @@ export function buildLaneResolver(collection) {
   return {
     resolver,
     baseFor(declaration) {
-      return basesByPath.get(declaration.source) ?? [...basesByPath.values()][0];
+      const documentBase = basesByPath.get(declaration.source) ?? [...basesByPath.values()][0];
+      const target = resolver.resolve(declaration.pointer, documentBase);
+      return target?.parentBase ?? documentBase;
     },
   };
 }
@@ -148,7 +151,7 @@ function verdictFor({ schema, instance, resolver, base, formatAssertion }) {
     const result = validateInstance({ schema, instance, resolver, base, formatAssertion, maxErrors: 8 });
     return { valid: result.valid, errors: summarizeErrors(result.errors), refused: null };
   } catch (error) {
-    if (error instanceof UnsupportedKeywordError || error instanceof SchemaResolutionError) {
+    if (error instanceof UnsupportedKeywordError || error instanceof SchemaResolutionError || error instanceof SchemaEvaluationError) {
       return { valid: null, errors: [], refused: { name: error.name, message: error.message } };
     }
     throw error;

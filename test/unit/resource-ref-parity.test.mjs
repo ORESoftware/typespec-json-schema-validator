@@ -7,6 +7,7 @@ function resourcePairInput(authoredRoleRef) {
   const generatedSource = '/repo/generated/schema.json';
   const authoredSource = '/repo/authored/support.schema.json';
   const role = { type: 'string', enum: ['admin', 'user'] };
+  const generatedRole = { ...role, $id: 'Role.json' };
   const generatedUser = {
     type: 'object',
     properties: { role: { $ref: 'Role.json' } },
@@ -34,12 +35,12 @@ function resourcePairInput(authoredRoleRef) {
         relativePath: 'schema.json',
         document: {
           $id: 'https://generated.example.test/schema.json',
-          $defs: { User: generatedUser, Role: role },
+          $defs: { User: generatedUser, Role: generatedRole },
         },
       }],
       declarations: [
         { name: 'User', kind: 'model', schema: generatedUser, source: generatedSource, pointer: '#/$defs/User' },
-        { name: 'Role', kind: 'enum', schema: role, source: generatedSource, pointer: '#/$defs/Role' },
+        { name: 'Role', kind: 'enum', schema: generatedRole, source: generatedSource, pointer: '#/$defs/Role' },
       ],
     },
     authoredCollection: {

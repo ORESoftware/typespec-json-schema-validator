@@ -10,6 +10,8 @@ import { loadSchemaCollection } from './json-schema.mjs';
 import { declarationKindFamily, inventoryTypeSpec } from './typespec-inventory.mjs';
 import { writeContractIrFile } from './contract-ir-file.mjs';
 import { assertExactSourceFiles } from './contract-ir-inputs.mjs';
+import { createScopedSchemaComparison } from './reference-comparison.mjs';
+import { crossValidate } from './differential.mjs';
 
 export const CONTRACT_IR_SCHEMA = 'ores.typespec-json-schema-validator.contract-ir/v1';
 export const CONTRACT_IR_VERIFICATION_SCHEMA =
@@ -273,11 +275,15 @@ function buildDeclaration(pair, maps, inputs, referenceAliases) {
   const generatedAssertionSchema = normalizeSchemaNodeForComparison(generated.schema);
   const authoredAssertionSchema = normalizeSchemaNodeForComparison(authored.schema);
   const comparableGeneratedAssertionSchema = aliasMappedDeclarationRefs(
-    generatedAssertionSchema,
+    referenceAliases.generatedScope
+      ? normalizeSchemaNodeForComparison(referenceAliases.generatedScope(generated))
+      : generatedAssertionSchema,
     referenceAliases.generated,
   );
   const comparableAuthoredAssertionSchema = aliasMappedDeclarationRefs(
-    authoredAssertionSchema,
+    referenceAliases.authoredScope
+      ? normalizeSchemaNodeForComparison(referenceAliases.authoredScope(authored))
+      : authoredAssertionSchema,
     referenceAliases.authored,
   );
   requireCondition(
@@ -420,9 +426,26 @@ export function createContractIr({ report, typespecInventory, generatedCollectio
     generated: buildReferenceAliases(report.declarationMap, 'generated', generatedCollection, maps.generated),
     authored: buildReferenceAliases(report.declarationMap, 'authored', authoredCollection, maps.authored),
   };
+  const scopeOptions = {
+    expectedDeclarations: new Map(report.declarationMap.map((pair) => [pair.typespec, {
+      declaration: { qualifiedName: pair.typespec }, generatedName: pair.generated, authoredName: pair.authored,
+    }])),
+    onFinding: (finding) => requireCondition(false, `current reference validation failed (${finding.ruleId})`),
+  };
+  referenceAliases.generatedScope = createScopedSchemaComparison({ ...scopeOptions, collection: generatedCollection, schemaMap: maps.generated, lane: 'generated' });
+  referenceAliases.authoredScope = createScopedSchemaComparison({ ...scopeOptions, collection: authoredCollection, schemaMap: maps.authored, lane: 'authored' });
   const declarations = [...report.declarationMap]
     .sort((left, right) => left.typespec.localeCompare(right.typespec))
     .map((pair) => buildDeclaration(pair, maps, inputs, referenceAliases));
+  // Exact digests cannot turn an earlier false-green receipt into current proof.
+  // Replay bounded deterministic probes with the current evaluator; external
+  // corpus evidence remains part of the original receipt, not an invented replay.
+  const currentDifferential = crossValidate({
+    generatedCollection, authoredCollection, declarationMap: report.declarationMap,
+    maxProbes: 64, maxFindings: 1,
+    formatAssertion: report.differential?.summary?.formatAssertion === true,
+  });
+  requireCondition(currentDifferential.findings.length === 0, 'current differential evaluation did not converge');
   const excluded = excludedDeclarations(report, inputs);
   const outOfScope = outOfScopeDeclarations(typespecInventory);
   const receipt = {

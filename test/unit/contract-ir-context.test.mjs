@@ -18,7 +18,7 @@ function evidence(generatedSchema, authoredSchema = generatedSchema) {
   };
   const collection = (input, character, schema) => ({
     input, digest: hex(character), findings: [],
-    documents: [{ path: input, relativePath: 'schema.json', sha256: hex(character), document: {} }],
+    documents: [{ path: input, relativePath: 'schema.json', sha256: hex(character), document: { $defs: { User: structuredClone(schema) } } }],
     declarations: [{ name: 'User', kind: 'model', schema: structuredClone(schema),
       source: input, pointer: '#/$defs/User' }],
   });

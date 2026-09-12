@@ -14,6 +14,7 @@
  */
 
 import { isPlainObject, escapeJsonPointerSegment, unescapeJsonPointerSegment } from './canonical.mjs';
+import { JSON_SCHEMA_DRAFT_2020_12 } from './json-schema.mjs';
 import { registerSchemaUri } from './schema-uri-index.mjs';
 import { FORMAT_ASSERTIONS } from './format-assertions.mjs';
 export { SchemaIdentityError } from './schema-uri-index.mjs';
@@ -124,6 +125,17 @@ export class SchemaResolutionError extends Error {
   }
 }
 
+/** An evaluation limit is missing evidence, never an invalid-instance verdict. */
+export class SchemaEvaluationError extends Error {
+  constructor(reason, pointer, source) {
+    super(`JSON Schema evaluation refused (${reason}) at ${pointer} in ${source}`);
+    this.name = 'SchemaEvaluationError';
+    this.reason = reason;
+    this.pointer = pointer;
+    this.source = source;
+  }
+}
+
 function resolveUri(reference, base) {
   try {
     return new URL(reference, base).href;
@@ -201,14 +213,14 @@ export class SchemaResolver {
     const index = this.#documents.length;
     const declaredId = isPlainObject(document) && typeof document.$id === 'string' ? document.$id : undefined;
     const fallbackBase = `${SYNTHETIC_BASE}${index}/${encodeURIComponent(path ?? `document-${index}`)}`;
-    const rootBase = declaredId ? resolveUri(declaredId, fallbackBase) ?? fallbackBase : fallbackBase;
+    const rootBase = (declaredId ? resolveUri(declaredId, fallbackBase) ?? fallbackBase : fallbackBase).split('#')[0];
     const record = { path, document, base: rootBase };
     // A rejected bundle must not leave new resources, anchors or document slots.
     const pending = new Map();
     registerSchemaUri(pending, this.#byUri, rootBase.split('#')[0], {
-      schema: document, base: rootBase, record, pointer: '#',
+      schema: document, base: rootBase, parentBase: fallbackBase, record, pointer: '#',
     });
-    this.#register(document, rootBase, rootBase, '#', record, pending);
+    this.#register(document, fallbackBase, rootBase, '#', record, pending);
     for (const [uri, entry] of pending) this.#byUri.set(uri, entry);
     this.#documents.push(record);
     return record;
@@ -216,7 +228,7 @@ export class SchemaResolver {
 
   #register(node, base, rootBase, pointer, record, pending) {
     if (typeof node === 'boolean') {
-      registerSchemaUri(pending, this.#byUri, `${base}#${pointer === '#' ? '' : pointer.slice(1)}`, { schema: node, base, record, pointer });
+      registerSchemaUri(pending, this.#byUri, `${rootBase}#${pointer === '#' ? '' : pointer.slice(1)}`, { schema: node, base, parentBase: base, record, pointer });
       return;
     }
     if (!isPlainObject(node)) {
@@ -225,15 +237,16 @@ export class SchemaResolver {
     let currentBase = base;
     if (typeof node.$id === 'string') {
       const resolved = resolveUri(node.$id, base);
+      if (!resolved) throw new SchemaResolutionError(node.$id, `${pointer}/$id`, base);
       if (resolved) {
         currentBase = resolved.split('#')[0];
-        registerSchemaUri(pending, this.#byUri, currentBase, { schema: node, base: currentBase, record, pointer });
+        registerSchemaUri(pending, this.#byUri, currentBase, { schema: node, base: currentBase, parentBase: base, record, pointer });
       }
     }
     const pointerUri = `${rootBase}#${pointer === '#' ? '' : pointer.slice(1)}`;
-    registerSchemaUri(pending, this.#byUri, pointerUri, { schema: node, base: currentBase, record, pointer });
+    registerSchemaUri(pending, this.#byUri, pointerUri, { schema: node, base: currentBase, parentBase: base, record, pointer });
     if (typeof node.$anchor === 'string') {
-      registerSchemaUri(pending, this.#byUri, `${currentBase}#${node.$anchor}`, { schema: node, base: currentBase, record, pointer });
+      registerSchemaUri(pending, this.#byUri, `${currentBase}#${node.$anchor}`, { schema: node, base: currentBase, parentBase: base, record, pointer });
     }
 
     for (const [key, child] of Object.entries(node)) {
@@ -282,7 +295,10 @@ export class SchemaResolver {
     if (schema === undefined) {
       return undefined;
     }
-    return { schema, base: anchorTarget.base };
+    // A pointer can cross embedded resources. Recover the registered location's
+    // scope instead of substituting the enclosing resource's base URI.
+    const pointer = `${anchorTarget.pointer}${segments.map((segment) => `/${escapeJsonPointerSegment(segment)}`).join('')}`;
+    return this.#byUri.get(`${anchorTarget.record.base}${pointer}`);
   }
 
   get documents() {
@@ -407,6 +423,9 @@ class ValidationContext {
  * dynamic-reference family genuinely can change a verdict and is therefore refused.
  */
 function assertKnownKeywords(schema, schemaPointer, source) {
+  if (schema.$schema !== undefined && schema.$schema !== JSON_SCHEMA_DRAFT_2020_12) {
+    throw new UnsupportedKeywordError('$schema', schemaPointer, source);
+  }
   for (const keyword of Object.keys(schema)) {
     if (REFUSED_KEYWORDS.has(keyword)) {
       throw new UnsupportedKeywordError(keyword, schemaPointer, source);
@@ -420,8 +439,7 @@ function assertKnownKeywords(schema, schemaPointer, source) {
  */
 function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, depth) {
   if (depth > ctx.maxDepth) {
-    ctx.push('$ref', instancePath, schemaPointer, 'maximum schema evaluation depth exceeded');
-    return { valid: false, annotations: emptyAnnotations() };
+    throw new SchemaEvaluationError('maximum-depth', schemaPointer, base);
   }
   if (schema === true) {
     return { valid: true, annotations: emptyAnnotations() };
@@ -440,6 +458,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
   let currentBase = base;
   if (typeof schema.$id === 'string') {
     const resolved = resolveUri(schema.$id, base);
+    if (!resolved) throw new SchemaResolutionError(schema.$id, `${schemaPointer}/$id`, base);
     if (resolved) {
       currentBase = resolved.split('#')[0];
     }
@@ -461,13 +480,12 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
     }
     const frame = `${currentBase}|${schema.$ref}|${instancePath}`;
     if (ctx.refStack.includes(frame)) {
-      ctx.push('$ref', instancePath, `${schemaPointer}/$ref`, `recursive $ref cycle at ${schema.$ref}`);
-      return { valid: false, annotations };
+      throw new SchemaEvaluationError('reference-cycle', `${schemaPointer}/$ref`, currentBase);
     }
     ctx.refStack.push(frame);
     let result;
     try {
-      result = evaluate(target.schema, instance, target.base, ctx, instancePath, `${schemaPointer}/$ref`, depth + 1);
+      result = evaluate(target.schema, instance, target.parentBase, ctx, instancePath, `${schemaPointer}/$ref`, depth + 1);
     } finally {
       ctx.refStack.pop();
     }
@@ -763,6 +781,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
           maxDepth: ctx.maxDepth,
         });
         probe.regexCache = ctx.regexCache;
+        probe.refStack = ctx.refStack;
         const result = evaluate(
           schema.contains,
           instance[index],
@@ -818,6 +837,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
         maxDepth: ctx.maxDepth,
       });
       probe.regexCache = ctx.regexCache;
+      probe.refStack = ctx.refStack;
       const result = evaluate(
         schema.anyOf[index],
         instance,
@@ -849,6 +869,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
         maxDepth: ctx.maxDepth,
       });
       probe.regexCache = ctx.regexCache;
+      probe.refStack = ctx.refStack;
       const result = evaluate(
         schema.oneOf[index],
         instance,
@@ -881,6 +902,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
       maxDepth: ctx.maxDepth,
     });
     probe.regexCache = ctx.regexCache;
+    probe.refStack = ctx.refStack;
     const result = evaluate(schema.not, instance, currentBase, probe, instancePath, `${schemaPointer}/not`, depth + 1);
     if (result.valid) {
       fail('not', 'instance satisfies a schema that must not be satisfied');
@@ -894,6 +916,7 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
       maxDepth: ctx.maxDepth,
     });
     probe.regexCache = ctx.regexCache;
+    probe.refStack = ctx.refStack;
     const conditional = evaluate(schema.if, instance, currentBase, probe, instancePath, `${schemaPointer}/if`, depth + 1);
     if (conditional.valid) {
       mergeAnnotations(annotations, conditional.annotations);
@@ -980,7 +1003,9 @@ function evaluate(schema, instance, base, ctx, instancePath, schemaPointer, dept
  */
 export function validateInstance({ schema, instance, resolver, base, formatAssertion = false, maxErrors = 32 }) {
   const ctx = new ValidationContext(resolver, { formatAssertion, maxErrors });
-  const result = evaluate(schema, instance, base, ctx, '', '#', 0);
+  const resource = resolver.resolve('#', base);
+  const inheritedBase = resource?.schema === schema ? resource.parentBase : base;
+  const result = evaluate(schema, instance, inheritedBase, ctx, '', '#', 0);
   return { valid: result.valid, errors: ctx.errors };
 }
 

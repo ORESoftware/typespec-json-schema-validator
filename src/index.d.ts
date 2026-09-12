@@ -181,7 +181,13 @@ export interface InstanceCorpusItem {
 export declare class SchemaResolver {
   constructor(documents?: Array<{ path: string; document: unknown }>);
   addDocument(document: unknown, path: string): { path: string; document: unknown; base: string };
-  resolve(reference: string, base: string): { schema: unknown; base: string } | undefined;
+  resolve(reference: string, base: string): {
+    schema: unknown;
+    base: string;
+    parentBase: string;
+    pointer: string;
+    record: { path: string; document: unknown; base: string };
+  } | undefined;
   readonly documents: Array<{ path: string; document: unknown; base: string }>;
 }
 
@@ -191,6 +197,12 @@ export declare class UnsupportedKeywordError extends Error {
   source: string;
 }
 
+export declare class SchemaEvaluationError extends Error {
+  reason: 'maximum-depth' | 'reference-cycle';
+  pointer: string;
+  source: string;
+  constructor(reason: 'maximum-depth' | 'reference-cycle', pointer: string, source: string);
+}
 export declare class SchemaResolutionError extends Error {
   reference: string;
   pointer: string;

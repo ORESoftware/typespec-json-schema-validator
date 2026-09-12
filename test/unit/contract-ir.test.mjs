@@ -36,12 +36,12 @@ function fixtures() {
   };
   const generatedCollection = {
     input: '/repo/generated/schema.json', digest: hex('b'), findings: [],
-    documents: [{ path: '/repo/generated/schema.json', relativePath: 'schema.json', sha256: hex('2'), document: {} }],
+    documents: [{ path: '/repo/generated/schema.json', relativePath: 'schema.json', sha256: hex('2'), document: { $defs: { User: generatedModel } } }],
     declarations: [{ name: 'User', kind: 'model', schema: generatedModel, source: '/repo/generated/schema.json', pointer: '#/$defs/User' }],
   };
   const authoredCollection = {
     input: '/repo/contracts/authored.schema.json', digest: hex('c'), findings: [],
-    documents: [{ path: '/repo/contracts/authored.schema.json', relativePath: 'authored.schema.json', sha256: hex('3'), document: {} }],
+    documents: [{ path: '/repo/contracts/authored.schema.json', relativePath: 'authored.schema.json', sha256: hex('3'), document: { $defs: { User: authoredModel } } }],
     declarations: [{ name: 'User', kind: 'model', schema: authoredModel, source: '/repo/contracts/authored.schema.json', pointer: '#/$defs/User' }],
   };
   const report = {
