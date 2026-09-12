@@ -47,6 +47,13 @@ function deepClone(value) {
 function resolveNode(schema, base, resolver, depth) {
   let current = schema;
   let currentBase = base;
+  if (isPlainObject(current) && typeof current.$id === 'string') {
+    try {
+      currentBase = new URL(current.$id, currentBase).href.split('#')[0];
+    } catch {
+      // Keep the inherited base when the identifier cannot be resolved.
+    }
+  }
   let hops = 0;
   while (isPlainObject(current) && typeof current.$ref === 'string' && hops < 32) {
     const target = resolver.resolve(current.$ref, currentBase);
@@ -60,13 +67,6 @@ function resolveNode(schema, base, resolver, depth) {
       : target.schema;
     currentBase = target.base;
     hops += 1;
-  }
-  if (isPlainObject(current) && typeof current.$id === 'string') {
-    try {
-      currentBase = new URL(current.$id, currentBase).href.split('#')[0];
-    } catch {
-      // Keep the inherited base when the identifier cannot be resolved.
-    }
   }
   return { schema: current, base: currentBase, depth };
 }

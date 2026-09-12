@@ -4,6 +4,7 @@ import { TextDecoder } from 'node:util';
 import { canonicalStringify, sha256 } from '../canonical.mjs';
 import { verifyContractIr } from '../contract-ir.mjs';
 import {
+  SchemaEvaluationError,
   SchemaResolutionError,
   SchemaResolver,
   UnsupportedKeywordError,
@@ -321,7 +322,7 @@ export function validateLegalManifestLanes(contractIr, manifest, declarationName
       }
     } catch (error) {
       verdicts[label] = null;
-      const refusal = error instanceof UnsupportedKeywordError || error instanceof SchemaResolutionError;
+      const refusal = error instanceof UnsupportedKeywordError || error instanceof SchemaResolutionError || error instanceof SchemaEvaluationError;
       findings.push(makeFinding(
         refusal ? 'legal-manifest-validation-refused' : 'legal-manifest-validation-failed',
         'manifest',
