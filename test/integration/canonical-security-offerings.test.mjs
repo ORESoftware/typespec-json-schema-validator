@@ -29,6 +29,7 @@ test('canonical security-offering peer authorities admit the exact six-instance 
   const temp = await mkdtemp(join(tmpdir(), 'tsjsv-canonical-security-offerings-'));
   const reportPath = join(temp, 'report.json');
   const contractIrPath = join(temp, 'contract-ir.json');
+  const generatedPath = join(temp, 'generated', 'typespec.generated.schema.json');
   const result = await run([
     'check',
     `--typespec=${resolve(fixture, 'main.tsp')}`,
@@ -44,9 +45,15 @@ test('canonical security-offering peer authorities admit the exact six-instance 
 
   const report = JSON.parse(await readFile(reportPath, 'utf8'));
   const contractIr = JSON.parse(await readFile(contractIrPath, 'utf8'));
+  const generated = JSON.parse(await readFile(generatedPath, 'utf8'));
 
   assert.equal(report.status, 'passed');
   assert.equal(report.zeroUnexplainedFindings, true);
+  assert.equal(report.authorities.typespec.authority, 'independently-authored');
+  assert.equal(report.authorities.jsonSchema.authority, 'independently-authored');
+  assert.equal(report.authorities.precedence, 'none');
+  assert.equal(report.authorities.typespec.generatedJsonSchemaRole, 'comparison-evidence-only');
+  assert.equal(report.coverage.typespecGeneratedJsonSchemaComparison, true);
   assert.equal(report.coverage.differentialInstanceValidation, true);
   assert.equal(report.differential.summary.corpusInstances, 6);
   assert.equal(report.differential.summary.divergences, 0);
@@ -55,6 +62,11 @@ test('canonical security-offering peer authorities admit the exact six-instance 
   assert.equal(contractIr.status, 'passed');
   assert.equal(contractIr.admissible, true);
   assert.equal(contractIr.editableAuthority, false);
+  assert.equal(contractIr.authorities.typespec, 'independently-authored');
+  assert.equal(contractIr.authorities.jsonSchema, 'independently-authored');
+  assert.equal(contractIr.authorities.generatedJsonSchema, 'comparison-evidence-only');
+  assert.equal(contractIr.authorities.precedence, 'none');
   assert.equal(contractIr.admission.receipt.runId, report.runId);
   assert.equal(contractIr.declarations.length, 8);
+  assert.equal(generated.$schema, 'https://json-schema.org/draft/2020-12/schema');
 });
