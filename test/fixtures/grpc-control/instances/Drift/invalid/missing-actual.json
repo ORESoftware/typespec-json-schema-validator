@@ -1,0 +1,1 @@
+{"kind":"DRIFT_KIND_COLUMN_MISMATCH","witness":"protobuf-descriptors","databaseAlias":"billing","schema":"public","table":"entries","column":"amount","expected":"numeric(18,2)"}
