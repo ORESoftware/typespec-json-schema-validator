@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { copyFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { copyFile, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 
 const packageRoot = resolve(import.meta.dirname, '../..');
 const executable = resolve(packageRoot, 'bin/typespec-json-schema-validator.mjs');
 const fixtures = resolve(packageRoot, 'test/fixtures/pass');
+const integrationTempRoot = resolve(packageRoot, 'test/integration');
 
 function run(args) {
   return new Promise((resolvePromise, reject) => {
@@ -29,6 +29,18 @@ function run(args) {
   });
 }
 
+async function createTempFixture(t, prefix) {
+  // Keep the copied TypeSpec source below packageRoot so normal Node/TypeSpec
+  // package resolution can walk up to this checkout's pinned node_modules.
+  const temp = await mkdtemp(join(integrationTempRoot, `.tmp-${prefix}-`));
+  t.after(() => rm(temp, { recursive: true, force: true }));
+  const typespecPath = join(temp, 'main.tsp');
+  const schemaPath = join(temp, 'authored.schema.json');
+  await copyFile(resolve(fixtures, 'main.tsp'), typespecPath);
+  await copyFile(resolve(fixtures, 'authored.schema.json'), schemaPath);
+  return { temp, typespecPath, schemaPath };
+}
+
 async function runCheck(temp, typespecPath, schemaPath, name) {
   const outputDir = join(temp, `${name}-generated`);
   const reportPath = join(temp, `${name}-report.json`);
@@ -41,18 +53,19 @@ async function runCheck(temp, typespecPath, schemaPath, name) {
     '--max-probes=64',
     '--quiet',
   ]);
-  return {
-    result,
-    report: JSON.parse(await readFile(reportPath, 'utf8')),
-  };
+  let report = null;
+  try {
+    report = JSON.parse(await readFile(reportPath, 'utf8'));
+  } catch (error) {
+    assert.fail(
+      `validator did not emit a readable report (exit=${result.code}, signal=${result.signal ?? 'none'}): ${result.stderr || result.stdout}\n${error}`,
+    );
+  }
+  return { result, report };
 }
 
-test('TypeSpec-only semantic drift stops while authored JSON Schema remains unchanged', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-typespec-only-drift-'));
-  const typespecPath = join(temp, 'main.tsp');
-  const schemaPath = join(temp, 'authored.schema.json');
-  await copyFile(resolve(fixtures, 'main.tsp'), typespecPath);
-  await copyFile(resolve(fixtures, 'authored.schema.json'), schemaPath);
+test('TypeSpec-only semantic drift stops while authored JSON Schema remains unchanged', async (t) => {
+  const { temp, typespecPath, schemaPath } = await createTempFixture(t, 'typespec-only-drift');
 
   const schemaBefore = await readFile(schemaPath, 'utf8');
   const typeSpec = await readFile(typespecPath, 'utf8');
@@ -67,12 +80,8 @@ test('TypeSpec-only semantic drift stops while authored JSON Schema remains unch
   assert.equal(await readFile(schemaPath, 'utf8'), schemaBefore, 'JSON Schema authority was modified');
 });
 
-test('JSON-Schema-only semantic drift stops while authored TypeSpec remains unchanged', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-json-only-drift-'));
-  const typespecPath = join(temp, 'main.tsp');
-  const schemaPath = join(temp, 'authored.schema.json');
-  await copyFile(resolve(fixtures, 'main.tsp'), typespecPath);
-  await copyFile(resolve(fixtures, 'authored.schema.json'), schemaPath);
+test('JSON-Schema-only semantic drift stops while authored TypeSpec remains unchanged', async (t) => {
+  const { temp, typespecPath, schemaPath } = await createTempFixture(t, 'json-only-drift');
 
   const typeSpecBefore = await readFile(typespecPath, 'utf8');
   const schema = JSON.parse(await readFile(schemaPath, 'utf8'));
@@ -88,12 +97,8 @@ test('JSON-Schema-only semantic drift stops while authored TypeSpec remains unch
   assert.equal(await readFile(typespecPath, 'utf8'), typeSpecBefore, 'TypeSpec authority was modified');
 });
 
-test('converged independent sources still pass and emit Schema B as evidence', async () => {
-  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-independent-authorities-pass-'));
-  const typespecPath = join(temp, 'main.tsp');
-  const schemaPath = join(temp, 'authored.schema.json');
-  await copyFile(resolve(fixtures, 'main.tsp'), typespecPath);
-  await copyFile(resolve(fixtures, 'authored.schema.json'), schemaPath);
+test('converged independent sources still pass and emit Schema B as evidence', async (t) => {
+  const { temp, typespecPath, schemaPath } = await createTempFixture(t, 'independent-authorities-pass');
 
   const { result, report } = await runCheck(temp, typespecPath, schemaPath, 'converged');
   assert.equal(result.code, 0, result.stderr || result.stdout);
