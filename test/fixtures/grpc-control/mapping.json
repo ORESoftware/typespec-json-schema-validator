@@ -1,0 +1,35 @@
+{
+  "schema": "ores.typespec-json-schema-validator.mapping/v1",
+  "declarations": [
+    {
+      "typespec": "Ores.GrpcPg.Control.V1.DatabaseTarget",
+      "generated": "DatabaseTarget",
+      "authored": "DatabaseTarget"
+    },
+    {
+      "typespec": "Ores.GrpcPg.Control.V1.DriftKind",
+      "generated": "DriftKind",
+      "authored": "DriftKind"
+    },
+    {
+      "typespec": "Ores.GrpcPg.Control.V1.Drift",
+      "generated": "Drift",
+      "authored": "Drift"
+    },
+    {
+      "typespec": "Ores.GrpcPg.Control.V1.WitnessSummary",
+      "generated": "WitnessSummary",
+      "authored": "WitnessSummary"
+    },
+    {
+      "typespec": "Ores.GrpcPg.Control.V1.CheckTargetSummary",
+      "generated": "CheckTargetSummary",
+      "authored": "CheckTargetSummary"
+    }
+  ],
+  "ignore": {
+    "typespec": [],
+    "generated": [],
+    "authored": []
+  }
+}

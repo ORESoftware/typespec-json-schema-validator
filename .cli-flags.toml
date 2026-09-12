@@ -362,6 +362,88 @@ type = "string"
 default = ".typespec-json-schema-validator/projection-verification.json"
 help = "Deterministic self-digesting projection verification receipt path relative to root."
 
+[commands.legal-rollout]
+help = "Admit legal-document inventory against exact peer authorities and Contract IR evidence."
+env = "TSJSV_COMMAND_LEGAL_ROLLOUT"
+
+[commands.legal-rollout.flags.manifest]
+env = "TSJSV_LEGAL_MANIFEST"
+aliases = ["manifest"]
+type = "string"
+help = "Legal rollout manifest path."
+
+[commands.legal-rollout.flags.typespec]
+env = "TSJSV_TYPESPEC"
+aliases = ["typespec"]
+type = "string"
+help = "Current independently authored TypeSpec entry."
+
+[commands.legal-rollout.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema"]
+type = "string"
+help = "Current independently authored JSON Schema."
+
+[commands.legal-rollout.flags.generated-schema]
+env = "TSJSV_GENERATED_SCHEMA"
+aliases = ["generated-schema"]
+type = "string"
+help = "Optional current generated comparison witness."
+
+[commands.legal-rollout.flags.parity-report]
+env = "TSJSV_LEGAL_PARITY_REPORT"
+aliases = ["parity-report"]
+type = "string"
+help = "Existing passed parity report input."
+
+[commands.legal-rollout.flags.contract-ir]
+env = "TSJSV_CONTRACT_IR"
+aliases = ["contract-ir"]
+type = "string"
+help = "Existing admissible Contract IR input."
+
+[commands.legal-rollout.flags.project-root]
+env = "TSJSV_LEGAL_PROJECT_ROOT"
+aliases = ["project-root"]
+type = "string"
+default = "."
+help = "Trusted project root containing manifest and document artifacts."
+
+[commands.legal-rollout.flags.legal-root]
+env = "TSJSV_LEGAL_ROOT"
+aliases = ["legal-root"]
+type = "string"
+default = "docs/legal"
+help = "Relative legal document directory."
+
+[commands.legal-rollout.flags.declaration]
+env = "TSJSV_LEGAL_DECLARATION"
+aliases = ["declaration"]
+type = "string"
+default = "LegalRolloutManifest"
+help = "Manifest declaration in both peer authorities."
+
+[commands.legal-rollout.flags.release]
+env = "TSJSV_LEGAL_RELEASE"
+aliases = ["release"]
+type = "bool"
+default = "false"
+help = "Require release approval and approved required documents."
+
+[commands.legal-rollout.flags.min-external]
+env = "TSJSV_LEGAL_MIN_EXTERNAL"
+aliases = ["min-external"]
+type = "integer"
+default = 5
+help = "Minimum distinct external agreement types."
+
+[commands.legal-rollout.flags.min-internal]
+env = "TSJSV_LEGAL_MIN_INTERNAL"
+aliases = ["min-internal"]
+type = "integer"
+default = 3
+help = "Minimum distinct internal agreement types."
+
 [commands.doctor]
 help = "Check the flags-2-env and TypeSpec toolchain required by the validator."
 env = "TSJSV_COMMAND_DOCTOR"
