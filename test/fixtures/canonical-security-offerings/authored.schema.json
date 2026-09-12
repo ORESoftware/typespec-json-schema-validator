@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:canonical-cloud:security-offerings:v1",
+  "$defs": {
+    "SecurityOfferCode": {
+      "type": "string",
+      "enum": ["security_review", "penetration_test", "continuous_security"]
+    },
+    "BillingUnit": {
+      "type": "string",
+      "enum": ["fixed", "monthly"]
+    },
+    "CustomerSegment": {
+      "type": "string",
+      "enum": ["business_to_business"]
+    },
+    "PricingCurrency": {
+      "type": "string",
+      "enum": ["USD"]
+    },
+    "CommercialAuthority": {
+      "type": "string",
+      "enum": ["signed_sow"]
+    },
+    "SecurityIndustryProfile": {
+      "type": "string",
+      "enum": [
+        "financial_services",
+        "healthcare",
+        "cloud_saas_ai",
+        "ecommerce_payments",
+        "public_sector"
+      ]
+    },
+    "SecurityOffering": {
+      "type": "object",
+      "properties": {
+        "rank": { "type": "integer", "format": "int32" },
+        "code": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/SecurityOfferCode" },
+        "name": { "type": "string" },
+        "priceMinUsd": { "type": "integer", "format": "int32" },
+        "priceMaxUsd": { "type": "integer", "format": "int32" },
+        "billingUnit": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/BillingUnit" },
+        "minimumTermMonths": { "type": "integer", "format": "int32" },
+        "deliveryWindow": { "type": "string" },
+        "coreOffer": { "type": "string" },
+        "activeTesting": { "type": "boolean" },
+        "independentAssurance": { "type": "boolean" },
+        "includedCapabilities": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "exclusions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "requiredPreconditions": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "industryProfiles": {
+          "type": "array",
+          "items": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/SecurityIndustryProfile" }
+        }
+      },
+      "required": [
+        "rank",
+        "code",
+        "name",
+        "priceMinUsd",
+        "priceMaxUsd",
+        "billingUnit",
+        "deliveryWindow",
+        "coreOffer",
+        "activeTesting",
+        "independentAssurance",
+        "includedCapabilities",
+        "exclusions",
+        "requiredPreconditions",
+        "industryProfiles"
+      ],
+      "unevaluatedProperties": false
+    },
+    "SecurityOfferingCatalog": {
+      "type": "object",
+      "properties": {
+        "schemaVersion": { "type": "string" },
+        "customerSegment": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/CustomerSegment" },
+        "currency": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/PricingCurrency" },
+        "commercialAuthority": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/CommercialAuthority" },
+        "pricingStatus": { "type": "string" },
+        "effectiveDate": { "type": "string" },
+        "sourceDocument": { "type": "string" },
+        "offers": {
+          "type": "array",
+          "items": { "$ref": "urn:canonical-cloud:security-offerings:v1#/$defs/SecurityOffering" }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "customerSegment",
+        "currency",
+        "commercialAuthority",
+        "pricingStatus",
+        "effectiveDate",
+        "sourceDocument",
+        "offers"
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

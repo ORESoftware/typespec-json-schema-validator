@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "canonical-cloud.security-offerings/v1",
+  "customerSegment": "business_to_business",
+  "currency": "USD",
+  "commercialAuthority": "signed_sow",
+  "pricingStatus": "test fixture",
+  "effectiveDate": "2026-09-11",
+  "sourceDocument": "docs/security.md",
+  "offers": [
+    {
+      "rank": 1,
+      "code": "security_review",
+      "name": "Security Review",
+      "priceMinUsd": 6000,
+      "priceMaxUsd": 15000,
+      "billingUnit": "fixed",
+      "deliveryWindow": "test",
+      "coreOffer": "test",
+      "activeTesting": false,
+      "independentAssurance": false,
+      "includedCapabilities": ["test"],
+      "exclusions": ["test"],
+      "requiredPreconditions": ["test"],
+      "industryProfiles": ["medical_devices_only"]
+    }
+  ]
+}
