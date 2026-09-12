@@ -3,35 +3,37 @@ using TypeSpec.JsonSchema;
 
 namespace CanonicalCloud.Security;
 
-@id("SecurityOfferCode")
+// Preserve default emitter identities; authored references stay inside one URN resource.
+
+@jsonSchema
 enum SecurityOfferCode {
   securityReview: "security_review",
   penetrationTest: "penetration_test",
   continuousSecurity: "continuous_security",
 }
 
-@id("BillingUnit")
+@jsonSchema
 enum BillingUnit {
   fixed: "fixed",
   monthly: "monthly",
 }
 
-@id("CustomerSegment")
+@jsonSchema
 enum CustomerSegment {
   businessToBusiness: "business_to_business",
 }
 
-@id("PricingCurrency")
+@jsonSchema
 enum PricingCurrency {
   usd: "USD",
 }
 
-@id("CommercialAuthority")
+@jsonSchema
 enum CommercialAuthority {
   signedSow: "signed_sow",
 }
 
-@id("SecurityIndustryProfile")
+@jsonSchema
 enum SecurityIndustryProfile {
   financialServices: "financial_services",
   healthcare: "healthcare",
@@ -40,7 +42,8 @@ enum SecurityIndustryProfile {
   publicSector: "public_sector",
 }
 
-@id("SecurityOffering")
+@jsonSchema
+@extension("unevaluatedProperties", false)
 model SecurityOffering {
   rank: int32;
   code: SecurityOfferCode;
@@ -59,7 +62,8 @@ model SecurityOffering {
   industryProfiles: SecurityIndustryProfile[];
 }
 
-@id("SecurityOfferingCatalog")
+@jsonSchema
+@extension("unevaluatedProperties", false)
 model SecurityOfferingCatalog {
   schemaVersion: string;
   customerSegment: CustomerSegment;

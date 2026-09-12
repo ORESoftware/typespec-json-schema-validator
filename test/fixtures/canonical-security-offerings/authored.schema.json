@@ -4,37 +4,31 @@
   "$defs": {
     "SecurityOfferCode": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "SecurityOfferCode",
       "type": "string",
       "enum": ["security_review", "penetration_test", "continuous_security"]
     },
     "BillingUnit": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "BillingUnit",
       "type": "string",
       "enum": ["fixed", "monthly"]
     },
     "CustomerSegment": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "CustomerSegment",
       "type": "string",
       "enum": ["business_to_business"]
     },
     "PricingCurrency": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "PricingCurrency",
       "type": "string",
       "enum": ["USD"]
     },
     "CommercialAuthority": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "CommercialAuthority",
       "type": "string",
       "enum": ["signed_sow"]
     },
     "SecurityIndustryProfile": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "SecurityIndustryProfile",
       "type": "string",
       "enum": [
         "financial_services",
@@ -46,15 +40,14 @@
     },
     "SecurityOffering": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "SecurityOffering",
       "type": "object",
       "properties": {
         "rank": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
-        "code": { "$ref": "SecurityOfferCode" },
+        "code": { "$ref": "#/$defs/SecurityOfferCode" },
         "name": { "type": "string" },
         "priceMinUsd": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
         "priceMaxUsd": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
-        "billingUnit": { "$ref": "BillingUnit" },
+        "billingUnit": { "$ref": "#/$defs/BillingUnit" },
         "minimumTermMonths": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
         "deliveryWindow": { "type": "string" },
         "coreOffer": { "type": "string" },
@@ -74,7 +67,7 @@
         },
         "industryProfiles": {
           "type": "array",
-          "items": { "$ref": "SecurityIndustryProfile" }
+          "items": { "$ref": "#/$defs/SecurityIndustryProfile" }
         }
       },
       "required": [
@@ -97,19 +90,18 @@
     },
     "SecurityOfferingCatalog": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "SecurityOfferingCatalog",
       "type": "object",
       "properties": {
         "schemaVersion": { "type": "string" },
-        "customerSegment": { "$ref": "CustomerSegment" },
-        "currency": { "$ref": "PricingCurrency" },
-        "commercialAuthority": { "$ref": "CommercialAuthority" },
+        "customerSegment": { "$ref": "#/$defs/CustomerSegment" },
+        "currency": { "$ref": "#/$defs/PricingCurrency" },
+        "commercialAuthority": { "$ref": "#/$defs/CommercialAuthority" },
         "pricingStatus": { "type": "string" },
         "effectiveDate": { "type": "string" },
         "sourceDocument": { "type": "string" },
         "offers": {
           "type": "array",
-          "items": { "$ref": "SecurityOffering" }
+          "items": { "$ref": "#/$defs/SecurityOffering" }
         }
       },
       "required": [
