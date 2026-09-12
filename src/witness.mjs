@@ -441,6 +441,22 @@ export function mutateInstance(seed, { limit = 64, maxNodes = 64 } = {}) {
     push('inject-unexpected-property', `${node.pointer}/${UNEXPECTED_PROPERTY}`, injected);
   }
 
+  // Arrays need explicit length-boundary probes. Scalar substitution can replace an
+  // entire array, but it cannot expose a generated tuple that silently accepts one item too few
+  // or too many compared with an independently authored minItems/maxItems authority.
+  for (const node of nodes) {
+    if (!Array.isArray(node.value)) {
+      continue;
+    }
+    if (node.value.length > 0) {
+      const shortened = node.value.slice(0, -1).map(deepClone);
+      push('shorten-array', node.pointer, setAtPointer(seed, node.pointer, shortened));
+    }
+    const extended = node.value.map(deepClone);
+    extended.push(OUT_OF_DOMAIN_STRING);
+    push('extend-array', node.pointer, setAtPointer(seed, node.pointer, extended));
+  }
+
   for (const node of nodes) {
     for (const substitution of SCALAR_SUBSTITUTIONS) {
       if (node.pointer === '' && substitution.label === 'null') {
