@@ -71,14 +71,21 @@ test('TypeSpec-only semantic drift stops while authored JSON Schema remains unch
 
   const schemaBefore = await readFile(schemaPath, 'utf8');
   const typeSpec = await readFile(typespecPath, 'utf8');
-  assert.match(typeSpec, /id: string;/);
-  await writeFile(typespecPath, typeSpec.replace('id: string;', 'id: int32;'));
+  assert.match(typeSpec, /active: boolean;/);
+  // Requiredness is deliberately used as the counterexample because it is a
+  // direct, normalization-independent JSON Schema semantic: Schema B must drop
+  // `active` from required while independently authored Schema A must not move.
+  await writeFile(typespecPath, typeSpec.replace('active: boolean;', 'active?: boolean;'));
 
   const { result, report } = await runCheck(temp, typespecPath, schemaPath, 'typespec-drift');
   assert.equal(result.code, 2, result.stderr || result.stdout);
   assert.equal(report.status, 'stopped_for_evaluation');
   assert.equal(report.zeroUnexplainedFindings, false);
   assert.ok(report.findings.length > 0);
+  assert.ok(
+    report.findings.some((finding) => String(finding.pointer ?? '').includes('required')),
+    JSON.stringify(report.findings),
+  );
   assert.equal(await readFile(schemaPath, 'utf8'), schemaBefore, 'JSON Schema authority was modified');
 });
 
