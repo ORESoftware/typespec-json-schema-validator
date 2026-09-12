@@ -1,4 +1,4 @@
-import type { ValidatorReport, ValidatorStatus } from '../index.mjs';
+import type { ValidatorReport, ValidatorStatus, loadSchemaCollection } from '../index.mjs';
 
 export declare const LEGAL_ROLLOUT_MANIFEST_SCHEMA: 'ores.legal-rollout.manifest/v1';
 export declare const LEGAL_ROLLOUT_RECEIPT_SCHEMA: 'ores.legal-rollout.receipt/v1';
@@ -96,6 +96,10 @@ export declare function validateLegalManifestLanes(
   contractIr: unknown,
   manifest: unknown,
   declarationName?: string,
+  collections?: {
+    typespecGeneratedJsonSchema?: Awaited<ReturnType<typeof loadSchemaCollection>>;
+    authoredJsonSchema?: Awaited<ReturnType<typeof loadSchemaCollection>>;
+  },
 ): {
   verdicts: Record<string, boolean | null>;
   findings: LegalRolloutFinding[];

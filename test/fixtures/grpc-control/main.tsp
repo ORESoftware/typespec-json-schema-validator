@@ -6,8 +6,10 @@ using TypeSpec.JsonSchema;
 
 namespace Ores.GrpcPg.Control.V1;
 
+// Keep the emitter's default declaration file identities. Bare relative @id
+// values are not aliases for references inside the authored URN resource.
+
 @jsonSchema
-@id("DatabaseTarget")
 @extension("unevaluatedProperties", false)
 model DatabaseTarget {
   @minLength(1)
@@ -16,7 +18,6 @@ model DatabaseTarget {
 }
 
 @jsonSchema
-@id("DriftKind")
 enum DriftKind {
   DRIFT_KIND_UNSPECIFIED,
   DRIFT_KIND_MISSING_FROM_WITNESS,
@@ -27,7 +28,6 @@ enum DriftKind {
 }
 
 @jsonSchema
-@id("Drift")
 @extension("unevaluatedProperties", false)
 model Drift {
   kind: DriftKind;
@@ -41,7 +41,6 @@ model Drift {
 }
 
 @jsonSchema
-@id("WitnessSummary")
 @extension("unevaluatedProperties", false)
 model WitnessSummary {
   source: string;
@@ -55,7 +54,6 @@ model WitnessSummary {
 }
 
 @jsonSchema
-@id("CheckTargetSummary")
 @extension("unevaluatedProperties", false)
 model CheckTargetSummary {
   target: DatabaseTarget;

@@ -102,6 +102,28 @@ export function loadCliConfiguration(argv = process.argv) {
   }
 
   switch (command) {
+    case 'legal-rollout': {
+      const minExternal = integerValue(env.TSJSV_LEGAL_MIN_EXTERNAL, 5);
+      const minInternal = integerValue(env.TSJSV_LEGAL_MIN_INTERNAL, 3);
+      if (minExternal < 0 || minInternal < 0) {
+        throw new CliUsageError('legal document minimums must be non-negative safe integers');
+      }
+      return {
+        ...common,
+        manifest: required(env, 'TSJSV_LEGAL_MANIFEST', '--manifest'),
+        parityReport: required(env, 'TSJSV_LEGAL_PARITY_REPORT', '--parity-report'),
+        contractIr: required(env, 'TSJSV_CONTRACT_IR', '--contract-ir'),
+        typespec: required(env, 'TSJSV_TYPESPEC', '--typespec'),
+        authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
+        generatedSchema: env.TSJSV_GENERATED_SCHEMA || undefined,
+        projectRoot: env.TSJSV_LEGAL_PROJECT_ROOT || '.',
+        legalRoot: env.TSJSV_LEGAL_ROOT || 'docs/legal',
+        declaration: env.TSJSV_LEGAL_DECLARATION || 'LegalRolloutManifest',
+        release: booleanValue(env.TSJSV_LEGAL_RELEASE, false),
+        minExternal,
+        minInternal,
+      };
+    }
     case 'check':
       return validateEmitterOptions({
         ...common,

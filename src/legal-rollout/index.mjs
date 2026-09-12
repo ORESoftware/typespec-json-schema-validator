@@ -2,7 +2,9 @@ import { lstat, readFile, readdir } from 'node:fs/promises';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { TextDecoder } from 'node:util';
 import { canonicalStringify, sha256 } from '../canonical.mjs';
-import { verifyContractIr } from '../contract-ir.mjs';
+import { verifyContractIrEvidence } from '../contract-ir.mjs';
+import { loadSchemaCollection } from '../json-schema.mjs';
+import { inventoryTypeSpec } from '../typespec-inventory.mjs';
 import {
   SchemaEvaluationError,
   SchemaResolutionError,
@@ -265,24 +267,22 @@ async function readJsonArtifact(path, label, projectRoot) {
   };
 }
 
-function schemaLane(contractIr, laneName, declarationName) {
-  const resolver = new SchemaResolver();
-  const byName = new Map();
-  for (const declaration of contractIr.declarations ?? []) {
-    const lane = declaration?.lanes?.[laneName];
-    if (!isObject(lane) || !isObject(lane.normalizedSchema) || typeof lane.name !== 'string') continue;
-    const schema = structuredClone(lane.normalizedSchema);
-    if (typeof schema.$id !== 'string' || schema.$id === '') schema.$id = lane.name;
-    const record = resolver.addDocument(schema, `${lane.name}.schema.json`);
-    const target = { schema, base: record.base, declaration };
-    byName.set(declaration.id, target);
-    byName.set(lane.name, target);
-    for (const name of Object.values(declaration.names ?? {})) {
-      if (typeof name === 'string') byName.set(name, target);
-    }
-  }
-  const target = byName.get(declarationName);
-  if (!target) throw new Error(`Contract IR does not admit declaration ${declarationName}`);
+function schemaLane(contractIr, laneName, declarationName, collection) {
+  if (!collection) throw new Error('current source collection is required for resource-safe validation');
+  const matches = (contractIr.declarations ?? []).filter((declaration) =>
+    declaration.id === declarationName
+    || Object.values(declaration.names ?? {}).includes(declarationName));
+  if (matches.length !== 1) throw new Error(`Contract IR must admit exactly one declaration ${declarationName}`);
+  const name = matches[0].lanes?.[laneName]?.name;
+  const declarations = collection.declarations.filter((declaration) => declaration.name === name);
+  if (declarations.length !== 1) throw new Error(`source collection must contain exactly one declaration ${name}`);
+  const declaration = declarations[0];
+  // Preserve the exact document graph verified by Contract IR. Extracting each
+  // $defs entry into an invented document changes relative URI resolution.
+  const resolver = new SchemaResolver(collection.documents);
+  const record = resolver.documents.find((document) => document.path === declaration.source);
+  const target = record && resolver.resolve(declaration.pointer, record.base);
+  if (!target) throw new Error(`source resource does not resolve declaration ${name}`);
   return { resolver, ...target };
 }
 
@@ -295,7 +295,7 @@ function summarizeSchemaErrors(errors) {
   }));
 }
 
-export function validateLegalManifestLanes(contractIr, manifest, declarationName = LEGAL_ROLLOUT_DECLARATION) {
+export function validateLegalManifestLanes(contractIr, manifest, declarationName = LEGAL_ROLLOUT_DECLARATION, collections = {}) {
   const findings = [];
   const verdicts = {};
   for (const [label, laneName] of [
@@ -303,7 +303,7 @@ export function validateLegalManifestLanes(contractIr, manifest, declarationName
     ['authored-json-schema', 'authoredJsonSchema'],
   ]) {
     try {
-      const lane = schemaLane(contractIr, laneName, declarationName);
+      const lane = schemaLane(contractIr, laneName, declarationName, collections[laneName]);
       const result = validateInstance({
         schema: lane.schema,
         instance: manifest,
@@ -724,12 +724,17 @@ export async function runLegalRollout(options) {
       readJsonArtifact(options.parityReport, 'parity report', root),
       readJsonArtifact(options.contractIr, 'Contract IR', root),
     ]);
-    const verification = await verifyContractIr({
+    const [typespecInventory, generatedCollection, authoredCollection] = await Promise.all([
+      inventoryTypeSpec(options.typespec ?? parityArtifact.value?.inputs?.typespec?.input),
+      loadSchemaCollection(options.generatedSchema ?? parityArtifact.value?.inputs?.generatedJsonSchema?.input, { requireDialect: true }),
+      loadSchemaCollection(options.authoredSchema ?? parityArtifact.value?.inputs?.authoredJsonSchema?.input, { requireDialect: true }),
+    ]);
+    const verification = verifyContractIrEvidence({
       contractIr: contractIrArtifact.value,
       report: parityArtifact.value,
-      typespec: options.typespec,
-      generatedSchema: options.generatedSchema,
-      authoredSchema: options.authoredSchema,
+      typespecInventory,
+      generatedCollection,
+      authoredCollection,
     });
     const findings = [];
     if (verification.status !== 'passed' || verification.admissible !== true) {
@@ -744,6 +749,10 @@ export async function runLegalRollout(options) {
       contractIrArtifact.value,
       manifestArtifact.value,
       configuration.declaration,
+      {
+        typespecGeneratedJsonSchema: generatedCollection,
+        authoredJsonSchema: authoredCollection,
+      },
     );
     findings.push(...laneValidation.findings);
     const audit = await auditLegalRollout({

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "legal-rollout-manifest.schema.json",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/legal-rollout-manifest.v1.schema.json",
   "$defs": {
     "LegalClassification": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
