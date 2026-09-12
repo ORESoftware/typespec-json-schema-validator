@@ -1,0 +1,165 @@
+name: Legal rollout Contract IR admission
+description: Verify peer manifest authorities, exact Contract IR inputs, and hash-pinned internal/external legal Markdown evidence.
+author: ORESoftware
+
+inputs:
+  manifest:
+    description: Repository-relative legal rollout manifest path.
+    required: true
+  project_root:
+    description: Repository root relative to github.workspace.
+    required: false
+    default: .
+  legal_root:
+    description: Canonical legal tree relative to project_root.
+    required: false
+    default: docs/legal
+  receipt:
+    description: Deterministic legal admission receipt path relative to project_root.
+    required: false
+    default: .legal-rollout/receipt.json
+  parity_report:
+    description: Peer-authority parity receipt path relative to project_root.
+    required: false
+    default: .legal-rollout/parity-report.json
+  contract_ir:
+    description: Parity-approved Contract IR path relative to project_root.
+    required: false
+    default: .legal-rollout/contract-ir.json
+  output_dir:
+    description: TypeSpec evidence output directory relative to project_root.
+    required: false
+    default: .legal-rollout/generated
+  typespec:
+    description: Optional TypeSpec manifest authority. Defaults to the action's packaged authority.
+    required: false
+    default: ''
+  schema:
+    description: Optional JSON Schema manifest authority. Defaults to the action's packaged authority.
+    required: false
+    default: ''
+  declaration:
+    description: Contract IR declaration used to validate the manifest.
+    required: false
+    default: LegalRolloutManifest
+  release:
+    description: Require aggregate and per-document publication approval.
+    required: false
+    default: 'false'
+  min_external:
+    description: Minimum distinct external agreement types.
+    required: false
+    default: '5'
+  min_internal:
+    description: Minimum distinct internal agreement types.
+    required: false
+    default: '3'
+
+outputs:
+  receipt:
+    description: Absolute deterministic legal admission receipt path.
+    value: ${{ steps.admit.outputs.receipt }}
+  parity_report:
+    description: Absolute peer-authority parity receipt path.
+    value: ${{ steps.admit.outputs.parity_report }}
+  contract_ir:
+    description: Absolute parity-approved Contract IR path.
+    value: ${{ steps.admit.outputs.contract_ir }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned validator dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/..
+      run: npm ci --ignore-scripts
+
+    - name: Compile peer authorities and admit legal rollout
+      id: admit
+      shell: bash
+      env:
+        INPUT_MANIFEST: ${{ inputs.manifest }}
+        INPUT_PROJECT_ROOT: ${{ inputs.project_root }}
+        INPUT_LEGAL_ROOT: ${{ inputs.legal_root }}
+        INPUT_RECEIPT: ${{ inputs.receipt }}
+        INPUT_PARITY_REPORT: ${{ inputs.parity_report }}
+        INPUT_CONTRACT_IR: ${{ inputs.contract_ir }}
+        INPUT_OUTPUT_DIR: ${{ inputs.output_dir }}
+        INPUT_TYPESPEC: ${{ inputs.typespec }}
+        INPUT_SCHEMA: ${{ inputs.schema }}
+        INPUT_DECLARATION: ${{ inputs.declaration }}
+        INPUT_RELEASE: ${{ inputs.release }}
+        INPUT_MIN_EXTERNAL: ${{ inputs.min_external }}
+        INPUT_MIN_INTERNAL: ${{ inputs.min_internal }}
+      run: |
+        set -euo pipefail
+
+        case "$INPUT_RELEASE" in
+          true|false) ;;
+          *) echo "release must be true or false" >&2; exit 64 ;;
+        esac
+        [[ "$INPUT_MIN_EXTERNAL" =~ ^(0|[1-9][0-9]*)$ ]] || {
+          echo "min_external must be a non-negative integer" >&2
+          exit 64
+        }
+        [[ "$INPUT_MIN_INTERNAL" =~ ^(0|[1-9][0-9]*)$ ]] || {
+          echo "min_internal must be a non-negative integer" >&2
+          exit 64
+        }
+
+        project_root="$INPUT_PROJECT_ROOT"
+        [[ "$project_root" = /* ]] || project_root="$GITHUB_WORKSPACE/$project_root"
+        project_root="$(cd "$project_root" && pwd -P)"
+
+        absolute_from_root() {
+          local value="$1"
+          if [[ "$value" = /* ]]; then
+            printf '%s\n' "$value"
+          else
+            printf '%s/%s\n' "$project_root" "$value"
+          fi
+        }
+
+        manifest="$(absolute_from_root "$INPUT_MANIFEST")"
+        receipt="$(absolute_from_root "$INPUT_RECEIPT")"
+        parity_report="$(absolute_from_root "$INPUT_PARITY_REPORT")"
+        contract_ir="$(absolute_from_root "$INPUT_CONTRACT_IR")"
+        output_dir="$(absolute_from_root "$INPUT_OUTPUT_DIR")"
+        typespec="${INPUT_TYPESPEC:-$GITHUB_ACTION_PATH/../schema/legal-rollout-manifest.tsp}"
+        schema="${INPUT_SCHEMA:-$GITHUB_ACTION_PATH/../schema/legal-rollout-manifest.schema.json}"
+        cli="$GITHUB_ACTION_PATH/../bin/typespec-json-schema-validator.mjs"
+
+        mkdir -p "$(dirname "$receipt")" "$(dirname "$parity_report")" "$(dirname "$contract_ir")" "$output_dir"
+
+        node "$cli" check \
+          --typespec "$typespec" \
+          --schema "$schema" \
+          --output-dir "$output_dir" \
+          --bundle-id legal-rollout.generated.schema.json \
+          --report "$parity_report" \
+          --contract-ir "$contract_ir" \
+          --quiet
+
+        legal_args=(
+          legal-rollout
+          --manifest "$manifest"
+          --typespec "$typespec"
+          --schema "$schema"
+          --parity-report "$parity_report"
+          --contract-ir "$contract_ir"
+          --project-root "$project_root"
+          --legal-root "$INPUT_LEGAL_ROOT"
+          --declaration "$INPUT_DECLARATION"
+          --min-external "$INPUT_MIN_EXTERNAL"
+          --min-internal "$INPUT_MIN_INTERNAL"
+          --report "$receipt"
+          --quiet
+        )
+        [[ "$INPUT_RELEASE" == true ]] && legal_args+=(--release)
+        node "$cli" "${legal_args[@]}"
+
+        {
+          printf 'receipt=%s\n' "$receipt"
+          printf 'parity_report=%s\n' "$parity_report"
+          printf 'contract_ir=%s\n' "$contract_ir"
+        } >> "$GITHUB_OUTPUT"
