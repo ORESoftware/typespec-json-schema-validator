@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "canonical-cloud.security-offerings/v1",
+  "customerSegment": "business_to_business",
+  "currency": "USD",
+  "commercialAuthority": "signed_sow",
+  "pricingStatus": "test fixture",
+  "effectiveDate": "2026-09-11",
+  "sourceDocument": "docs/security.md",
+  "offers": [
+    {
+      "rank": 4,
+      "code": "red_team",
+      "name": "Unknown offer fixture",
+      "priceMinUsd": 1,
+      "priceMaxUsd": 2,
+      "billingUnit": "fixed",
+      "deliveryWindow": "test",
+      "coreOffer": "test",
+      "activeTesting": true,
+      "independentAssurance": false,
+      "includedCapabilities": ["test"],
+      "exclusions": ["test"],
+      "requiredPreconditions": ["test"],
+      "industryProfiles": ["cloud_saas_ai"]
+    }
+  ]
+}

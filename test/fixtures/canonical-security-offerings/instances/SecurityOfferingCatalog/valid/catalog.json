@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "canonical-cloud.security-offerings/v1",
+  "customerSegment": "business_to_business",
+  "currency": "USD",
+  "commercialAuthority": "signed_sow",
+  "pricingStatus": "2026 management planning assumptions; signed SOW controls",
+  "effectiveDate": "2026-09-11",
+  "sourceDocument": "docs/security.md",
+  "offers": [
+    {
+      "rank": 1,
+      "code": "security_review",
+      "name": "Security Review",
+      "priceMinUsd": 6000,
+      "priceMaxUsd": 15000,
+      "billingUnit": "fixed",
+      "deliveryWindow": "1–2 weeks",
+      "coreOffer": "Architecture, identity, cloud, application, API, secrets, logging, dependency, and exposure review with a prioritized remediation plan",
+      "activeTesting": false,
+      "independentAssurance": false,
+      "includedCapabilities": [
+        "architecture and trust-boundary review",
+        "identity and authorization review",
+        "cloud and configuration review",
+        "application and API review",
+        "secrets and dependency review",
+        "prioritized remediation plan"
+      ],
+      "exclusions": [
+        "active exploitation unless separately authorized",
+        "independent audit opinion or certification",
+        "guaranteed absence of vulnerabilities"
+      ],
+      "requiredPreconditions": [
+        "signed statement of work defining the scoped systems and exclusions"
+      ],
+      "industryProfiles": [
+        "financial_services",
+        "healthcare",
+        "cloud_saas_ai",
+        "ecommerce_payments",
+        "public_sector"
+      ]
+    },
+    {
+      "rank": 2,
+      "code": "penetration_test",
+      "name": "Scoped Penetration Test",
+      "priceMinUsd": 15000,
+      "priceMaxUsd": 40000,
+      "billingUnit": "fixed",
+      "deliveryWindow": "2–4 weeks for a bounded prepared scope",
+      "coreOffer": "Authorized adversarial testing of named applications, APIs, cloud surfaces, identity paths, or other explicitly approved targets, followed by findings and retest evidence",
+      "activeTesting": true,
+      "independentAssurance": false,
+      "includedCapabilities": [
+        "authorized reconnaissance and attack-surface validation",
+        "manual and tool-assisted vulnerability analysis",
+        "bounded exploit validation",
+        "technical and executive findings",
+        "remediation guidance",
+        "scoped retest evidence"
+      ],
+      "exclusions": [
+        "denial-of-service unless separately authorized",
+        "destructive testing unless separately authorized",
+        "social engineering, physical, wireless, persistence, or third-party testing unless separately authorized",
+        "independent regulatory or assurance conclusion"
+      ],
+      "requiredPreconditions": [
+        "written authorization from a party authorized to grant testing permission",
+        "approved rules of engagement identifying exact targets, exclusions, techniques, testing windows, safety limits, stop conditions, and evidence handling",
+        "signed statement of work defining scope, price, deliverables, and customer dependencies"
+      ],
+      "industryProfiles": [
+        "financial_services",
+        "healthcare",
+        "cloud_saas_ai",
+        "ecommerce_payments",
+        "public_sector"
+      ]
+    },
+    {
+      "rank": 3,
+      "code": "continuous_security",
+      "name": "Continuous Security Assurance",
+      "priceMinUsd": 8000,
+      "priceMaxUsd": 20000,
+      "billingUnit": "monthly",
+      "minimumTermMonths": 3,
+      "deliveryWindow": "3-month minimum managed term",
+      "coreOffer": "Recurring security review, vulnerability-trend and change-impact review, remediation verification, threat-model refresh, and coordination of separately scoped active tests",
+      "activeTesting": false,
+      "independentAssurance": false,
+      "includedCapabilities": [
+        "recurring technical security review",
+        "vulnerability and remediation trend review",
+        "change-impact review",
+        "threat-model refresh",
+        "security backlog prioritization",
+        "coordination of separately scoped active tests"
+      ],
+      "exclusions": [
+        "continuous or unrestricted penetration testing",
+        "independent audit opinion or certification",
+        "guaranteed security outcomes"
+      ],
+      "requiredPreconditions": [
+        "signed statement of work defining cadence, systems, review allowance, escalation, and evidence handling",
+        "separate written authorization and rules of engagement for any active penetration testing"
+      ],
+      "industryProfiles": [
+        "financial_services",
+        "healthcare",
+        "cloud_saas_ai",
+        "ecommerce_payments",
+        "public_sector"
+      ]
+    }
+  ]
+}
