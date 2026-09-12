@@ -1,0 +1,106 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { copyFile, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import test from 'node:test';
+
+const packageRoot = resolve(import.meta.dirname, '../..');
+const executable = resolve(packageRoot, 'bin/typespec-json-schema-validator.mjs');
+const fixtures = resolve(packageRoot, 'test/fixtures/pass');
+
+function run(args) {
+  return new Promise((resolvePromise, reject) => {
+    const child = spawn(process.execPath, [executable, ...args], {
+      cwd: packageRoot,
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolvePromise({ code, signal, stdout, stderr }));
+  });
+}
+
+async function runCheck(temp, typespecPath, schemaPath, name) {
+  const outputDir = join(temp, `${name}-generated`);
+  const reportPath = join(temp, `${name}-report.json`);
+  const result = await run([
+    'check',
+    `--typespec=${typespecPath}`,
+    `--schema=${schemaPath}`,
+    `--output-dir=${outputDir}`,
+    `--report=${reportPath}`,
+    '--max-probes=64',
+    '--quiet',
+  ]);
+  return {
+    result,
+    report: JSON.parse(await readFile(reportPath, 'utf8')),
+  };
+}
+
+test('TypeSpec-only semantic drift stops while authored JSON Schema remains unchanged', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-typespec-only-drift-'));
+  const typespecPath = join(temp, 'main.tsp');
+  const schemaPath = join(temp, 'authored.schema.json');
+  await copyFile(resolve(fixtures, 'main.tsp'), typespecPath);
+  await copyFile(resolve(fixtures, 'authored.schema.json'), schemaPath);
+
+  const schemaBefore = await readFile(schemaPath, 'utf8');
+  const typeSpec = await readFile(typespecPath, 'utf8');
+  assert.match(typeSpec, /active: boolean;/);
+  await writeFile(typespecPath, typeSpec.replace('active: boolean;', 'active: string;'));
+
+  const { result, report } = await runCheck(temp, typespecPath, schemaPath, 'typespec-drift');
+  assert.equal(result.code, 2, result.stderr || result.stdout);
+  assert.equal(report.status, 'stopped_for_evaluation');
+  assert.equal(report.zeroUnexplainedFindings, false);
+  assert.ok(report.findings.length > 0);
+  assert.equal(await readFile(schemaPath, 'utf8'), schemaBefore, 'JSON Schema authority was modified');
+});
+
+test('JSON-Schema-only semantic drift stops while authored TypeSpec remains unchanged', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-json-only-drift-'));
+  const typespecPath = join(temp, 'main.tsp');
+  const schemaPath = join(temp, 'authored.schema.json');
+  await copyFile(resolve(fixtures, 'main.tsp'), typespecPath);
+  await copyFile(resolve(fixtures, 'authored.schema.json'), schemaPath);
+
+  const typeSpecBefore = await readFile(typespecPath, 'utf8');
+  const schema = JSON.parse(await readFile(schemaPath, 'utf8'));
+  assert.equal(schema.$defs.User.properties.active.type, 'boolean');
+  schema.$defs.User.properties.active.type = 'integer';
+  await writeFile(schemaPath, `${JSON.stringify(schema, null, 2)}\n`);
+
+  const { result, report } = await runCheck(temp, typespecPath, schemaPath, 'json-schema-drift');
+  assert.equal(result.code, 2, result.stderr || result.stdout);
+  assert.equal(report.status, 'stopped_for_evaluation');
+  assert.equal(report.zeroUnexplainedFindings, false);
+  assert.ok(report.findings.length > 0);
+  assert.equal(await readFile(typespecPath, 'utf8'), typeSpecBefore, 'TypeSpec authority was modified');
+});
+
+test('converged independent sources still pass and emit Schema B as evidence', async () => {
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-independent-authorities-pass-'));
+  const typespecPath = join(temp, 'main.tsp');
+  const schemaPath = join(temp, 'authored.schema.json');
+  await copyFile(resolve(fixtures, 'main.tsp'), typespecPath);
+  await copyFile(resolve(fixtures, 'authored.schema.json'), schemaPath);
+
+  const { result, report } = await runCheck(temp, typespecPath, schemaPath, 'converged');
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+  assert.equal(report.status, 'passed');
+  assert.equal(report.zeroUnexplainedFindings, true);
+  assert.equal(report.differential.summary.divergences, 0);
+  assert.ok(report.differential.summary.probesEvaluated > 0);
+  assert.equal(report.inputs.typespec.endsWith('main.tsp'), true);
+  assert.equal(report.inputs.authoredSchema.endsWith('authored.schema.json'), true);
+});
