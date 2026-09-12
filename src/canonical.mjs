@@ -38,12 +38,14 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   stripMetadata: false,
   normalizeReference: normalizeRef,
   collapseSafeIntegerConstType: false,
+  collapseStringConstAnyOfToEnum: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
   stripMetadata: true,
   normalizeReference: normalizeComparisonRef,
   collapseSafeIntegerConstType: true,
+  collapseStringConstAnyOfToEnum: true,
 });
 
 export function isPlainObject(value) {
@@ -192,6 +194,42 @@ function collapseRedundantSafeIntegerConstType(value, options) {
   const { type: _redundantType, ...rest } = value;
   return rest;
 }
+
+function collapseStringConstAnyOfToEnum(value, options) {
+  if (!options.collapseStringConstAnyOfToEnum || !isPlainObject(value)) {
+    return value;
+  }
+  if (Object.keys(value).length !== 1 || !Array.isArray(value.anyOf) || value.anyOf.length < 2) {
+    return value;
+  }
+
+  const values = [];
+  for (const branch of value.anyOf) {
+    if (!isPlainObject(branch)) {
+      return value;
+    }
+    const keys = Object.keys(branch).sort();
+    if (keys.length !== 2 || keys[0] !== 'const' || keys[1] !== 'type') {
+      return value;
+    }
+    if (branch.type !== 'string' || typeof branch.const !== 'string') {
+      return value;
+    }
+    values.push(branch.const);
+  }
+  if (new Set(values).size !== values.length) {
+    return value;
+  }
+
+  // For unique string constants, inclusive `anyOf` and a string enum accept
+  // exactly the same JSON instances. The TypeSpec JSON Schema emitter commonly
+  // uses the former for string literal unions while an independently authored
+  // Draft 2020-12 authority naturally uses the latter. Normalize only this
+  // finite homogeneous form in the comparison lane; executable schemas and
+  // oneOf/mixed/annotated/duplicate branches remain untouched.
+  return { enum: values.sort(), type: 'string' };
+}
+
 function sortJsonValues(values) {
   // Never deduplicate. In particular, repeated oneOf branches change validity.
   // Use code-unit ordering, not a locale-dependent comparator, for digests.
@@ -260,7 +298,8 @@ function normalizeSchemaNodeWith(value, options) {
   }
   const result = Object.fromEntries(entries);
   const normalizedUnion = canCollapseSimpleTypeUnion(result) ?? result;
-  return collapseRedundantSafeIntegerConstType(normalizedUnion, options);
+  const normalizedFiniteStringUnion = collapseStringConstAnyOfToEnum(normalizedUnion, options);
+  return collapseRedundantSafeIntegerConstType(normalizedFiniteStringUnion, options);
 }
 
 /**
