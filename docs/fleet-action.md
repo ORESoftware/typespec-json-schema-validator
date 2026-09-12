@@ -30,6 +30,18 @@ These inputs map directly to the reviewed CLI flags and official TypeSpec JSON S
 
 `seal_object_schemas` accepts `true` or `false`. `polymorphic_models_strategy` accepts `ignore`, `oneOf`, or `anyOf`. Invalid values fail during the CLI configuration phase before generated evidence is accepted.
 
-The caller owns artifact retention. Upload the report and generated witness under `if: always()` so a stopped or failed run remains inspectable, then enforce the action's exit status. Neither the action nor the generated witness may overwrite the independently authored TypeSpec or JSON Schema authority.
+## Admission and evidence retention are separate gates
+
+The parity action and consumer-admission action are semantic gates. They must remain fail-closed: do not set `continue-on-error` on either action, do not mask their exit code, and do not make downstream promotion depend on a weaker fallback authority.
+
+Artifact upload is diagnostic transport, not semantic admission. Upload the report, Contract IR, SARIF, and generated comparison witness under `if: ${{ always() }}` so stopped runs remain inspectable, but set `continue-on-error: true` on the upload step. GitHub artifact quota exhaustion, a transient artifact-service failure, or retention infrastructure being unavailable must not convert a successful peer-authority comparison into a false red. The authored TypeSpec and JSON Schema authorities remain independent regardless of whether diagnostic transport succeeds.
+
+The canonical consumer workflow is recorded in `docs/fleet-peer-authority-workflow.yml`. Keep the invariant explicit:
+
+1. exact-head checkout and revision verification are mandatory;
+2. TypeSpec ↔ JSON Schema comparison is fail-closed;
+3. current Contract IR / receipt admission is fail-closed;
+4. authored authorities must remain byte-for-byte unmodified by the run; and
+5. diagnostic artifact retention is best-effort only.
 
 Repository adoption is incremental: a green, independently authored canary contract proves the gate is installed and executable, but it does not certify unrelated domain contracts. Each domain declaration must move into both authored lanes and converge before downstream generation or promotion can consume it.
