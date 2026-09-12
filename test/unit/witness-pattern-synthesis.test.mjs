@@ -32,6 +32,7 @@ test('common anchored character-class patterns synthesize valid deterministic wi
   });
   assert.equal(synthesized.complete, true);
   assert.match(synthesized.instance.service, /^[A-Za-z][A-Za-z0-9._-]*$/u);
+  assert.equal(synthesized.instance.service, 'A');
   assert.match(synthesized.instance.contractSha256, /^[0-9a-f]{64}$/u);
   assert.equal(synthesized.instance.contractSha256, '0'.repeat(64));
   const verdict = validateInstance({
