@@ -16,6 +16,7 @@ const SCHEMA_SINGLE_KEYS = new Set([
 const JSON_SCHEMA_TYPES = new Set([
   'array', 'boolean', 'integer', 'null', 'number', 'object', 'string',
 ]);
+const SAFE_LITERAL_UNION_TYPES = new Set(['boolean', 'null', 'string']);
 
 // These keywords do not assert whether an instance is valid. They may still be
 // essential while executing a schema: $id builds the resource graph, examples
@@ -38,12 +39,14 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   stripMetadata: false,
   normalizeReference: normalizeRef,
   collapseSafeIntegerConstType: false,
+  collapseSafeLiteralUnion: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
   stripMetadata: true,
   normalizeReference: normalizeComparisonRef,
   collapseSafeIntegerConstType: true,
+  collapseSafeLiteralUnion: true,
 });
 
 export function isPlainObject(value) {
@@ -172,6 +175,64 @@ function canCollapseSimpleTypeUnion(value) {
   return { type: types.sort() };
 }
 
+function literalMatchesType(value, type) {
+  if (type === 'null') return value === null;
+  if (type === 'string') return typeof value === 'string';
+  if (type === 'boolean') return typeof value === 'boolean';
+  return false;
+}
+
+function canCollapseSafeLiteralUnion(value, options) {
+  if (!options.collapseSafeLiteralUnion || !isPlainObject(value)) {
+    return null;
+  }
+  const keys = Object.keys(value);
+  const unionKey = keys.includes('anyOf') ? 'anyOf' : keys.includes('oneOf') ? 'oneOf' : null;
+  if (!unionKey || keys.length !== 1) {
+    return null;
+  }
+  const branches = value[unionKey];
+  if (!Array.isArray(branches) || branches.length === 0) {
+    return null;
+  }
+
+  let type;
+  const values = [];
+  const seen = new Set();
+  for (const branch of branches) {
+    if (!isPlainObject(branch)) return null;
+    const branchKeys = Object.keys(branch).sort();
+    if (branchKeys.length !== 2 || branchKeys[0] !== 'const' || branchKeys[1] !== 'type') {
+      return null;
+    }
+    if (typeof branch.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(branch.type)) {
+      return null;
+    }
+    if (type !== undefined && branch.type !== type) {
+      return null;
+    }
+    if (!literalMatchesType(branch.const, branch.type)) {
+      return null;
+    }
+    type = branch.type;
+    const identity = canonicalStringify(branch.const);
+    if (unionKey === 'oneOf' && seen.has(identity)) {
+      // A repeated oneOf branch makes that literal match more than one branch,
+      // so the XOR rejects it. An enum would accept it; do not erase that fact.
+      return null;
+    }
+    if (!seen.has(identity)) {
+      seen.add(identity);
+      values.push(canonicalizeJson(branch.const));
+    }
+  }
+
+  return {
+    enum: sortJsonValues(values),
+    type,
+  };
+}
+
 function collapseRedundantSafeIntegerConstType(value, options) {
   if (!options.collapseSafeIntegerConstType || !isPlainObject(value)) {
     return value;
@@ -193,7 +254,7 @@ function collapseRedundantSafeIntegerConstType(value, options) {
   return rest;
 }
 function sortJsonValues(values) {
-  // Never deduplicate. In particular, repeated oneOf branches change validity.
+  // Never deduplicate here. In particular, repeated oneOf branches change validity.
   // Use code-unit ordering, not a locale-dependent comparator, for digests.
   return values.map((value) => [canonicalStringify(value), value])
     .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
@@ -259,7 +320,8 @@ function normalizeSchemaNodeWith(value, options) {
     entries.push([targetKey, normalizeKeywordValue(key, value[key], options)]);
   }
   const result = Object.fromEntries(entries);
-  const normalizedUnion = canCollapseSimpleTypeUnion(result) ?? result;
+  const normalizedLiteralUnion = canCollapseSafeLiteralUnion(result, options) ?? result;
+  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedLiteralUnion) ?? normalizedLiteralUnion;
   return collapseRedundantSafeIntegerConstType(normalizedUnion, options);
 }
 
