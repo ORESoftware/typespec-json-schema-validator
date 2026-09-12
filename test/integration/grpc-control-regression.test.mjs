@@ -10,6 +10,7 @@ const executable = resolve(packageRoot, 'bin/typespec-json-schema-validator.mjs'
 const fixture = resolve(packageRoot, 'test/fixtures/grpc-control');
 const typeSpecPath = resolve(fixture, 'main.tsp');
 const authoredSchemaPath = resolve(fixture, 'authored.schema.json');
+const mappingPath = resolve(fixture, 'mapping.json');
 
 function run(args) {
   return new Promise((resolvePromise, reject) => {
@@ -32,6 +33,7 @@ function checkArgs(temp, schemaPath, contractIrPath = join(temp, 'contract-ir.js
     'check',
     `--typespec=${typeSpecPath}`,
     `--schema=${schemaPath}`,
+    `--mapping=${mappingPath}`,
     `--instances=${resolve(fixture, 'instances')}`,
     `--output-dir=${join(temp, 'generated')}`,
     `--report=${join(temp, 'report.json')}`,
@@ -99,6 +101,21 @@ test('gRPC authored URN authority keeps $defs inside one schema resource', async
   assert.equal(authored.$defs.CheckTargetSummary.properties.target.$ref, '#/$defs/DatabaseTarget');
 });
 
+test('gRPC mapping binds qualified TypeSpec declarations to peer schema identities', async () => {
+  const mapping = JSON.parse(await readFile(mappingPath, 'utf8'));
+  assert.equal(mapping.schema, 'ores.typespec-json-schema-validator.mapping/v1');
+  assert.deepEqual(
+    mapping.declarations.map(({ typespec, generated, authored }) => [typespec, generated, authored]),
+    [
+      ['Ores.GrpcPg.Control.V1.DatabaseTarget', 'DatabaseTarget', 'DatabaseTarget'],
+      ['Ores.GrpcPg.Control.V1.DriftKind', 'DriftKind', 'DriftKind'],
+      ['Ores.GrpcPg.Control.V1.Drift', 'Drift', 'Drift'],
+      ['Ores.GrpcPg.Control.V1.WitnessSummary', 'WitnessSummary', 'WitnessSummary'],
+      ['Ores.GrpcPg.Control.V1.CheckTargetSummary', 'CheckTargetSummary', 'CheckTargetSummary'],
+    ],
+  );
+});
+
 test('real-world gRPC control authorities produce clean differential and Contract IR evidence', async () => {
   const temp = await mkdtemp(join(tmpdir(), 'tjsv-grpc-control-'));
   const reportPath = join(temp, 'report.json');
@@ -133,6 +150,7 @@ test('gRPC control admission recovers from a fail-closed tombstone only after pe
   const contractIrPath = join(temp, 'contract-ir.json');
   const typeSpecBefore = await readFile(typeSpecPath, 'utf8');
   const authoredBefore = await readFile(authoredSchemaPath, 'utf8');
+  const mappingBefore = await readFile(mappingPath, 'utf8');
 
   const initial = await run(checkArgs(temp, authoredSchemaPath, contractIrPath));
   await assertPassedCheck(initial, reportPath);
@@ -177,6 +195,7 @@ test('gRPC control admission recovers from a fail-closed tombstone only after pe
 
   assert.equal(await readFile(typeSpecPath, 'utf8'), typeSpecBefore);
   assert.equal(await readFile(authoredSchemaPath, 'utf8'), authoredBefore);
+  assert.equal(await readFile(mappingPath, 'utf8'), mappingBefore);
 });
 
 test('gRPC control enum drift stops promotion and emits only a non-admissible Contract IR tombstone', async () => {
