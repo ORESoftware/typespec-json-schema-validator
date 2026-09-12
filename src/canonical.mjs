@@ -50,6 +50,7 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   collapseSafeIntegerConstType: false,
   collapseSimpleClosedObjectKeyword: false,
   collapseSafeLiteralUnion: false,
+  collapseSafeSingletonEnum: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
@@ -58,6 +59,7 @@ const COMPARISON_NORMALIZATION = Object.freeze({
   collapseSafeIntegerConstType: true,
   collapseSimpleClosedObjectKeyword: true,
   collapseSafeLiteralUnion: true,
+  collapseSafeSingletonEnum: true,
 });
 
 export function isPlainObject(value) {
@@ -244,6 +246,30 @@ function canCollapseSafeLiteralUnion(value, options) {
   };
 }
 
+function canCollapseSafeSingletonEnum(value, options) {
+  if (!options.collapseSafeSingletonEnum || !isPlainObject(value)) {
+    return null;
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'enum' || keys[1] !== 'type') {
+    return null;
+  }
+  if (typeof value.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(value.type)) {
+    return null;
+  }
+  if (!Array.isArray(value.enum) || value.enum.length !== 1) {
+    return null;
+  }
+  const literal = value.enum[0];
+  if (!literalMatchesType(literal, value.type)) {
+    return null;
+  }
+  return {
+    const: canonicalizeJson(literal),
+    type: value.type,
+  };
+}
+
 function collapseRedundantSafeIntegerConstType(value, options) {
   if (!options.collapseSafeIntegerConstType || !isPlainObject(value)) {
     return value;
@@ -368,7 +394,8 @@ function normalizeSchemaNodeWith(value, options) {
   }
   const result = Object.fromEntries(entries);
   const normalizedLiteralUnion = canCollapseSafeLiteralUnion(result, options) ?? result;
-  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedLiteralUnion) ?? normalizedLiteralUnion;
+  const normalizedSingletonEnum = canCollapseSafeSingletonEnum(normalizedLiteralUnion, options) ?? normalizedLiteralUnion;
+  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedSingletonEnum) ?? normalizedSingletonEnum;
   const normalizedClosedObject = collapseEquivalentSimpleClosedObjectKeyword(normalizedUnion, options);
   return collapseRedundantSafeIntegerConstType(normalizedClosedObject, options);
 }
