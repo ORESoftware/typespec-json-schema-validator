@@ -88,9 +88,97 @@ function chooseType(schema) {
   return undefined;
 }
 
+function representativeCharacterFromClass(source) {
+  if (!source || source.startsWith('^')) {
+    return undefined;
+  }
+  if (source.startsWith('\\d')) {
+    return '0';
+  }
+  if (source.startsWith('\\w')) {
+    return 'a';
+  }
+  if (source.startsWith('\\s')) {
+    return ' ';
+  }
+  if (source.startsWith('\\') && source.length >= 2) {
+    return source[1];
+  }
+  return source[0];
+}
+
+function buildAnchoredCharacterClassPattern(pattern, minLength, maxLength) {
+  if (typeof pattern !== 'string' || !pattern.startsWith('^') || !pattern.endsWith('$')) {
+    return undefined;
+  }
+  const body = pattern.slice(1, -1);
+  const token = /\[((?:\\.|[^\]])+)\](\{(\d+)(?:,(\d*))?\}|[+*?])?/gyu;
+  let index = 0;
+  let value = '';
+  let stretchable;
+
+  while (index < body.length) {
+    token.lastIndex = index;
+    const match = token.exec(body);
+    if (!match || match.index !== index) {
+      return undefined;
+    }
+    const character = representativeCharacterFromClass(match[1]);
+    if (character === undefined) {
+      return undefined;
+    }
+
+    let minimum = 1;
+    let maximum = 1;
+    const quantifier = match[2];
+    if (quantifier?.startsWith('{')) {
+      minimum = Number(match[3]);
+      maximum = match[4] === undefined
+        ? minimum
+        : match[4] === ''
+          ? Number.POSITIVE_INFINITY
+          : Number(match[4]);
+    } else if (quantifier === '+') {
+      minimum = 1;
+      maximum = Number.POSITIVE_INFINITY;
+    } else if (quantifier === '*') {
+      minimum = 0;
+      maximum = Number.POSITIVE_INFINITY;
+    } else if (quantifier === '?') {
+      minimum = 0;
+      maximum = 1;
+    }
+
+    value += character.repeat(minimum);
+    if (maximum > minimum) {
+      stretchable = {
+        character,
+        remaining: Number.isFinite(maximum) ? maximum - minimum : Number.POSITIVE_INFINITY,
+      };
+    }
+    index = token.lastIndex;
+  }
+
+  if (value.length < minLength) {
+    const additional = minLength - value.length;
+    if (!stretchable || additional > stretchable.remaining) {
+      return undefined;
+    }
+    value += stretchable.character.repeat(additional);
+  }
+  if (value.length > maxLength) {
+    return undefined;
+  }
+  return value;
+}
+
 function buildString(schema) {
   const minLength = typeof schema.minLength === 'number' ? schema.minLength : 0;
   const maxLength = typeof schema.maxLength === 'number' ? schema.maxLength : Number.POSITIVE_INFINITY;
+  const patterned = buildAnchoredCharacterClassPattern(schema.pattern, minLength, maxLength);
+  if (patterned !== undefined) {
+    return patterned;
+  }
   const seed = 'tsjsv';
   let value = seed.length >= minLength ? seed : seed.padEnd(minLength, 'x');
   if (value.length > maxLength) {
@@ -232,11 +320,19 @@ export function synthesizeInstance({ schema, base, resolver, mode = 'full', maxD
           }
           return instance;
         }
-        case 'string':
+        case 'string': {
+          const value = buildString(schemaNode);
           if (typeof schemaNode.pattern === 'string') {
-            complete = false;
+            try {
+              if (!new RegExp(schemaNode.pattern, 'u').test(value)) {
+                complete = false;
+              }
+            } catch {
+              complete = false;
+            }
           }
-          return buildString(schemaNode);
+          return value;
+        }
         case 'integer':
           return buildNumber(schemaNode, true);
         case 'number':
