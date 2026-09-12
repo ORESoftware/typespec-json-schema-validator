@@ -89,11 +89,17 @@ async function assertStoppedForDrift(mutator, prefix) {
   assert.equal(ir.admission.receipt.runId, report.runId);
 }
 
-test('gRPC authored URN authority uses explicit local-fragment references', async () => {
+test('gRPC authored URN authority anchors cross-resource refs at the root schema ID', async () => {
   const authored = JSON.parse(await readFile(authoredSchemaPath, 'utf8'));
   assert.equal(authored.$id, 'urn:oresoftware:grpc-pg-control:v1');
-  assert.equal(authored.$defs.Drift.properties.kind.$ref, '#/$defs/DriftKind');
-  assert.equal(authored.$defs.CheckTargetSummary.properties.target.$ref, '#/$defs/DatabaseTarget');
+  assert.equal(
+    authored.$defs.Drift.properties.kind.$ref,
+    'urn:oresoftware:grpc-pg-control:v1#/$defs/DriftKind',
+  );
+  assert.equal(
+    authored.$defs.CheckTargetSummary.properties.target.$ref,
+    'urn:oresoftware:grpc-pg-control:v1#/$defs/DatabaseTarget',
+  );
 });
 
 test('real-world gRPC control authorities produce clean differential and Contract IR evidence', async () => {
