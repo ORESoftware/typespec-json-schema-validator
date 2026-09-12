@@ -5,7 +5,6 @@
   "$defs": {
     "DatabaseTarget": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "DatabaseTarget",
       "type": "object",
       "unevaluatedProperties": false,
       "required": ["databaseAlias", "schemas"],
@@ -16,7 +15,6 @@
     },
     "DriftKind": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "DriftKind",
       "type": "string",
       "enum": [
         "DRIFT_KIND_UNSPECIFIED",
@@ -29,12 +27,11 @@
     },
     "Drift": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "Drift",
       "type": "object",
       "unevaluatedProperties": false,
       "required": ["kind", "witness", "databaseAlias", "schema", "table", "column", "expected", "actual"],
       "properties": {
-        "kind": { "$ref": "urn:oresoftware:grpc-pg-control:v1#/$defs/DriftKind" },
+        "kind": { "$ref": "#/$defs/DriftKind" },
         "witness": { "type": "string" },
         "databaseAlias": { "type": "string" },
         "schema": { "type": "string" },
@@ -46,7 +43,6 @@
     },
     "WitnessSummary": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "WitnessSummary",
       "type": "object",
       "unevaluatedProperties": false,
       "required": ["source", "revision", "fingerprint", "relationCount", "columnCount", "lineage", "artifactDigest", "contractVersion"],
@@ -63,12 +59,11 @@
     },
     "CheckTargetSummary": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "CheckTargetSummary",
       "type": "object",
       "unevaluatedProperties": false,
       "required": ["target", "balanced", "witnessCount", "driftCount"],
       "properties": {
-        "target": { "$ref": "urn:oresoftware:grpc-pg-control:v1#/$defs/DatabaseTarget" },
+        "target": { "$ref": "#/$defs/DatabaseTarget" },
         "balanced": { "type": "boolean" },
         "witnessCount": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
         "driftCount": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
