@@ -71,9 +71,14 @@ test('requiredness, type, enum, nullability, constraint, and unknown-field drift
   const result = await compareFixture('drift');
   assert.ok(result.findingCount >= 6);
   const text = canonicalStringify(result.findings);
-  for (const fragment of ['required', '/type', '/enum', 'minLength', 'additionalProperties', 'unevaluatedProperties']) {
+  for (const fragment of ['required', '/type', '/enum', 'minLength', 'additionalProperties']) {
     assert.match(text, new RegExp(fragment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   }
+  assert.doesNotMatch(
+    text,
+    /unevaluatedProperties/,
+    'simple closed-object drift should use the normalized additionalProperties comparison spelling',
+  );
 });
 
 test('repeated parity comparisons emit byte-stable finding fingerprints and order', async () => {
