@@ -49,6 +49,18 @@ Differential validation and legal-manifest validation record these exceptions as
 refusals. Two unfinished lanes cannot produce behavioral agreement or admission.
 Diagnostics contain schema locations and reasons, without instance payloads.
 
+## Downstream admission
+
+Contract IR creation and verification use the same resource-bound comparison as
+the parity runner. They also rerun 64 deterministic probes per declaration per
+lane with the current evaluator. Exact input hashes do not excuse a false-green
+receipt produced by an older evaluator. The bounded replay does not claim to
+recreate an external historical corpus; that evidence remains in the receipt.
+
+Equivalent pointer encodings that pass parity must also pass downstream admission.
+The persisted lane schemas and IR envelope retain their existing format; the new
+checks strengthen admission without rewriting either authored source.
+
 ## Verification
 
 Focused regressions live in `test/unit/scoped-parity.test.mjs`,
@@ -60,6 +72,8 @@ receipts. Run these with the existing reference-identity and validator tests, th
 run `npm run test:all` and `npm run release:preflight` on the exact candidate head.
 `test/integration/reference-admission.test.mjs` also verifies actual CLI refusal
 receipts, immutable source files, and non-admissible Contract IR tombstones.
+`test/unit/reference-ir-admission.test.mjs` proves rejection of legacy false-green
+scope/cycle receipts and acceptance of equivalent resource-aware IR evidence.
 
 Draft 2020-12 specifies [reference resolution against the current URI base](https://json-schema.org/draft/2020-12/json-schema-core#section-8.2.3.1)
 and [guards against infinite recursion](https://json-schema.org/draft/2020-12/json-schema-core#section-9.4.1).

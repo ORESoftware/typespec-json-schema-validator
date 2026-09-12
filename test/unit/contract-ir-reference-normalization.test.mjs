@@ -107,6 +107,14 @@ function referenceEvidence(authoredUserRef = 'https://schemas.example/identifier
     ],
   };
 
+  for (const collection of [generatedCollection, authoredCollection]) {
+    for (const document of collection.documents) {
+      document.document.$defs = Object.fromEntries(collection.declarations
+        .filter((declaration) => declaration.source === document.path)
+        .map((declaration) => [declaration.name, declaration.schema]));
+    }
+  }
+
   const report = {
     schema: 'ores.typespec-json-schema-validator.report/v1',
     runId: hex('d'),
@@ -186,7 +194,7 @@ function namedArrayEvidence({ generatedSchema, authoredSchema }) {
         path: `${input}/schema.json`,
         relativePath: 'schema.json',
         sha256: hex(digestCharacter),
-        document: {},
+        document: { $defs: { Tags: schema } },
       },
     ],
     declarations: [
@@ -253,7 +261,7 @@ test('Contract IR accepts only locally proven aliases for mapped cross-document 
 
 test('Contract IR keeps unknown external refs fail-closed', () => {
   const values = referenceEvidence('https://unknown.example/identifier.json#/$defs/Identifier');
-  assert.throws(() => createContractIr(values), /assertion schemas no longer converge/);
+  assert.throws(() => createContractIr(values), /json-schema-unresolved-ref/);
 });
 
 test('Contract IR accepts emitter-proven TypeSpec named array models without changing lexical IR kind', () => {
