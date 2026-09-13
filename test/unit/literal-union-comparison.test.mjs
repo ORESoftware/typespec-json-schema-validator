@@ -23,7 +23,6 @@ test('comparison equates a pure string anyOf literal union with an authored enum
   assert.equal(normalized(generated), normalized(authored));
   assert.deepEqual(normalizeSchemaNodeForComparison(generated), {
     enum: ['pull', 'push'],
-    type: 'string',
   });
 
   // Runtime/executable normalization must preserve the compositional schema.
