@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/openapi-compatibility-receipt.v1.schema.json",
+  "title": "ORESoftware OpenAPI compatibility receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "admissible",
+    "baselineDigest",
+    "currentDigest",
+    "breakingChangeCount",
+    "reviewRequiredCount",
+    "truncated",
+    "findings",
+    "verificationId"
+  ],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.openapi-compatibility-receipt/v1" },
+    "status": { "enum": ["passed", "stopped_for_evaluation"] },
+    "admissible": { "type": "boolean" },
+    "baselineDigest": { "$ref": "#/$defs/sha256" },
+    "currentDigest": { "$ref": "#/$defs/sha256" },
+    "breakingChangeCount": { "type": "integer", "minimum": 0 },
+    "reviewRequiredCount": { "type": "integer", "minimum": 0 },
+    "truncated": { "type": "boolean" },
+    "findings": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "verificationId": { "$ref": "#/$defs/sha256" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "passed" } },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "admissible": { "const": true },
+          "breakingChangeCount": { "const": 0 },
+          "reviewRequiredCount": { "const": 0 },
+          "findings": { "maxItems": 0 },
+          "truncated": { "const": false }
+        }
+      },
+      "else": {
+        "properties": { "admissible": { "const": false } }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruleId", "severity", "subject", "message", "baseline", "current", "fingerprint"],
+      "properties": {
+        "ruleId": { "type": "string", "minLength": 1 },
+        "severity": { "enum": ["breaking", "review_required"] },
+        "subject": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "baseline": {},
+        "current": {},
+        "fingerprint": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

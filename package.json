@@ -30,6 +30,10 @@
       "import": "./src/behavior-contract.mjs",
       "types": "./src/behavior-contract.d.mts"
     },
+    "./openapi-compatibility": {
+      "import": "./src/openapi-compatibility.mjs",
+      "types": "./src/openapi-compatibility.d.mts"
+    },
     "./language-boundary-verification": {
       "import": "./src/language-boundary-verification.mjs",
       "types": "./src/language-boundary-verification.d.mts"
@@ -46,6 +50,8 @@
     "./schema/language-boundary-verification": "./schema/language-boundary-verification.schema.json",
     "./schema/legal-rollout-manifest": "./schema/legal-rollout-manifest.schema.json",
     "./schema/mapping": "./schema/mapping.schema.json",
+    "./schema/openapi-projection": "./schema/openapi-projection.schema.json",
+    "./schema/openapi-compatibility-receipt": "./schema/openapi-compatibility-receipt.schema.json",
     "./schema/projection-manifest": "./schema/projection-manifest.schema.json",
     "./schema/projection-verification-policy": "./schema/projection-verification-policy.schema.json",
     "./schema/projection-verification-receipt": "./schema/projection-verification-receipt.schema.json",

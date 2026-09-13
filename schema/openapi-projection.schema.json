@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/openapi-projection.v1.schema.json",
+  "title": "ORESoftware normalized OpenAPI 3.1 projection v1",
+  "description": "Normalized HTTP projection used for fail-closed compatibility checks. This is downstream transport evidence and does not replace independently authored TypeSpec or JSON Schema authorities.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "openapi", "operations"],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.openapi-projection/v1" },
+    "openapi": { "enum": ["3.1.0", "3.1.1"] },
+    "operations": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/operation" }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "parameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "in", "required", "schemaRef"],
+      "properties": {
+        "name": { "$ref": "#/$defs/text" },
+        "in": { "enum": ["cookie", "header", "path", "query"] },
+        "required": { "type": "boolean" },
+        "schemaRef": { "$ref": "#/$defs/text" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "in": { "const": "path" } },
+            "required": ["in"]
+          },
+          "then": { "properties": { "required": { "const": true } } }
+        }
+      ]
+    },
+    "requestBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "schemaRef"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "schemaRef": { "$ref": "#/$defs/text" }
+      }
+    },
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "schemaRef"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "pattern": "^(?:[1-5](?:[0-9]{2}|XX)|default)$"
+        },
+        "schemaRef": {
+          "oneOf": [
+            { "$ref": "#/$defs/text" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "embeddedBehavior": {
+      "allOf": [
+        {
+          "$ref": "https://schemas.oresoftware.com/typespec-json-schema-validator/behavior-contract.v1.schema.json#/$defs/behavior"
+        },
+        {
+          "not": { "required": ["operationId"] }
+        }
+      ]
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operationId", "method", "path", "parameters", "requestBody", "responses", "behavior"],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/text" },
+        "method": { "enum": ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE"] },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^/[^\\u0000-\\u001f\\u007f]*$"
+        },
+        "parameters": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/parameter" }
+        },
+        "requestBody": {
+          "oneOf": [
+            { "$ref": "#/$defs/requestBody" },
+            { "type": "null" }
+          ]
+        },
+        "responses": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/response" }
+        },
+        "behavior": {
+          "oneOf": [
+            { "$ref": "#/$defs/embeddedBehavior" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}
