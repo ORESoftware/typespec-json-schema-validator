@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/behavior-contract.v1.schema.json",
+  "title": "ORESoftware independently authored behavioral contract v1",
+  "description": "Behavioral authority bound to stable operation IDs. Structural TypeSpec and authored JSON Schema remain independent peer authorities; this document specifies executable or reviewable behavior without becoming a structural schema authority.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "authority", "operations"],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.behavior-contract/v1" },
+    "authority": { "const": "independently-authored-behavioral-authority" },
+    "operations": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/operation" }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?=.*\\S)[^\\u0000-\\u0008\\u000b\\u000c\\u000e-\\u001f\\u007f]+$"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "required"],
+      "properties": {
+        "name": { "$ref": "#/$defs/text" },
+        "type": { "$ref": "#/$defs/text" },
+        "required": { "type": "boolean" }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "nullable"],
+      "properties": {
+        "type": { "$ref": "#/$defs/text" },
+        "nullable": { "type": "boolean" }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "resource"],
+      "properties": {
+        "kind": {
+          "enum": ["read", "write", "emit", "network", "clock", "random", "storage", "authz", "external"]
+        },
+        "resource": { "$ref": "#/$defs/text" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "when"],
+      "properties": {
+        "code": { "$ref": "#/$defs/text" },
+        "when": { "$ref": "#/$defs/text" }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "language",
+        "executable",
+        "inputs",
+        "output",
+        "requires",
+        "ensures",
+        "invariants",
+        "expression",
+        "algorithm",
+        "effects",
+        "errors",
+        "deterministic",
+        "idempotent",
+        "pure"
+      ],
+      "properties": {
+        "operationId": { "$ref": "#/$defs/text" },
+        "kind": {
+          "enum": ["expression", "predicate", "validator", "transform", "policy", "state_machine", "algorithm", "procedure", "external"]
+        },
+        "language": { "enum": ["cel", "cue", "rego", "dafny", "pseudocode", "none"] },
+        "executable": { "type": "boolean" },
+        "inputs": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/input" }
+        },
+        "output": {
+          "oneOf": [
+            { "$ref": "#/$defs/output" },
+            { "type": "null" }
+          ]
+        },
+        "requires": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "ensures": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "invariants": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/text" }
+        },
+        "expression": {
+          "oneOf": [
+            { "$ref": "#/$defs/text" },
+            { "type": "null" }
+          ]
+        },
+        "algorithm": {
+          "oneOf": [
+            { "$ref": "#/$defs/text" },
+            { "type": "null" }
+          ]
+        },
+        "effects": {
+          "type": "array",
+          "maxItems": 1024,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/effect" }
+        },
+        "errors": {
+          "type": "array",
+          "maxItems": 1024,
+          "items": { "$ref": "#/$defs/error" }
+        },
+        "deterministic": { "type": "boolean" },
+        "idempotent": { "type": "boolean" },
+        "pure": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": { "enum": ["expression", "predicate", "validator", "transform", "policy"] }
+            },
+            "required": ["kind"]
+          },
+          "then": { "properties": { "expression": { "$ref": "#/$defs/text" } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": { "enum": ["state_machine", "algorithm", "procedure"] }
+            },
+            "required": ["kind"]
+          },
+          "then": { "properties": { "algorithm": { "$ref": "#/$defs/text" } } }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "external" } },
+            "required": ["kind"]
+          },
+          "then": { "properties": { "expression": { "type": "null" } } }
+        },
+        {
+          "if": {
+            "properties": { "language": { "enum": ["pseudocode", "none"] } },
+            "required": ["language"]
+          },
+          "then": { "properties": { "executable": { "const": false } } }
+        },
+        {
+          "if": {
+            "properties": { "language": { "const": "none" } },
+            "required": ["language"]
+          },
+          "then": {
+            "properties": {
+              "expression": { "type": "null" },
+              "algorithm": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "pure": { "const": true } },
+            "required": ["pure"]
+          },
+          "then": {
+            "properties": {
+              "effects": { "maxItems": 0 },
+              "deterministic": { "const": true },
+              "idempotent": { "const": true }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "kind": { "const": "state_machine" } },
+            "required": ["kind"]
+          },
+          "then": { "properties": { "pure": { "const": false } } }
+        }
+      ]
+    },
+    "operation": {
+      "allOf": [
+        { "$ref": "#/$defs/behavior" },
+        {
+          "type": "object",
+          "required": ["operationId"],
+          "properties": {
+            "operationId": { "$ref": "#/$defs/text" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
