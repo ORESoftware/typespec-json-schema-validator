@@ -9,6 +9,36 @@ const SINGLES = new Set([
   'not', 'if', 'then', 'else', 'contentSchema', 'items', 'unevaluatedItems',
 ]);
 const DYNAMIC = new Set(['$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor', '$vocabulary']);
+const SAFE_INLINE_STRING_LEAF_KEYS = new Set([
+  '$schema', '$id', 'type', 'minLength', 'maxLength', 'pattern', 'format',
+]);
+const SAFE_INLINE_STRING_ASSERTION_KEYS = new Set([
+  'type', 'minLength', 'maxLength', 'pattern', 'format',
+]);
+
+function safeInlineStringLeaf(target) {
+  if (!isPlainObject(target?.schema) || target.schema.type !== 'string') return null;
+  const keys = Object.keys(target.schema);
+  if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_STRING_LEAF_KEYS.has(key))) {
+    return null;
+  }
+  if (
+    Object.hasOwn(target.schema, '$schema')
+    && target.schema.$schema !== JSON_SCHEMA_DRAFT_2020_12
+  ) {
+    return null;
+  }
+  if (Object.hasOwn(target.schema, '$id') && typeof target.schema.$id !== 'string') {
+    return null;
+  }
+  // `$schema` and `$id` establish the helper's resource identity, but this
+  // narrow leaf contains no references or compositional keywords whose meaning
+  // can depend on that identity. Static comparison can therefore compare only
+  // its executable scalar assertions without changing runtime resolution.
+  return Object.fromEntries(
+    Object.entries(target.schema).filter(([key]) => SAFE_INLINE_STRING_ASSERTION_KEYS.has(key)),
+  );
+}
 
 /** Bind references before comparison is allowed to remove resource metadata. */
 export function createScopedSchemaComparison({ collection, schemaMap, expectedDeclarations, lane, onFinding }) {
@@ -38,6 +68,26 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
   function visit(node, inheritedBase, pointer, declaration) {
     if (!isPlainObject(node)) return node;
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
+
+    // Comparison may inline one deliberately narrow class of ignored helper:
+    // a reference-only node that resolves to a self-contained string leaf made
+    // solely of scalar string assertions plus its own Draft-2020-12 `$schema`
+    // and string `$id` metadata. This covers emitter helper scalars such as
+    // BoundedString/Hostname when the authored peer writes the exact same
+    // constraints inline. Runtime validation is unchanged. Mapped refs, refs
+    // with siblings, composed/nested-resource targets and recursive refs
+    // continue through the ordinary fail-closed reference path below.
+    const nodeKeys = Object.keys(node);
+    if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof node.$ref === 'string') {
+      const target = resolver.resolve(node.$ref, base);
+      if (target && targetIdentity(target) === undefined) {
+        const leaf = safeInlineStringLeaf(target);
+        if (leaf) {
+          return visit(leaf, target.parentBase, target.pointer, declaration);
+        }
+      }
+    }
+
     return Object.fromEntries(Object.entries(node).map(([key, value]) => {
       const childPointer = `${pointer}/${escapeJsonPointerSegment(key)}`;
       if (key === '$schema' && value !== JSON_SCHEMA_DRAFT_2020_12) {
