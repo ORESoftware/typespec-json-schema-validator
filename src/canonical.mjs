@@ -52,6 +52,7 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   collapseSafeLiteralUnion: false,
   collapseSafeSingletonEnum: false,
   collapseSafeLiteralConstType: false,
+  collapseSafeEnumType: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
@@ -62,6 +63,7 @@ const COMPARISON_NORMALIZATION = Object.freeze({
   collapseSafeLiteralUnion: true,
   collapseSafeSingletonEnum: true,
   collapseSafeLiteralConstType: true,
+  collapseSafeEnumType: true,
 });
 
 export function isPlainObject(value) {
@@ -282,6 +284,26 @@ function canCollapseSafeSingletonEnum(value, options) {
   };
 }
 
+function collapseRedundantSafeEnumType(value, options) {
+  if (!options.collapseSafeEnumType || !isPlainObject(value)) {
+    return value;
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'enum' || keys[1] !== 'type') {
+    return value;
+  }
+  if (typeof value.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(value.type)) {
+    return value;
+  }
+  if (!Array.isArray(value.enum) || value.enum.length === 0) {
+    return value;
+  }
+  if (!value.enum.every((literal) => literalMatchesType(literal, value.type))) {
+    return value;
+  }
+  return { enum: value.enum.map((literal) => canonicalizeJson(literal)) };
+}
+
 function collapseRedundantSafeLiteralConstType(value, options) {
   if (!options.collapseSafeLiteralConstType || !isPlainObject(value)) {
     return value;
@@ -424,7 +446,8 @@ function normalizeSchemaNodeWith(value, options) {
   const result = Object.fromEntries(entries);
   const normalizedLiteralUnion = canCollapseSafeLiteralUnion(result, options) ?? result;
   const normalizedSingletonEnum = canCollapseSafeSingletonEnum(normalizedLiteralUnion, options) ?? normalizedLiteralUnion;
-  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedSingletonEnum) ?? normalizedSingletonEnum;
+  const normalizedEnum = collapseRedundantSafeEnumType(normalizedSingletonEnum, options);
+  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedEnum) ?? normalizedEnum;
   const normalizedClosedObject = collapseEquivalentSimpleClosedObjectKeyword(normalizedUnion, options);
   const normalizedLiteralConst = collapseRedundantSafeLiteralConstType(normalizedClosedObject, options);
   return collapseRedundantSafeIntegerConstType(normalizedLiteralConst, options);
