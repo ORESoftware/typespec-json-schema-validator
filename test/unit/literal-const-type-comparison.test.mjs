@@ -24,6 +24,24 @@ test('comparison equates safe boolean and null consts with redundant types', () 
   assert.equal(normalized({ const: null }), normalized({ const: null, type: 'null' }));
 });
 
+test('comparison equates a safe typed enum with the same bare enum', () => {
+  const authored = { enum: ['draft', 'issued', 'accepted'] };
+  const generated = { enum: ['draft', 'issued', 'accepted'], type: 'string' };
+
+  assert.equal(normalized(authored), normalized(generated));
+  assert.deepEqual(normalizeSchemaNodeForComparison(generated), {
+    enum: ['accepted', 'draft', 'issued'],
+  });
+});
+
+test('comparison refuses typed enums with mixed or mismatched literal types', () => {
+  const malformed = { enum: ['draft', false], type: 'string' };
+  assert.deepEqual(normalizeSchemaNodeForComparison(malformed), {
+    enum: [false, 'draft'],
+    type: 'string',
+  });
+});
+
 test('singleton enums and one-branch literal unions converge all the way to bare const', () => {
   const union = { anyOf: [{ const: 'pull', type: 'string' }] };
   const singleton = { type: 'string', enum: ['pull'] };
