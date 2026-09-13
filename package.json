@@ -26,6 +26,10 @@
       "import": "./src/protobuf-compatibility.mjs",
       "types": "./src/protobuf-compatibility.d.mts"
     },
+    "./protobuf-behavior-bindings": {
+      "import": "./src/protobuf-behavior-bindings.mjs",
+      "types": "./src/protobuf-behavior-bindings.d.mts"
+    },
     "./behavior-contract": {
       "import": "./src/behavior-contract.mjs",
       "types": "./src/behavior-contract.d.mts"
@@ -57,6 +61,8 @@
     "./schema/projection-verification-receipt": "./schema/projection-verification-receipt.schema.json",
     "./schema/protobuf-projection": "./schema/protobuf-projection.schema.json",
     "./schema/protobuf-compatibility-receipt": "./schema/protobuf-compatibility-receipt.schema.json",
+    "./schema/protobuf-behavior-bindings": "./schema/protobuf-behavior-bindings.schema.json",
+    "./schema/protobuf-behavior-bindings-receipt": "./schema/protobuf-behavior-bindings-receipt.schema.json",
     "./schema/report": "./schema/report.schema.json",
     "./schema/runtime-conformance-report": "./schema/runtime-conformance-report.schema.json",
     "./schema/runtime-evidence": "./schema/runtime-evidence.schema.json",
