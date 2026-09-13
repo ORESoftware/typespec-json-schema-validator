@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/protobuf-behavior-bindings.v1.schema.json",
+  "title": "ORESoftware Protobuf behavior bindings v1",
+  "description": "Backward-compatible semantic bridge from normalized Protobuf RPC methods to independently authored behavioral operation IDs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "package", "bindings"],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.protobuf-behavior-bindings/v1" },
+    "package": { "$ref": "#/$defs/text" },
+    "bindings": {
+      "type": "array",
+      "maxItems": 100000,
+      "items": { "$ref": "#/$defs/binding" }
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["service", "method", "operationId"],
+      "properties": {
+        "service": { "$ref": "#/$defs/text" },
+        "method": { "$ref": "#/$defs/text" },
+        "operationId": { "$ref": "#/$defs/text" }
+      }
+    }
+  }
+}
