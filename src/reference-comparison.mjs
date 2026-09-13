@@ -10,6 +10,9 @@ const SINGLES = new Set([
 ]);
 const DYNAMIC = new Set(['$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor', '$vocabulary']);
 const SAFE_INLINE_STRING_LEAF_KEYS = new Set([
+  '$schema', '$id', 'type', 'minLength', 'maxLength', 'pattern', 'format',
+]);
+const SAFE_INLINE_STRING_ASSERTION_KEYS = new Set([
   'type', 'minLength', 'maxLength', 'pattern', 'format',
 ]);
 
@@ -19,7 +22,22 @@ function safeInlineStringLeaf(target) {
   if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_STRING_LEAF_KEYS.has(key))) {
     return null;
   }
-  return target.schema;
+  if (
+    Object.hasOwn(target.schema, '$schema')
+    && target.schema.$schema !== JSON_SCHEMA_DRAFT_2020_12
+  ) {
+    return null;
+  }
+  if (Object.hasOwn(target.schema, '$id') && typeof target.schema.$id !== 'string') {
+    return null;
+  }
+  // `$schema` and `$id` establish the helper's resource identity, but this
+  // narrow leaf contains no references or compositional keywords whose meaning
+  // can depend on that identity. Static comparison can therefore compare only
+  // its executable scalar assertions without changing runtime resolution.
+  return Object.fromEntries(
+    Object.entries(target.schema).filter(([key]) => SAFE_INLINE_STRING_ASSERTION_KEYS.has(key)),
+  );
 }
 
 /** Bind references before comparison is allowed to remove resource metadata. */
@@ -52,11 +70,12 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
 
     // Comparison may inline one deliberately narrow class of ignored helper:
-    // a reference-only node that resolves to a non-resource string leaf made
-    // solely of scalar string constraints. This covers emitter helper scalars
-    // such as BoundedString/Hostname when the authored peer writes the exact
-    // same constraints inline. Runtime validation is unchanged. Mapped refs,
-    // refs with siblings, composed/resource-bearing targets and recursive refs
+    // a reference-only node that resolves to a self-contained string leaf made
+    // solely of scalar string assertions plus its own Draft-2020-12 `$schema`
+    // and string `$id` metadata. This covers emitter helper scalars such as
+    // BoundedString/Hostname when the authored peer writes the exact same
+    // constraints inline. Runtime validation is unchanged. Mapped refs, refs
+    // with siblings, composed/nested-resource targets and recursive refs
     // continue through the ordinary fail-closed reference path below.
     const nodeKeys = Object.keys(node);
     if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof node.$ref === 'string') {
