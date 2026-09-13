@@ -9,6 +9,25 @@ const SINGLES = new Set([
   'not', 'if', 'then', 'else', 'contentSchema', 'items', 'unevaluatedItems',
 ]);
 const DYNAMIC = new Set(['$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor', '$vocabulary']);
+const COMPARISON_LEAF_SCALAR_TYPES = new Set(['boolean', 'integer', 'null', 'number', 'string']);
+const COMPARISON_LEAF_SCALAR_KEYS = new Set([
+  '$anchor', '$comment', '$id', '$schema',
+  'const', 'contentEncoding', 'contentMediaType', 'default', 'deprecated', 'description',
+  'enum', 'examples', 'exclusiveMaximum', 'exclusiveMinimum', 'format',
+  'maxLength', 'maximum', 'minLength', 'minimum', 'multipleOf', 'pattern',
+  'readOnly', 'title', 'type', 'writeOnly',
+]);
+
+function isComparisonLeafScalar(schema) {
+  if (!isPlainObject(schema)) return false;
+  const types = typeof schema.type === 'string'
+    ? [schema.type]
+    : Array.isArray(schema.type) ? schema.type : [];
+  if (types.length === 0 || !types.every((type) => COMPARISON_LEAF_SCALAR_TYPES.has(type))) {
+    return false;
+  }
+  return Object.keys(schema).every((key) => COMPARISON_LEAF_SCALAR_KEYS.has(key));
+}
 
 /** Bind references before comparison is allowed to remove resource metadata. */
 export function createScopedSchemaComparison({ collection, schemaMap, expectedDeclarations, lane, onFinding }) {
@@ -38,7 +57,24 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
   function visit(node, inheritedBase, pointer, declaration) {
     if (!isPlainObject(node)) return node;
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
-    return Object.fromEntries(Object.entries(node).map(([key, value]) => {
+    const entries = Object.entries(node);
+
+    // The official TypeSpec emitter often preserves a reusable primitive scalar
+    // as a named $defs entry while the independent authored peer intentionally
+    // inlines the same primitive constraints. If that helper declaration is
+    // explicitly outside the compared declaration set, a pure $ref wrapper may
+    // be expanded in this comparison-only copy when the resolved target is a
+    // bounded primitive leaf. Executable schemas and authored sources remain
+    // untouched. Objects, arrays, applicators, nested refs, and untyped helpers
+    // stay fail-closed through json-schema-uncompared-ref-target below.
+    if (entries.length === 1 && entries[0][0] === '$ref' && typeof entries[0][1] === 'string') {
+      const target = resolver.resolve(entries[0][1], base);
+      if (target && targetIdentity(target) === undefined && isComparisonLeafScalar(target.schema)) {
+        return visit(target.schema, target.parentBase, target.pointer, declaration);
+      }
+    }
+
+    return Object.fromEntries(entries.map(([key, value]) => {
       const childPointer = `${pointer}/${escapeJsonPointerSegment(key)}`;
       if (key === '$schema' && value !== JSON_SCHEMA_DRAFT_2020_12) {
         report('json-schema-unsupported-dialect', declaration, childPointer, 'static comparison requires Draft 2020-12 for every declared resource dialect');
