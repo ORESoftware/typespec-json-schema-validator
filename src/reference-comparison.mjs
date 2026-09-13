@@ -9,6 +9,18 @@ const SINGLES = new Set([
   'not', 'if', 'then', 'else', 'contentSchema', 'items', 'unevaluatedItems',
 ]);
 const DYNAMIC = new Set(['$dynamicRef', '$dynamicAnchor', '$recursiveRef', '$recursiveAnchor', '$vocabulary']);
+const SAFE_INLINE_STRING_LEAF_KEYS = new Set([
+  'type', 'minLength', 'maxLength', 'pattern', 'format',
+]);
+
+function safeInlineStringLeaf(target) {
+  if (!isPlainObject(target?.schema) || target.schema.type !== 'string') return null;
+  const keys = Object.keys(target.schema);
+  if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_STRING_LEAF_KEYS.has(key))) {
+    return null;
+  }
+  return target.schema;
+}
 
 /** Bind references before comparison is allowed to remove resource metadata. */
 export function createScopedSchemaComparison({ collection, schemaMap, expectedDeclarations, lane, onFinding }) {
@@ -38,6 +50,25 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
   function visit(node, inheritedBase, pointer, declaration) {
     if (!isPlainObject(node)) return node;
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
+
+    // Comparison may inline one deliberately narrow class of ignored helper:
+    // a reference-only node that resolves to a non-resource string leaf made
+    // solely of scalar string constraints. This covers emitter helper scalars
+    // such as BoundedString/Hostname when the authored peer writes the exact
+    // same constraints inline. Runtime validation is unchanged. Mapped refs,
+    // refs with siblings, composed/resource-bearing targets and recursive refs
+    // continue through the ordinary fail-closed reference path below.
+    const nodeKeys = Object.keys(node);
+    if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof node.$ref === 'string') {
+      const target = resolver.resolve(node.$ref, base);
+      if (target && targetIdentity(target) === undefined) {
+        const leaf = safeInlineStringLeaf(target);
+        if (leaf) {
+          return visit(leaf, target.parentBase, target.pointer, declaration);
+        }
+      }
+    }
+
     return Object.fromEntries(Object.entries(node).map(([key, value]) => {
       const childPointer = `${pointer}/${escapeJsonPointerSegment(key)}`;
       if (key === '$schema' && value !== JSON_SCHEMA_DRAFT_2020_12) {
