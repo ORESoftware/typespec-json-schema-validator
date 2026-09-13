@@ -8,7 +8,7 @@ function collection(document, path) {
   return { documents: [{ document, path }], declarations: extractSchemaDeclarations(document, path), findings: validateJsonSchemaDocument(document) };
 }
 
-function compare(generated, authored) {
+function compare(generated, authored, mapping = { declarations: [], ignore: { typespec: [], generated: [], authored: [] } }) {
   const generatedCollection = collection(generated, 'generated.json');
   return compareParity({
     generatedCollection,
@@ -17,7 +17,7 @@ function compare(generated, authored) {
       declarations: generatedCollection.declarations.map(({ name, kind }) => ({ name, qualifiedName: `Demo.${name}`, kind: kind === 'scalar-like' ? 'scalar' : kind })),
       errors: [], ambiguities: [],
     },
-    mapping: { declarations: [], ignore: { typespec: [], generated: [], authored: [] } },
+    mapping,
   });
 }
 
@@ -89,6 +89,68 @@ test('references outside the compared declaration set stop static admission', ()
   const document = schema();
   document.$defs.Payload.properties.value = { $ref: '#' };
   const result = compare(document, structuredClone(document));
+  assert.ok(result.findings.some(({ ruleId }) => ruleId === 'json-schema-uncompared-ref-target'), canonicalStringify(result.findings));
+});
+
+test('ignored string leaf helper ref compares with equivalent authored inline constraints', () => {
+  const generated = schema();
+  generated.$defs.Helper = { type: 'string', minLength: 1, maxLength: 50, format: 'hostname' };
+  generated.$defs.Payload.properties.value = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.value = { type: 'string', minLength: 1, maxLength: 50, format: 'hostname' };
+
+  const mapping = {
+    declarations: [],
+    ignore: {
+      typespec: ['Demo.Helper'],
+      generated: ['Helper'],
+      authored: ['Helper'],
+    },
+  };
+  const snapshots = structuredClone([generated, authored]);
+  const result = compare(generated, authored, mapping);
+  assert.equal(result.findingCount, 0, canonicalStringify(result.findings));
+  assert.deepEqual([generated, authored], snapshots);
+});
+
+test('ignored helper refs with composition remain fail-closed', () => {
+  const generated = schema();
+  generated.$defs.Helper = { type: 'string', allOf: [{ maxLength: 50 }] };
+  generated.$defs.Payload.properties.value = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.value = { type: 'string', maxLength: 50 };
+
+  const mapping = {
+    declarations: [],
+    ignore: {
+      typespec: ['Demo.Helper'],
+      generated: ['Helper'],
+      authored: ['Helper'],
+    },
+  };
+  const result = compare(generated, authored, mapping);
+  assert.ok(result.findings.some(({ ruleId }) => ruleId === 'json-schema-uncompared-ref-target'), canonicalStringify(result.findings));
+});
+
+test('ignored helper refs with sibling assertions remain fail-closed', () => {
+  const generated = schema();
+  generated.$defs.Helper = { type: 'string', minLength: 1 };
+  generated.$defs.Payload.properties.value = { $ref: '#/$defs/Helper', maxLength: 50 };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.value = { type: 'string', minLength: 1, maxLength: 50 };
+
+  const mapping = {
+    declarations: [],
+    ignore: {
+      typespec: ['Demo.Helper'],
+      generated: ['Helper'],
+      authored: ['Helper'],
+    },
+  };
+  const result = compare(generated, authored, mapping);
   assert.ok(result.findings.some(({ ruleId }) => ruleId === 'json-schema-uncompared-ref-target'), canonicalStringify(result.findings));
 });
 
