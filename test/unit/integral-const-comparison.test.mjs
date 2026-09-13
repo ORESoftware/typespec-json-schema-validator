@@ -68,9 +68,9 @@ test('comparison keeps unsafe integral constants distinct', () => {
   );
 });
 
-test('comparison leaves non-numeric types alone', () => {
+test('comparison independently canonicalizes safe non-numeric const typing', () => {
   assert.deepEqual(
     normalizeSchemaNodeForComparison({ type: 'string', const: 'a' }),
-    { const: 'a', type: 'string' },
+    { const: 'a' },
   );
 });
