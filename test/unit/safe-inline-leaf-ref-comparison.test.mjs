@@ -28,9 +28,9 @@ function compare(generated, authored) {
     mapping: {
       declarations: [],
       ignore: {
-        typespec: ['Demo.Helper'],
+        typespec: [],
         generated: ['Helper'],
-        authored: ['Helper'],
+        authored: [],
       },
     },
   });
