@@ -197,6 +197,13 @@ function literalMatchesType(value, type) {
   return false;
 }
 
+function safeLiteralType(value) {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'boolean') return 'boolean';
+  return null;
+}
+
 function canCollapseSafeLiteralUnion(value, options) {
   if (!options.collapseSafeLiteralUnion || !isPlainObject(value)) {
     return null;
@@ -217,19 +224,22 @@ function canCollapseSafeLiteralUnion(value, options) {
   for (const branch of branches) {
     if (!isPlainObject(branch)) return null;
     const branchKeys = Object.keys(branch).sort();
-    if (branchKeys.length !== 2 || branchKeys[0] !== 'const' || branchKeys[1] !== 'type') {
+    const bareConst = branchKeys.length === 1 && branchKeys[0] === 'const';
+    const typedConst = branchKeys.length === 2 && branchKeys[0] === 'const' && branchKeys[1] === 'type';
+    if (!bareConst && !typedConst) {
       return null;
     }
-    if (typeof branch.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(branch.type)) {
+    const branchType = bareConst ? safeLiteralType(branch.const) : branch.type;
+    if (typeof branchType !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(branchType)) {
       return null;
     }
-    if (type !== undefined && branch.type !== type) {
+    if (typedConst && !literalMatchesType(branch.const, branchType)) {
       return null;
     }
-    if (!literalMatchesType(branch.const, branch.type)) {
+    if (type !== undefined && branchType !== type) {
       return null;
     }
-    type = branch.type;
+    type = branchType;
     const identity = canonicalStringify(branch.const);
     if (unionKey === 'oneOf' && seen.has(identity)) {
       // A repeated oneOf branch makes that literal match more than one branch,
