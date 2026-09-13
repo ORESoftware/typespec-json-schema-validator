@@ -8,7 +8,7 @@ function collection(document, path) {
   return { documents: [{ document, path }], declarations: extractSchemaDeclarations(document, path), findings: validateJsonSchemaDocument(document) };
 }
 
-function compare(generated, authored) {
+function compare(generated, authored, mapping = { declarations: [], ignore: { typespec: [], generated: [], authored: [] } }) {
   const generatedCollection = collection(generated, 'generated.json');
   return compareParity({
     generatedCollection,
@@ -17,7 +17,7 @@ function compare(generated, authored) {
       declarations: generatedCollection.declarations.map(({ name, kind }) => ({ name, qualifiedName: `Demo.${name}`, kind: kind === 'scalar-like' ? 'scalar' : kind })),
       errors: [], ambiguities: [],
     },
-    mapping: { declarations: [], ignore: { typespec: [], generated: [], authored: [] } },
+    mapping,
   });
 }
 
@@ -34,6 +34,17 @@ function schema(id) {
         $defs: { Value: { type: 'integer' } },
       },
       Value: { type: 'string' },
+    },
+  };
+}
+
+function ignoredHelperMapping(name) {
+  return {
+    declarations: [],
+    ignore: {
+      typespec: [`Demo.${name}`],
+      generated: [name],
+      authored: [],
     },
   };
 }
@@ -89,6 +100,114 @@ test('references outside the compared declaration set stop static admission', ()
   const document = schema();
   document.$defs.Payload.properties.value = { $ref: '#' };
   const result = compare(document, structuredClone(document));
+  assert.ok(result.findings.some(({ ruleId }) => ruleId === 'json-schema-uncompared-ref-target'), canonicalStringify(result.findings));
+});
+
+test('ignored generated primitive helpers compare by resolved leaf constraints', () => {
+  const generated = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'https://example.test/generated.json',
+    $defs: {
+      Payload: {
+        type: 'object',
+        properties: {
+          hosts: {
+            type: 'array',
+            items: { $ref: '#/$defs/Hostname' },
+          },
+        },
+        required: ['hosts'],
+      },
+      Hostname: {
+        type: 'string',
+        format: 'hostname',
+        maxLength: 253,
+      },
+    },
+  };
+  const authored = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'https://example.test/authored.json',
+    $defs: {
+      Payload: {
+        type: 'object',
+        properties: {
+          hosts: {
+            type: 'array',
+            items: {
+              type: 'string',
+              format: 'hostname',
+              maxLength: 253,
+            },
+          },
+        },
+        required: ['hosts'],
+      },
+    },
+  };
+
+  const snapshots = structuredClone([generated, authored]);
+  const result = compare(generated, authored, ignoredHelperMapping('Hostname'));
+  assert.equal(result.findingCount, 0, canonicalStringify(result.findings));
+  assert.deepEqual([generated, authored], snapshots);
+});
+
+test('ignored generated primitive helpers still expose changed inline constraints', () => {
+  const generated = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'https://example.test/generated.json',
+    $defs: {
+      Payload: {
+        type: 'object',
+        properties: { names: { type: 'array', items: { $ref: '#/$defs/BoundedString' } } },
+      },
+      BoundedString: { type: 'string', minLength: 1, maxLength: 500 },
+    },
+  };
+  const authored = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'https://example.test/authored.json',
+    $defs: {
+      Payload: {
+        type: 'object',
+        properties: { names: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 501 } } },
+      },
+    },
+  };
+
+  const result = compare(generated, authored, ignoredHelperMapping('BoundedString'));
+  assert.ok(result.findings.some(({ ruleId, pointer }) =>
+    ruleId === 'generated-authored-semantic-mismatch' && pointer.endsWith('/properties/names/items/maxLength')),
+  canonicalStringify(result.findings));
+});
+
+test('ignored object helpers remain outside static comparison admission', () => {
+  const generated = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'https://example.test/generated.json',
+    $defs: {
+      Payload: {
+        type: 'object',
+        properties: { nested: { $ref: '#/$defs/Helper' } },
+      },
+      Helper: {
+        type: 'object',
+        properties: { value: { type: 'string' } },
+      },
+    },
+  };
+  const authored = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'https://example.test/authored.json',
+    $defs: {
+      Payload: {
+        type: 'object',
+        properties: { nested: { type: 'object', properties: { value: { type: 'string' } } } },
+      },
+    },
+  };
+
+  const result = compare(generated, authored, ignoredHelperMapping('Helper'));
   assert.ok(result.findings.some(({ ruleId }) => ruleId === 'json-schema-uncompared-ref-target'), canonicalStringify(result.findings));
 });
 
