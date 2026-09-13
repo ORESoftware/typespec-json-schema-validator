@@ -51,6 +51,7 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   collapseSimpleClosedObjectKeyword: false,
   collapseSafeLiteralUnion: false,
   collapseSafeSingletonEnum: false,
+  collapseSafeLiteralConstType: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
@@ -60,6 +61,7 @@ const COMPARISON_NORMALIZATION = Object.freeze({
   collapseSimpleClosedObjectKeyword: true,
   collapseSafeLiteralUnion: true,
   collapseSafeSingletonEnum: true,
+  collapseSafeLiteralConstType: true,
 });
 
 export function isPlainObject(value) {
@@ -270,6 +272,23 @@ function canCollapseSafeSingletonEnum(value, options) {
   };
 }
 
+function collapseRedundantSafeLiteralConstType(value, options) {
+  if (!options.collapseSafeLiteralConstType || !isPlainObject(value)) {
+    return value;
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'const' || keys[1] !== 'type') {
+    return value;
+  }
+  if (typeof value.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(value.type)) {
+    return value;
+  }
+  if (!literalMatchesType(value.const, value.type)) {
+    return value;
+  }
+  return { const: canonicalizeJson(value.const) };
+}
+
 function collapseRedundantSafeIntegerConstType(value, options) {
   if (!options.collapseSafeIntegerConstType || !isPlainObject(value)) {
     return value;
@@ -397,7 +416,8 @@ function normalizeSchemaNodeWith(value, options) {
   const normalizedSingletonEnum = canCollapseSafeSingletonEnum(normalizedLiteralUnion, options) ?? normalizedLiteralUnion;
   const normalizedUnion = canCollapseSimpleTypeUnion(normalizedSingletonEnum) ?? normalizedSingletonEnum;
   const normalizedClosedObject = collapseEquivalentSimpleClosedObjectKeyword(normalizedUnion, options);
-  return collapseRedundantSafeIntegerConstType(normalizedClosedObject, options);
+  const normalizedLiteralConst = collapseRedundantSafeLiteralConstType(normalizedClosedObject, options);
+  return collapseRedundantSafeIntegerConstType(normalizedLiteralConst, options);
 }
 
 /**
