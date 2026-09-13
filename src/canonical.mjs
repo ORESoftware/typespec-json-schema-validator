@@ -51,6 +51,8 @@ const EXECUTABLE_NORMALIZATION = Object.freeze({
   collapseSimpleClosedObjectKeyword: false,
   collapseSafeLiteralUnion: false,
   collapseSafeSingletonEnum: false,
+  collapseSafeLiteralConstType: false,
+  collapseSafeEnumType: false,
 });
 
 const COMPARISON_NORMALIZATION = Object.freeze({
@@ -60,6 +62,8 @@ const COMPARISON_NORMALIZATION = Object.freeze({
   collapseSimpleClosedObjectKeyword: true,
   collapseSafeLiteralUnion: true,
   collapseSafeSingletonEnum: true,
+  collapseSafeLiteralConstType: true,
+  collapseSafeEnumType: true,
 });
 
 export function isPlainObject(value) {
@@ -195,6 +199,13 @@ function literalMatchesType(value, type) {
   return false;
 }
 
+function safeLiteralType(value) {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return 'string';
+  if (typeof value === 'boolean') return 'boolean';
+  return null;
+}
+
 function canCollapseSafeLiteralUnion(value, options) {
   if (!options.collapseSafeLiteralUnion || !isPlainObject(value)) {
     return null;
@@ -215,19 +226,22 @@ function canCollapseSafeLiteralUnion(value, options) {
   for (const branch of branches) {
     if (!isPlainObject(branch)) return null;
     const branchKeys = Object.keys(branch).sort();
-    if (branchKeys.length !== 2 || branchKeys[0] !== 'const' || branchKeys[1] !== 'type') {
+    const bareConst = branchKeys.length === 1 && branchKeys[0] === 'const';
+    const typedConst = branchKeys.length === 2 && branchKeys[0] === 'const' && branchKeys[1] === 'type';
+    if (!bareConst && !typedConst) {
       return null;
     }
-    if (typeof branch.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(branch.type)) {
+    const branchType = bareConst ? safeLiteralType(branch.const) : branch.type;
+    if (typeof branchType !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(branchType)) {
       return null;
     }
-    if (type !== undefined && branch.type !== type) {
+    if (typedConst && !literalMatchesType(branch.const, branchType)) {
       return null;
     }
-    if (!literalMatchesType(branch.const, branch.type)) {
+    if (type !== undefined && branchType !== type) {
       return null;
     }
-    type = branch.type;
+    type = branchType;
     const identity = canonicalStringify(branch.const);
     if (unionKey === 'oneOf' && seen.has(identity)) {
       // A repeated oneOf branch makes that literal match more than one branch,
@@ -268,6 +282,43 @@ function canCollapseSafeSingletonEnum(value, options) {
     const: canonicalizeJson(literal),
     type: value.type,
   };
+}
+
+function collapseRedundantSafeEnumType(value, options) {
+  if (!options.collapseSafeEnumType || !isPlainObject(value)) {
+    return value;
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'enum' || keys[1] !== 'type') {
+    return value;
+  }
+  if (typeof value.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(value.type)) {
+    return value;
+  }
+  if (!Array.isArray(value.enum) || value.enum.length === 0) {
+    return value;
+  }
+  if (!value.enum.every((literal) => literalMatchesType(literal, value.type))) {
+    return value;
+  }
+  return { enum: value.enum.map((literal) => canonicalizeJson(literal)) };
+}
+
+function collapseRedundantSafeLiteralConstType(value, options) {
+  if (!options.collapseSafeLiteralConstType || !isPlainObject(value)) {
+    return value;
+  }
+  const keys = Object.keys(value).sort();
+  if (keys.length !== 2 || keys[0] !== 'const' || keys[1] !== 'type') {
+    return value;
+  }
+  if (typeof value.type !== 'string' || !SAFE_LITERAL_UNION_TYPES.has(value.type)) {
+    return value;
+  }
+  if (!literalMatchesType(value.const, value.type)) {
+    return value;
+  }
+  return { const: canonicalizeJson(value.const) };
 }
 
 function collapseRedundantSafeIntegerConstType(value, options) {
@@ -395,9 +446,11 @@ function normalizeSchemaNodeWith(value, options) {
   const result = Object.fromEntries(entries);
   const normalizedLiteralUnion = canCollapseSafeLiteralUnion(result, options) ?? result;
   const normalizedSingletonEnum = canCollapseSafeSingletonEnum(normalizedLiteralUnion, options) ?? normalizedLiteralUnion;
-  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedSingletonEnum) ?? normalizedSingletonEnum;
+  const normalizedEnum = collapseRedundantSafeEnumType(normalizedSingletonEnum, options);
+  const normalizedUnion = canCollapseSimpleTypeUnion(normalizedEnum) ?? normalizedEnum;
   const normalizedClosedObject = collapseEquivalentSimpleClosedObjectKeyword(normalizedUnion, options);
-  return collapseRedundantSafeIntegerConstType(normalizedClosedObject, options);
+  const normalizedLiteralConst = collapseRedundantSafeLiteralConstType(normalizedClosedObject, options);
+  return collapseRedundantSafeIntegerConstType(normalizedLiteralConst, options);
 }
 
 /**
