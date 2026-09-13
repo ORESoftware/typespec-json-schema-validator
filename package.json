@@ -5,8 +5,10 @@
   "license": "MIT",
   "type": "module",
   "main": "./src/index.mjs",
+  "tspMain": "./typespec/main.tsp",
   "exports": {
     ".": {
+      "typespec": "./typespec/main.tsp",
       "import": "./src/index.mjs",
       "types": "./src/index.d.ts"
     },
@@ -33,6 +35,10 @@
     "./behavior-contract": {
       "import": "./src/behavior-contract.mjs",
       "types": "./src/behavior-contract.d.mts"
+    },
+    "./typespec-behavior": {
+      "import": "./src/typespec-behavior.mjs",
+      "types": "./src/typespec-behavior.d.mts"
     },
     "./openapi-compatibility": {
       "import": "./src/openapi-compatibility.mjs",
@@ -83,7 +89,8 @@
     "bin",
     "docs",
     "schema",
-    "src"
+    "src",
+    "typespec"
   ],
   "scripts": {
     "audit:fleet": "node ./scripts/github-fleet-audit.mjs",
