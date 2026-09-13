@@ -12,6 +12,9 @@ env:
   ORES_INTERFACES_ZED_TARGET: public-contracts
   ORES_CLI_ZED_PACKAGE: oresoftware/ores-cli@^0.1
   TJSV_ZED_PACKAGE: oresoftware/typespec-json-schema-validator@^0.1
+  ORES_CLI_SOURCE_COMMIT: 8e475955e4aaf7e9383b00980135f93d47b8e291
+  TJSV_SOURCE_COMMIT: b5bd51946b53c00b1daeb2723c0b5d54eaeafab7
+  ORES_CLI_RUST_TOOLCHAIN: 1.88.0
   ZED_INSTALLER_COMMIT: a80dad717dbff82ef6fff237e13ccf3820f074c4
   ZED_VERSION: v0.3.0
   RUNTIME_PROJECTION_TARGETS: rust,typescript,javascript,python,go,java,kotlin,csharp,dart,swift,ruby,php,scala,elixir,gleam,erlang,cpp,c
@@ -53,6 +56,9 @@ jobs:
           assert os.environ["ORES_INTERFACES_ZED_TARGET"] == "public-contracts"
           assert os.environ["ORES_CLI_ZED_PACKAGE"] == "oresoftware/ores-cli@^0.1"
           assert os.environ["TJSV_ZED_PACKAGE"] == "oresoftware/typespec-json-schema-validator@^0.1"
+          for name in ("ORES_CLI_SOURCE_COMMIT", "TJSV_SOURCE_COMMIT"):
+              value = os.environ[name]
+              assert len(value) == 40 and all(c in "0123456789abcdef" for c in value), (name, value)
           PY
 
       - name: Materialize independent peer-authority canary
@@ -134,19 +140,71 @@ jobs:
           ZED_VERSION="$ZED_VERSION" ZED_PROFILE="$RUNNER_TEMP/zed-profile" bash "$installer"
           echo "$HOME/.zed/bin" >> "$GITHUB_PATH"
 
-      - name: Validate through ores-cli and packaged TJSV
+      - name: Validate through ores-cli and TJSV
         shell: bash
         run: |
           set -euo pipefail
           export PATH="$HOME/.zed/bin:$PATH"
           work="$RUNNER_TEMP/ores-contract-tools"
-          mkdir -p "$work"
+          evidence="$GITHUB_WORKSPACE/.typespec-json-schema-validator/tool-resolution.json"
+          mkdir -p "$work" "$(dirname "$evidence")"
           cd "$work"
-          zed install "$ORES_CLI_ZED_PACKAGE" "$TJSV_ZED_PACKAGE" --allow-build --adapter none
-          zed run oresc -- doctor
-          zed run oresc -- audit contract \
+
+          set +e
+          zed_output="$(zed install "$ORES_CLI_ZED_PACKAGE" "$TJSV_ZED_PACKAGE" --allow-build --adapter none 2>&1)"
+          zed_status=$?
+          set -e
+          printf '%s\n' "$zed_output"
+
+          if [[ $zed_status -eq 0 ]]; then
+            zed run oresc -- doctor
+            zed run oresc -- audit contract \
+              --typespec "$GITHUB_WORKSPACE/.contract-canary/main.tsp" \
+              --schema "$GITHUB_WORKSPACE/.contract-canary/authored.schema.json"
+            cat > "$evidence" <<JSON
+          {"schema":"ores.core-contract-tool-resolution/v1","mode":"zed-registry","zedVersion":"${ZED_VERSION}","oresCliPackage":"${ORES_CLI_ZED_PACKAGE}","tjsvPackage":"${TJSV_ZED_PACKAGE}"}
+          JSON
+            exit 0
+          fi
+
+          if ! grep -Eqi 'registry error \((500|502|503|504)( |\))|registry[^[:cntrl:]]*(500|502|503|504)|Internal Server Error|Bad Gateway|Service Unavailable|Gateway Timeout' <<<"$zed_output"; then
+            echo "Zed package installation failed for a non-registry-outage reason; refusing source fallback." >&2
+            exit "$zed_status"
+          fi
+
+          echo "::warning::Zed registry is unavailable; executing immutable GitHub-source fallback for the same ores-cli/TJSV contract audit."
+          fallback="$RUNNER_TEMP/ores-contract-source-fallback"
+          tjsv_src="$fallback/tjsv"
+          fallback_bin="$fallback/bin"
+          mkdir -p "$tjsv_src" "$fallback_bin"
+
+          curl --fail --silent --show-error --location \
+            "https://github.com/ORESoftware/typespec-json-schema-validator/archive/${TJSV_SOURCE_COMMIT}.tar.gz" \
+            -o "$fallback/tjsv.tar.gz"
+          tar -xzf "$fallback/tjsv.tar.gz" -C "$tjsv_src" --strip-components=1
+          (cd "$tjsv_src" && npm ci --omit=dev)
+          chmod +x "$tjsv_src/bin/typespec-json-schema-validator.mjs"
+          ln -s "$tjsv_src/bin/typespec-json-schema-validator.mjs" "$fallback_bin/tjsv"
+
+          rustup toolchain install "$ORES_CLI_RUST_TOOLCHAIN" --profile minimal --no-self-update
+          cargo "+$ORES_CLI_RUST_TOOLCHAIN" install --locked \
+            --git https://github.com/ORESoftware/ores-cli \
+            --rev "$ORES_CLI_SOURCE_COMMIT" \
+            --root "$fallback/ores-cli" \
+            --bin oresc
+
+          export PATH="$fallback_bin:$fallback/ores-cli/bin:$PATH"
+          test "$(command -v tjsv)" = "$fallback_bin/tjsv"
+          test -x "$fallback/ores-cli/bin/oresc"
+          tjsv --help >/dev/null
+          ORES_CLI_VALIDATOR=tjsv oresc doctor
+          ORES_CLI_VALIDATOR=tjsv oresc audit contract \
             --typespec "$GITHUB_WORKSPACE/.contract-canary/main.tsp" \
             --schema "$GITHUB_WORKSPACE/.contract-canary/authored.schema.json"
+
+          cat > "$evidence" <<JSON
+          {"schema":"ores.core-contract-tool-resolution/v1","mode":"immutable-source-fallback","reason":"zed-registry-5xx","oresCliCommit":"${ORES_CLI_SOURCE_COMMIT}","tjsvCommit":"${TJSV_SOURCE_COMMIT}","zedVersion":"${ZED_VERSION}"}
+          JSON
 
       - name: Validate Zed package boundary when present
         shell: bash
