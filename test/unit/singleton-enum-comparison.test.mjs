@@ -16,7 +16,7 @@ test('comparison equates a string singleton enum with an equivalent typed const'
   const generated = { const: 'push', type: 'string' };
 
   assert.equal(normalized(authored), normalized(generated));
-  assert.deepEqual(normalizeSchemaNodeForComparison(authored), generated);
+  assert.deepEqual(normalizeSchemaNodeForComparison(authored), { const: 'push' });
 });
 
 test('comparison equates safe boolean and null singleton enums with typed consts', () => {
@@ -95,7 +95,7 @@ test('comparison refuses constrained or numeric singleton enums', () => {
   assert.ok(Object.hasOwn(normalizeSchemaNodeForComparison(numeric), 'enum'));
 });
 
-test('single-branch literal unions converge to the same typed const representation', () => {
+test('single-branch literal unions converge to the same bare const representation', () => {
   const union = { anyOf: [{ const: 'pull', type: 'string' }] };
   const singleton = { type: 'string', enum: ['pull'] };
   const direct = { const: 'pull', type: 'string' };
