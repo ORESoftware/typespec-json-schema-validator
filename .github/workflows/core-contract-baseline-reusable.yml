@@ -1,0 +1,180 @@
+name: Reusable core contract baseline
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  ORES_INTERFACES_REPOSITORY: ORESoftware/ores-interfaces
+  ORES_INTERFACES_ZED_PACKAGE: oresoftware/ores-interfaces@^0.1
+  ORES_INTERFACES_ZED_TARGET: public-contracts
+  ORES_CLI_ZED_PACKAGE: oresoftware/ores-cli@^0.1
+  TJSV_ZED_PACKAGE: oresoftware/typespec-json-schema-validator@^0.1
+  ZED_INSTALLER_COMMIT: a80dad717dbff82ef6fff237e13ccf3820f074c4
+  ZED_VERSION: v0.3.0
+  RUNTIME_PROJECTION_TARGETS: rust,typescript,javascript,python,go,java,kotlin,csharp,dart,swift,ruby,php,scala,elixir,gleam,erlang,cpp,c
+  ADDITIVE_CONTRACT_LANES: protobuf,wit,dafny
+
+jobs:
+  contract-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact caller head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Verify checked-out revision
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+
+      - name: Enforce fleet contract policy floor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          targets = [x for x in os.environ["RUNTIME_PROJECTION_TARGETS"].split(",") if x]
+          assert len(set(targets)) >= 15, targets
+          for required in ("rust", "typescript", "dart", "go", "java", "python"):
+              assert required in targets, required
+          lanes = set(os.environ["ADDITIVE_CONTRACT_LANES"].split(","))
+          assert {"protobuf", "wit", "dafny"} <= lanes
+          assert os.environ["ORES_INTERFACES_REPOSITORY"] == "ORESoftware/ores-interfaces"
+          assert os.environ["ORES_INTERFACES_ZED_PACKAGE"] == "oresoftware/ores-interfaces@^0.1"
+          assert os.environ["ORES_INTERFACES_ZED_TARGET"] == "public-contracts"
+          assert os.environ["ORES_CLI_ZED_PACKAGE"] == "oresoftware/ores-cli@^0.1"
+          assert os.environ["TJSV_ZED_PACKAGE"] == "oresoftware/typespec-json-schema-validator@^0.1"
+          PY
+
+      - name: Materialize independent peer-authority canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .contract-canary
+          cat > .contract-canary/main.tsp <<'TSP'
+          import "@typespec/json-schema";
+          using TypeSpec.JsonSchema;
+          namespace OreSchemaAuthority;
+          @id("AuthorityKind")
+          enum AuthorityKind {
+            typespec: "typespec",
+            jsonSchema: "json-schema",
+          }
+          @id("PeerAuthorityRegistration")
+          model PeerAuthorityRegistration {
+            repository: string;
+            authority: AuthorityKind;
+            generatedWitnessOnly: boolean;
+            owner?: string;
+          }
+          TSP
+          cat > .contract-canary/authored.schema.json <<'JSON'
+          {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "authored.peer-authority-canary.schema.json",
+            "$defs": {
+              "AuthorityKind": {
+                "$id": "AuthorityKind",
+                "type": "string",
+                "enum": ["typespec", "json-schema"]
+              },
+              "PeerAuthorityRegistration": {
+                "$id": "PeerAuthorityRegistration",
+                "type": "object",
+                "properties": {
+                  "repository": {"type": "string"},
+                  "authority": {"$ref": "AuthorityKind"},
+                  "generatedWitnessOnly": {"type": "boolean"},
+                  "owner": {"type": "string"}
+                },
+                "required": ["repository", "authority", "generatedWitnessOnly"],
+                "unevaluatedProperties": false
+              }
+            }
+          }
+          JSON
+
+      - name: Compare TypeSpec and authored JSON Schema peers
+        uses: ORESoftware/typespec-json-schema-validator@b5bd51946b53c00b1daeb2723c0b5d54eaeafab7
+        with:
+          typespec: .contract-canary/main.tsp
+          schema: .contract-canary/authored.schema.json
+          report: .typespec-json-schema-validator/report.json
+          contract_ir: .typespec-json-schema-validator/contract-ir.json
+          output_dir: .typespec-json-schema-validator/generated
+          max_probes: "64"
+
+      - name: Require canonical consumer-admission refusals
+        uses: ORESoftware/typespec-json-schema-validator/actions/test-consumer-admission@b5bd51946b53c00b1daeb2723c0b5d54eaeafab7
+        with:
+          contract_ir: .typespec-json-schema-validator/contract-ir.json
+          report: .typespec-json-schema-validator/report.json
+          typespec: .contract-canary/main.tsp
+          schema: .contract-canary/authored.schema.json
+          generated_schema: .typespec-json-schema-validator/generated/typespec.generated.schema.json
+          expected_declarations: '["OreSchemaAuthority.AuthorityKind","OreSchemaAuthority.PeerAuthorityRegistration"]'
+
+      - name: Install pinned Zed CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          installer="$RUNNER_TEMP/zed-install.sh"
+          curl --fail --silent --show-error --location \
+            "https://raw.githubusercontent.com/zed-pkg/zed-cli/${ZED_INSTALLER_COMMIT}/install.sh" \
+            -o "$installer"
+          ZED_VERSION="$ZED_VERSION" ZED_PROFILE="$RUNNER_TEMP/zed-profile" bash "$installer"
+          echo "$HOME/.zed/bin" >> "$GITHUB_PATH"
+
+      - name: Validate through ores-cli and packaged TJSV
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.zed/bin:$PATH"
+          work="$RUNNER_TEMP/ores-contract-tools"
+          mkdir -p "$work"
+          cd "$work"
+          zed install "$ORES_CLI_ZED_PACKAGE" "$TJSV_ZED_PACKAGE" --allow-build --adapter none
+          zed run oresc -- doctor
+          zed run oresc -- audit contract \
+            --typespec "$GITHUB_WORKSPACE/.contract-canary/main.tsp" \
+            --schema "$GITHUB_WORKSPACE/.contract-canary/authored.schema.json"
+
+      - name: Validate Zed package boundary when present
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.zed/bin:$PATH"
+          if [[ -f .zpkg.toml ]]; then
+            if [[ -f .zpkg.lock ]]; then
+              zed validate --manifest .zpkg.toml --lock .zpkg.lock
+            else
+              zed validate --manifest .zpkg.toml
+            fi
+          else
+            echo "No .zpkg.toml yet; public-package policy remains a fleet requirement, not a publication claim."
+          fi
+
+      - name: Preserve caller source tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --exit-code -- . ':!.contract-canary' ':!.typespec-json-schema-validator'
+
+      - name: Retain parity evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-contract-baseline-${{ github.event.repository.name }}-${{ github.run_id }}
+          path: .typespec-json-schema-validator/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
