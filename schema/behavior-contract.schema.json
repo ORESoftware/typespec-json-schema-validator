@@ -81,6 +81,7 @@
         "pure"
       ],
       "properties": {
+        "operationId": { "$ref": "#/$defs/text" },
         "kind": {
           "enum": ["expression", "predicate", "validator", "transform", "policy", "state_machine", "algorithm", "procedure", "external"]
         },
