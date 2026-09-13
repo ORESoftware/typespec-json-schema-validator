@@ -37,7 +37,7 @@ test('comparison equates a safe typed enum with the same bare enum', () => {
 test('comparison refuses typed enums with mixed or mismatched literal types', () => {
   const malformed = { enum: ['draft', false], type: 'string' };
   assert.deepEqual(normalizeSchemaNodeForComparison(malformed), {
-    enum: [false, 'draft'],
+    enum: ['draft', false],
     type: 'string',
   });
 });
