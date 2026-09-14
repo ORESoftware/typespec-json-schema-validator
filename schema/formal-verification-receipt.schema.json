@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/formal-verification-receipt.v1.schema.json",
+  "title": "ORESoftware formal verification receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "authority",
+    "behaviorContractDigest",
+    "formalManifestDigest",
+    "bindings",
+    "dafny",
+    "proofRuns",
+    "findings",
+    "verificationId"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.formal-verification-receipt/v1"
+    },
+    "status": {
+      "enum": ["passed", "stopped_for_evaluation"]
+    },
+    "authority": {
+      "const": "independently-authored-formal-authority"
+    },
+    "behaviorContractDigest": { "$ref": "#/$defs/digest" },
+    "formalManifestDigest": { "$ref": "#/$defs/digest" },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["operationId", "qualifiedName"],
+        "properties": {
+          "operationId": { "type": "string", "minLength": 1 },
+          "qualifiedName": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "dafny": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "available", "versionProbe"],
+      "properties": {
+        "executable": { "type": "string", "minLength": 1 },
+        "available": { "type": "boolean" },
+        "versionProbe": { "$ref": "#/$defs/commandEvidence" }
+      }
+    },
+    "proofRuns": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          { "$ref": "#/$defs/commandEvidence" },
+          {
+            "type": "object",
+            "required": ["source", "operationIds"],
+            "properties": {
+              "source": { "type": "string", "minLength": 1 },
+              "operationIds": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string", "minLength": 1 },
+                "uniqueItems": true
+              }
+            }
+          }
+        ]
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["ruleId", "severity", "resolutionState", "comparison", "pointer", "message", "fingerprint"],
+        "properties": {
+          "ruleId": { "type": "string", "minLength": 1 },
+          "severity": { "const": "error" },
+          "resolutionState": { "const": "unexplained" },
+          "comparison": { "const": "formal-verification" },
+          "pointer": { "type": "string" },
+          "message": { "type": "string", "minLength": 1 },
+          "fingerprint": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "verificationId": { "$ref": "#/$defs/digest" }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "commandEvidence": {
+      "type": "object",
+      "required": ["exitCode", "signal", "stdoutSha256", "stderrSha256"],
+      "properties": {
+        "exitCode": { "type": ["integer", "null"] },
+        "signal": { "type": ["string", "null"] },
+        "stdoutSha256": { "$ref": "#/$defs/digest" },
+        "stderrSha256": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}

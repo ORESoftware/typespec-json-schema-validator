@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/formal-manifest.v1.schema.json",
+  "title": "ORESoftware formal proof manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "authority", "behaviorContractDigest", "operations"],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.formal-manifest/v1"
+    },
+    "authority": {
+      "const": "independently-authored-formal-authority"
+    },
+    "behaviorContractDigest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/operation" }
+    }
+  },
+  "$defs": {
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "language",
+        "source",
+        "module",
+        "symbol",
+        "sourceSha256",
+        "verifyIncludedFiles"
+      ],
+      "properties": {
+        "operationId": { "type": "string", "minLength": 1 },
+        "language": { "const": "dafny" },
+        "source": {
+          "type": "string",
+          "minLength": 5,
+          "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.?/)(?!.*\\\\)(?!.*//).+\\.dfy$"
+        },
+        "module": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+        },
+        "symbol": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "sourceSha256": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "verifyIncludedFiles": { "type": "boolean" }
+      }
+    }
+  }
+}
