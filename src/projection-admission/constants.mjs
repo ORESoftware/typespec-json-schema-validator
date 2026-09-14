@@ -11,6 +11,7 @@ export const IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/u;
 export const MEDIA_TYPE_PATTERN = /^[a-z0-9][a-z0-9!#$&^_.+-]{0,126}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,126}$/u;
 export const JSON_POINTER_PATTERN = /^#(?:\/(?:[^~/]|~[01])*)*$/u;
 export const ISO_INSTANT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?Z$/u;
+export const ADDITIVE_PROJECTION_IDS = Object.freeze(['protobuf', 'wit', 'dafny']);
 
 export const DEFAULT_LIMITS = Object.freeze({
   maxBytes: 8 * 1024 * 1024,
