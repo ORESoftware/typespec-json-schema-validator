@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   refresh-and-test:
@@ -16,8 +16,6 @@ jobs:
     steps:
       - name: Check out exact revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -34,6 +32,15 @@ jobs:
         run: npm run test:integration
       - name: Run repository checks
         run: npm run check
+      - name: Commit verified lockfile
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "ORESoftware CI"
+            git config user.email "noreply@oresoftware.com"
+            git add package-lock.json
+            git commit -m "chore: refresh TypeSpec 1.16 lockfile"
+            git push origin HEAD:fix/typespec-1.16-audit-20260914
+          fi
       - name: Upload refreshed manifests
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
