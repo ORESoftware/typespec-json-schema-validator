@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/implementation-proof-manifest.v1.schema.json",
+  "title": "ORESoftware Rust implementation proof manifest v1",
+  "description": "Consumer-authored plan binding concrete Rust implementation proofs to the same behavioral contract digest and passed L3 formal verification receipt.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "authority",
+    "behaviorContractDigest",
+    "formalVerificationId",
+    "repository",
+    "revision",
+    "operations"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.implementation-proof-manifest/v1"
+    },
+    "authority": {
+      "const": "consumer-authored-implementation-proof-plan"
+    },
+    "behaviorContractDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "formalVerificationId": {
+      "$ref": "#/$defs/digest"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/operation"
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "rustPath": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$"
+    },
+    "rsPath": {
+      "type": "string",
+      "minLength": 4,
+      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.?/)(?!.*\\\\)(?!.*//).+\\.rs$"
+    },
+    "tomlPath": {
+      "type": "string",
+      "minLength": 5,
+      "pattern": "^(?!/)(?![A-Za-z]:/)(?!.*(?:^|/)\\.\\.?/)(?!.*\\\\)(?!.*//).+\\.toml$"
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "sourceSha256",
+        "symbol"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/rsPath"
+        },
+        "sourceSha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "symbol": {
+          "$ref": "#/$defs/rustPath"
+        }
+      }
+    },
+    "kaniProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "source",
+        "sourceSha256",
+        "manifestPath",
+        "harness",
+        "package"
+      ],
+      "properties": {
+        "tool": {
+          "const": "kani"
+        },
+        "source": {
+          "$ref": "#/$defs/rsPath"
+        },
+        "sourceSha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "manifestPath": {
+          "$ref": "#/$defs/tomlPath"
+        },
+        "harness": {
+          "$ref": "#/$defs/rustPath"
+        },
+        "package": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+            }
+          ]
+        }
+      }
+    },
+    "verusProof": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "source",
+        "sourceSha256"
+      ],
+      "properties": {
+        "tool": {
+          "const": "verus"
+        },
+        "source": {
+          "$ref": "#/$defs/rsPath"
+        },
+        "sourceSha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "language",
+        "implementation",
+        "proofs"
+      ],
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "language": {
+          "const": "rust"
+        },
+        "implementation": {
+          "$ref": "#/$defs/implementation"
+        },
+        "proofs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/kaniProof"
+              },
+              {
+                "$ref": "#/$defs/verusProof"
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/implementation-verification-receipt.v1.schema.json",
+  "title": "ORESoftware Rust implementation verification receipt v1",
+  "description": "Derived L4 implementation-verification evidence. A passed receipt is bound to a passed L3 receipt and the exact behavioral authority digest; it does not promote proofs for other language implementations.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "status",
+    "assuranceLevel",
+    "authority",
+    "behaviorContractDigest",
+    "formalVerificationId",
+    "implementationManifestDigest",
+    "repository",
+    "revision",
+    "git",
+    "tools",
+    "proofRuns",
+    "findings",
+    "verificationId"
+  ],
+  "properties": {
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.implementation-verification-receipt/v1"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "stopped_for_evaluation"
+      ]
+    },
+    "assuranceLevel": {
+      "oneOf": [
+        {
+          "const": "L4"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "authority": {
+      "const": "consumer-authored-implementation-proof-plan"
+    },
+    "behaviorContractDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "formalVerificationId": {
+      "$ref": "#/$defs/digest"
+    },
+    "implementationManifestDigest": {
+      "$ref": "#/$defs/digest"
+    },
+    "repository": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "revision": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "git": {
+      "$ref": "#/$defs/git"
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kani": {
+          "$ref": "#/$defs/tool"
+        },
+        "verus": {
+          "$ref": "#/$defs/tool"
+        }
+      }
+    },
+    "proofRuns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/proofRun"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "verificationId": {
+      "$ref": "#/$defs/digest"
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exitCode",
+        "signal",
+        "stdoutSha256",
+        "stderrSha256"
+      ],
+      "properties": {
+        "exitCode": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signal": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stdoutSha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "stderrSha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executable",
+        "available",
+        "versionProbe"
+      ],
+      "properties": {
+        "executable": {
+          "type": "string",
+          "minLength": 1
+        },
+        "available": {
+          "type": "boolean"
+        },
+        "versionProbe": {
+          "$ref": "#/$defs/command"
+        }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "head",
+        "clean",
+        "headProbe",
+        "statusProbe"
+      ],
+      "properties": {
+        "head": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clean": {
+          "type": "boolean"
+        },
+        "headProbe": {
+          "$ref": "#/$defs/command"
+        },
+        "statusProbe": {
+          "$ref": "#/$defs/command"
+        }
+      }
+    },
+    "proofRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operationId",
+        "tool",
+        "proofMode",
+        "target",
+        "exitCode",
+        "signal",
+        "stdoutSha256",
+        "stderrSha256"
+      ],
+      "properties": {
+        "operationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tool": {
+          "enum": [
+            "kani",
+            "verus"
+          ]
+        },
+        "proofMode": {
+          "enum": [
+            "model-checking",
+            "deductive"
+          ]
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exitCode": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signal": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stdoutSha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "stderrSha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "ruleId",
+        "severity",
+        "resolutionState",
+        "comparison",
+        "pointer",
+        "message",
+        "fingerprint"
+      ],
+      "properties": {
+        "ruleId": {
+          "type": "string"
+        },
+        "severity": {
+          "const": "error"
+        },
+        "resolutionState": {
+          "const": "unexplained"
+        },
+        "comparison": {
+          "const": "implementation-verification"
+        },
+        "pointer": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
