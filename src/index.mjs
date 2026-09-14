@@ -76,14 +76,3 @@ export {
   inventoryTypeSpecSource,
   lexTypeSpec,
 } from './typespec-inventory.mjs';
-export {
-  FORMAL_AUTHORITY,
-  FORMAL_MANIFEST_SCHEMA,
-  FORMAL_VERIFICATION_RECEIPT_SCHEMA,
-  FormalVerificationError,
-  behaviorDigestForFormalVerification,
-  formalManifestDigest,
-  inspectTypeSpecBehaviorBindings,
-  normalizeFormalManifest,
-  verifyFormalContract,
-} from './formal-verification.mjs';
