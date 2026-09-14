@@ -8,6 +8,10 @@ import {
   normalizeBehaviorContract,
 } from './behavior-contract.mjs';
 import { canonicalStringify, isPlainObject, sha256, stableFindingFingerprint } from './canonical.mjs';
+import {
+  FORMAL_AUTHORITY,
+  FORMAL_VERIFICATION_RECEIPT_SCHEMA,
+} from './formal-verification.mjs';
 
 export const IMPLEMENTATION_PROOF_MANIFEST_SCHEMA =
   'ores.typespec-json-schema-validator.implementation-proof-manifest/v1';
@@ -18,7 +22,9 @@ export const IMPLEMENTATION_VERIFICATION_RECEIPT_SCHEMA =
 const DIGEST = /^sha256:[a-f0-9]{64}$/u;
 const REVISION = /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u;
 const RUST_SYMBOL = /^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$/u;
-const KANI_HARNESS = /^[A-Za-z_][A-Za-z0-9_]*(?:::[A-Za-z_][A-Za-z0-9_]*)*$/u;
+const KANI_HARNESS = RUST_SYMBOL;
+const MIN_TIMEOUT_MS = 1_000;
+const MAX_TIMEOUT_MS = 3_600_000;
 
 export class ImplementationVerificationError extends Error {
   constructor(message) {
@@ -104,6 +110,11 @@ function normalizeOperation(value, index) {
   if (!RUST_SYMBOL.test(value.implementation.symbol ?? '')) {
     fail(`${label}.implementation.symbol must be a Rust path`);
   }
+  const implementation = Object.freeze({
+    source: normalizedRelativePath(value.implementation.source, `${label}.implementation.source`, '.rs'),
+    sourceSha256: value.implementation.sourceSha256,
+    symbol: value.implementation.symbol,
+  });
   if (!Array.isArray(value.proofs) || value.proofs.length === 0) {
     fail(`${label}.proofs must be a non-empty array`);
   }
@@ -113,14 +124,15 @@ function normalizeOperation(value, index) {
       ? `${proof.tool}\u0000${proof.source}\u0000${proof.harness}`
       : `${proof.tool}\u0000${proof.source}`);
   if (new Set(proofKeys).size !== proofKeys.length) fail(`${label}.proofs contains duplicate proof targets`);
+  for (const proof of proofs.filter((item) => item.tool === 'verus')) {
+    if (proof.source !== implementation.source || proof.sourceSha256 !== implementation.sourceSha256) {
+      fail(`${label} Verus proof must target the exact pinned implementation source`);
+    }
+  }
   return Object.freeze({
     operationId: nonEmptyString(value.operationId, `${label}.operationId`),
     language: 'rust',
-    implementation: Object.freeze({
-      source: normalizedRelativePath(value.implementation.source, `${label}.implementation.source`, '.rs'),
-      sourceSha256: value.implementation.sourceSha256,
-      symbol: value.implementation.symbol,
-    }),
+    implementation,
     proofs: Object.freeze(proofs),
   });
 }
@@ -178,6 +190,26 @@ function makeFinding(ruleId, message, pointer, extra = {}) {
   return Object.freeze({ ...finding, fingerprint: stableFindingFingerprint(finding) });
 }
 
+function sortFindings(findings) {
+  return Object.freeze([...findings].sort((left, right) => {
+    const byRule = left.ruleId.localeCompare(right.ruleId);
+    if (byRule !== 0) return byRule;
+    const byPointer = left.pointer.localeCompare(right.pointer);
+    if (byPointer !== 0) return byPointer;
+    return left.fingerprint.localeCompare(right.fingerprint);
+  }));
+}
+
+function sortProofRuns(proofRuns) {
+  return Object.freeze([...proofRuns].sort((left, right) => {
+    const byOperation = left.operationId.localeCompare(right.operationId);
+    if (byOperation !== 0) return byOperation;
+    const byTool = left.tool.localeCompare(right.tool);
+    if (byTool !== 0) return byTool;
+    return left.target.localeCompare(right.target);
+  }));
+}
+
 async function readPinnedSource(root, pathValue, expectedDigest) {
   const absoluteRoot = resolve(root);
   const path = resolve(absoluteRoot, pathValue);
@@ -219,11 +251,103 @@ function execute(spawn, command, args, root, timeoutMs) {
   });
 }
 
-function proofSourceHasBinding(text, operationId, behaviorDigest) {
+function proofSourceHasBinding(text, operationId, behaviorDigest, implementationDigest) {
   return (
     text.includes(`TJSV_OPERATION_ID: ${operationId}`)
     && text.includes(`TJSV_BEHAVIOR_DIGEST: ${behaviorDigest}`)
+    && text.includes(`TJSV_IMPLEMENTATION_SHA256: ${implementationDigest}`)
   );
+}
+
+function kaniHarnessPresent(text, harness) {
+  const leaf = harness.split('::').at(-1);
+  const escaped = leaf.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const pattern = new RegExp(`#\\s*\\[\\s*kani::proof\\s*\\][\\s\\S]{0,1024}\\bfn\\s+${escaped}\\b`, 'u');
+  return pattern.test(text);
+}
+
+function validateFormalReceipt(formalReceipt, manifest, expectedBehaviorDigest, findings) {
+  if (!isPlainObject(formalReceipt)) {
+    findings.push(makeFinding(
+      'implementation-formal-receipt-invalid',
+      'L4 implementation evidence requires an object-shaped L3 formal receipt',
+      '#/formalReceipt',
+    ));
+    return { bindings: [], proofRuns: [] };
+  }
+
+  const expectedKeys = [
+    'schema', 'status', 'authority', 'behaviorContractDigest', 'formalManifestDigest',
+    'bindings', 'dafny', 'proofRuns', 'findings', 'verificationId',
+  ].sort();
+  if (canonicalStringify(Object.keys(formalReceipt).sort()) !== canonicalStringify(expectedKeys)) {
+    findings.push(makeFinding(
+      'implementation-formal-receipt-invalid',
+      'L3 formal receipt contains missing or unknown top-level fields',
+      '#/formalReceipt',
+    ));
+    return { bindings: [], proofRuns: [] };
+  }
+
+  const { verificationId, ...formalBody } = formalReceipt;
+  const recomputedId = `sha256:${sha256(canonicalStringify(formalBody))}`;
+  if (!DIGEST.test(verificationId ?? '') || verificationId !== recomputedId) {
+    findings.push(makeFinding(
+      'implementation-formal-receipt-digest-mismatch',
+      'L3 formal receipt self-digest is invalid',
+      '#/formalReceipt/verificationId',
+    ));
+  }
+
+  if (
+    formalReceipt.schema !== FORMAL_VERIFICATION_RECEIPT_SCHEMA
+    || formalReceipt.authority !== FORMAL_AUTHORITY
+    || formalReceipt.status !== 'passed'
+    || formalReceipt.behaviorContractDigest !== expectedBehaviorDigest
+    || formalReceipt.verificationId !== manifest.formalVerificationId
+    || !Array.isArray(formalReceipt.findings)
+    || formalReceipt.findings.length !== 0
+    || !isPlainObject(formalReceipt.dafny)
+    || formalReceipt.dafny.available !== true
+  ) {
+    findings.push(makeFinding(
+      'implementation-formal-receipt-mismatch',
+      'L4 implementation evidence requires the exact passed L3 formal receipt for the same behavioral authority',
+      '#/formalReceipt',
+    ));
+  }
+
+  return {
+    bindings: Array.isArray(formalReceipt.bindings) ? formalReceipt.bindings : [],
+    proofRuns: Array.isArray(formalReceipt.proofRuns) ? formalReceipt.proofRuns : [],
+  };
+}
+
+function checkL3Coverage(operationId, l3, findings) {
+  const bindingCount = l3.bindings.filter((binding) =>
+    isPlainObject(binding) && binding.operationId === operationId).length;
+  if (bindingCount !== 1) {
+    findings.push(makeFinding(
+      'implementation-l3-binding-missing',
+      `${operationId} must have exactly one admitted TypeSpec binding in the L3 receipt`,
+      `#/operations/${operationId}`,
+      { bindings: bindingCount },
+    ));
+  }
+
+  const successfulProofs = l3.proofRuns.filter((proofRun) =>
+    isPlainObject(proofRun)
+    && Array.isArray(proofRun.operationIds)
+    && proofRun.operationIds.includes(operationId)
+    && proofRun.exitCode === 0
+    && proofRun.signal === null);
+  if (successfulProofs.length === 0) {
+    findings.push(makeFinding(
+      'implementation-l3-proof-missing',
+      `${operationId} must be covered by a successful Dafny proof run in the exact L3 receipt`,
+      `#/operations/${operationId}`,
+    ));
+  }
 }
 
 export async function verifyImplementationProofs({
@@ -237,6 +361,10 @@ export async function verifyImplementationProofs({
   timeoutMs = 600_000,
   spawn = spawnSync,
 } = {}) {
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < MIN_TIMEOUT_MS || timeoutMs > MAX_TIMEOUT_MS) {
+    fail(`timeoutMs must be a safe integer between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS}`);
+  }
+
   const contract = normalizeBehaviorContract(behaviorContract);
   const normalizedManifest = normalizeImplementationProofManifest(manifest);
   const expectedBehaviorDigest = behaviorDigestForImplementationVerification(contract);
@@ -252,29 +380,20 @@ export async function verifyImplementationProofs({
     ));
   }
 
-  if (!isPlainObject(formalReceipt)
-    || formalReceipt.status !== 'passed'
-    || formalReceipt.verificationId !== normalizedManifest.formalVerificationId
-    || formalReceipt.behaviorContractDigest !== expectedBehaviorDigest) {
-    findings.push(makeFinding(
-      'implementation-formal-receipt-mismatch',
-      'L4 implementation evidence requires the exact passed L3 formal receipt for the same behavioral authority',
-      '#/formalReceipt',
-    ));
-  }
+  const l3 = validateFormalReceipt(formalReceipt, normalizedManifest, expectedBehaviorDigest, findings);
 
   const gitHeadResult = execute(spawn, gitBin, ['rev-parse', 'HEAD'], root, timeoutMs);
   const gitStatusResult = execute(spawn, gitBin, ['status', '--porcelain=v1', '--untracked-files=all'], root, timeoutMs);
   const gitHead = typeof gitHeadResult.stdout === 'string' ? gitHeadResult.stdout.trim() : '';
   const gitDirty = typeof gitStatusResult.stdout === 'string' ? gitStatusResult.stdout.trim() !== '' : true;
-  if (gitHeadResult.status !== 0 || gitHead !== normalizedManifest.revision) {
+  if (gitHeadResult.error || gitHeadResult.status !== 0 || gitHead !== normalizedManifest.revision) {
     findings.push(makeFinding(
       'implementation-revision-mismatch',
       'checked-out git revision does not match manifest.revision',
       '#/manifest/revision',
     ));
   }
-  if (gitStatusResult.status !== 0 || gitDirty) {
+  if (gitStatusResult.error || gitStatusResult.status !== 0 || gitDirty) {
     findings.push(makeFinding(
       'implementation-working-tree-dirty',
       'implementation verification requires a clean working tree, including untracked files',
@@ -288,20 +407,21 @@ export async function verifyImplementationProofs({
 
   if (needsKani) {
     const probe = execute(spawn, cargoBin, ['kani', '--version'], root, timeoutMs);
-    tools.kani = Object.freeze({ executable: cargoBin, available: probe.status === 0, versionProbe: commandEvidence(probe) });
-    if (probe.status !== 0) {
+    tools.kani = Object.freeze({ executable: cargoBin, available: !probe.error && probe.status === 0, versionProbe: commandEvidence(probe) });
+    if (probe.error || probe.status !== 0) {
       findings.push(makeFinding('implementation-kani-unavailable', 'cargo kani is required by the implementation manifest', '#/tools/kani'));
     }
   }
   if (needsVerus) {
     const probe = execute(spawn, verusBin, ['--version'], root, timeoutMs);
-    tools.verus = Object.freeze({ executable: verusBin, available: probe.status === 0, versionProbe: commandEvidence(probe) });
-    if (probe.status !== 0) {
+    tools.verus = Object.freeze({ executable: verusBin, available: !probe.error && probe.status === 0, versionProbe: commandEvidence(probe) });
+    if (probe.error || probe.status !== 0) {
       findings.push(makeFinding('implementation-verus-unavailable', 'verus is required by the implementation manifest', '#/tools/verus'));
     }
   }
 
   for (const operation of normalizedManifest.operations) {
+    checkL3Coverage(operation.operationId, l3, findings);
     if (!behaviors.has(operation.operationId)) {
       findings.push(makeFinding(
         'implementation-operation-missing',
@@ -348,12 +468,26 @@ export async function verifyImplementationProofs({
         ));
         continue;
       }
-      if (!proofSourceHasBinding(proofSource.text, operation.operationId, expectedBehaviorDigest)) {
+      if (!proofSourceHasBinding(
+        proofSource.text,
+        operation.operationId,
+        expectedBehaviorDigest,
+        operation.implementation.sourceSha256,
+      )) {
         findings.push(makeFinding(
           'implementation-proof-binding-missing',
-          `${operation.operationId} ${proof.tool} proof source must embed the operation id and behavioral digest binding markers`,
+          `${operation.operationId} ${proof.tool} proof source must embed the operation id, behavioral digest, and implementation digest binding markers`,
           `#/operations/${operation.operationId}/proofs`,
           { tool: proof.tool },
+        ));
+        continue;
+      }
+      if (proof.tool === 'kani' && !kaniHarnessPresent(proofSource.text, proof.harness)) {
+        findings.push(makeFinding(
+          'implementation-kani-harness-missing',
+          `${operation.operationId} Kani proof source does not declare the named #[kani::proof] harness`,
+          `#/operations/${operation.operationId}/proofs`,
+          { harness: proof.harness },
         ));
         continue;
       }
@@ -377,7 +511,7 @@ export async function verifyImplementationProofs({
         target,
         ...evidence,
       }));
-      if (result.status !== 0) {
+      if (result.error || result.status !== 0) {
         findings.push(makeFinding(
           'implementation-proof-failed',
           `${operation.operationId} ${proof.tool} verification failed`,
@@ -388,10 +522,12 @@ export async function verifyImplementationProofs({
     }
   }
 
+  const sortedFindings = sortFindings(findings);
+  const sortedProofRuns = sortProofRuns(proofRuns);
   const unsigned = {
     schema: IMPLEMENTATION_VERIFICATION_RECEIPT_SCHEMA,
-    status: findings.length === 0 ? 'passed' : 'stopped_for_evaluation',
-    assuranceLevel: findings.length === 0 ? 'L4' : null,
+    status: sortedFindings.length === 0 ? 'passed' : 'stopped_for_evaluation',
+    assuranceLevel: sortedFindings.length === 0 ? 'L4' : null,
     authority: IMPLEMENTATION_PROOF_AUTHORITY,
     behaviorContractDigest: expectedBehaviorDigest,
     formalVerificationId: normalizedManifest.formalVerificationId,
@@ -400,13 +536,13 @@ export async function verifyImplementationProofs({
     revision: normalizedManifest.revision,
     git: {
       head: gitHead || null,
-      clean: gitStatusResult.status === 0 && !gitDirty,
+      clean: !gitStatusResult.error && gitStatusResult.status === 0 && !gitDirty,
       headProbe: commandEvidence(gitHeadResult),
       statusProbe: commandEvidence(gitStatusResult),
     },
     tools,
-    proofRuns: Object.freeze(proofRuns),
-    findings: Object.freeze(findings),
+    proofRuns: sortedProofRuns,
+    findings: sortedFindings,
   };
   return Object.freeze({
     ...unsigned,

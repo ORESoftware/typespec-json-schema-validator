@@ -7,26 +7,30 @@ The Dafny lane proves the reviewed reference/specification at L3. It does **not*
 `implementation-proof-manifest/v1` binds a Rust consumer to all of the following at once:
 
 - the exact `behavior-contract/v1` SHA-256 digest;
-- the exact passed `formal-verification-receipt/v1` verification ID;
-- the exact consumer Git revision;
-- the concrete Rust implementation source and symbol;
+- the exact, self-digest-valid, passed `formal-verification-receipt/v1` verification ID;
+- an L3 receipt that contains exactly one TypeSpec binding and at least one successful Dafny proof run for every promoted operation ID;
+- the exact consumer Git revision and a clean worktree;
+- the concrete Rust implementation source, symbol, and source digest;
 - immutable proof-source digests; and
 - one or more Verus and/or Kani proof targets.
 
-The verifier refuses to issue a passed receipt when the checkout is dirty or at a different revision. This prevents an L4 receipt from silently floating across later source changes.
+The verifier refuses to issue a passed receipt when the checkout is dirty or at a different revision. This prevents an L4 receipt from silently floating across later source changes. It also recomputes the L3 receipt's `verificationId` instead of trusting a copied green identifier.
 
-Every proof source must also contain these machine-readable review markers:
+Every proof source must contain these machine-readable review markers:
 
 ```text
 TJSV_OPERATION_ID: locks.check_ttl
 TJSV_BEHAVIOR_DIGEST: sha256:<behavior-contract-digest>
+TJSV_IMPLEMENTATION_SHA256: sha256:<concrete-rust-source-digest>
 ```
 
-Those markers do not prove that the harness calls the intended function by themselves. They make the semantic binding visible and grep-able while the proof-source digest, Git revision, proof target, and verifier result remain the stronger evidence envelope.
+The markers make the semantic binding visible and grep-able. They are not proof by themselves: the exact proof-source digest, implementation-source digest, Git revision, L3 receipt, proof target, and verifier result form the evidence envelope.
+
+Because source digests are byte-level pins, consumer repositories intended to verify on Windows, macOS, and Linux should make proof and implementation source line endings explicit in `.gitattributes`, for example `*.rs text eol=lf`.
 
 ## Kani
 
-Kani is intended for ordinary Rust implementations. A target names a Cargo manifest and proof harness:
+Kani is intended for ordinary Rust implementations where the proof harness may live separately from the production function. A target names a Cargo manifest and proof harness:
 
 ```json
 {
@@ -39,39 +43,39 @@ Kani is intended for ordinary Rust implementations. A target names a Cargo manif
 }
 ```
 
-TJSV executes:
+TJSV requires the pinned proof source to contain the named `#[kani::proof]` function and then executes:
 
 ```sh
 cargo kani --manifest-path Cargo.toml --harness verification::check_ttl_contract
 ```
 
-Kani evidence is recorded as `proofMode: "model-checking"`. Where a Kani proof uses explicit unwind bounds, the human review must retain those bounds and their scope; a passed receipt must not be paraphrased as an unbounded proof when the harness is bounded.
+Kani evidence is recorded as `proofMode: "model-checking"`. Where a Kani proof uses explicit unwind bounds or other bounded assumptions, human review must retain those bounds and their scope; a passed receipt must not be paraphrased as an unbounded mathematical proof.
 
 ## Verus
 
-Verus targets point at an immutable `.rs` proof source:
+Verus is admitted only when it verifies the **exact pinned implementation source**. TJSV rejects a separate Verus model file that merely resembles the production implementation, because that would reintroduce the same L3/L4 gap this lane exists to close.
 
 ```json
 {
   "tool": "verus",
-  "source": "verification/check_ttl.rs",
-  "sourceSha256": "sha256:<digest>"
+  "source": "src/lib.rs",
+  "sourceSha256": "sha256:<same implementation digest>"
 }
 ```
 
 TJSV executes:
 
 ```sh
-verus verification/check_ttl.rs
+verus src/lib.rs
 ```
 
 Verus evidence is recorded as `proofMode: "deductive"`.
 
 ## Receipt semantics
 
-A passed `implementation-verification-receipt/v1` is L4 evidence **only for the concrete Rust consumer revision named in the receipt**. It does not promote Go, Dart, TypeScript, or another Rust implementation to L4.
+A passed `implementation-verification-receipt/v1` is L4 evidence **only for the concrete Rust consumer revision named in the receipt**. The receipt is self-digesting, sorts findings and proof runs deterministically, and labels Kani and Verus evidence separately.
 
-For those other implementations, keep the claim at L2 unless they have their own implementation-proof lane. Reuse the same operation IDs and behavioral digest in generated conformance corpora and runtime-conformance evidence so drift is detected without pretending the implementation was formally proved.
+It does not promote Go, Dart, TypeScript, or another Rust implementation to L4. For those implementations, keep the claim at L2 unless they have their own implementation-proof lane. Reuse the same operation IDs and behavioral digest in generated conformance corpora and runtime-conformance evidence so drift is detected without pretending the implementation was formally proved.
 
 ## Example manifest
 
