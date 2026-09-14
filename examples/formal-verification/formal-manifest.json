@@ -1,0 +1,16 @@
+{
+  "schema": "ores.typespec-json-schema-validator.formal-manifest/v1",
+  "authority": "independently-authored-formal-authority",
+  "behaviorContractDigest": "sha256:bceeed19bc05e7e6e17d2e3d5d64e3d43cf578e0081466424d1a99946e0ba654",
+  "operations": [
+    {
+      "operationId": "locks.check_ttl",
+      "language": "dafny",
+      "source": "examples/formal-verification/formal/locks.dfy",
+      "module": "Locks",
+      "symbol": "CheckTtl",
+      "sourceSha256": "sha256:b1ae7ddad94cbfcd56fee9a6ece5850984307172f48533711f6dd0329d529584",
+      "verifyIncludedFiles": true
+    }
+  ]
+}
