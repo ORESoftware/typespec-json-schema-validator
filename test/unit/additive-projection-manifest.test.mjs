@@ -163,3 +163,22 @@ test('protobuf wit and dafny coexist as digest-bound downstream projections', ()
   assert.equal(report.summary.projections, 3);
   assert.equal(report.summary.outputs, 3);
 });
+
+test('WIT byte drift invalidates the shared additive projection receipt', () => {
+  const value = fixture();
+  const actualOutputs = value.outputs.map((output) =>
+    output.projection === 'wit' ? { ...output, sha256: digest('wit-drift') } : output,
+  );
+  const report = verifyProjectionManifest({
+    manifest: value.manifest,
+    contractIr: value.contractIr,
+    parityReceipt: value.receipt,
+    expectedSourceDigests: value.sourceDigests,
+    expectedInputs: value.inputs,
+    requiredToolchains: value.toolchains,
+    actualOutputs,
+    requiredProjections: ADDITIVE_PROJECTION_IDS,
+  });
+  assert.notEqual(report.status, 'passed');
+  assert.equal(report.admissible, false);
+});
