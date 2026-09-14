@@ -6,4 +6,5 @@
 *.toml text eol=lf
 *.json text eol=lf
 *.tsp text eol=lf
+*.dfy text eol=lf
 *.sh text eol=lf
