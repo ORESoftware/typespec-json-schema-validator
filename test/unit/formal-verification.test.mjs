@@ -66,13 +66,18 @@ test('formal manifest is deterministic and binds an exact behavioral authority d
   assert.match(formalManifestDigest(normalized), /^sha256:[a-f0-9]{64}$/u);
 });
 
-test('formal manifest rejects path traversal and non-Dafny proof sources', () => {
-  const invalid = manifest();
-  invalid.operations[0].source = '../locks.dfy';
-  assert.throws(() => normalizeFormalManifest(invalid), /normalized relative POSIX path/u);
+test('formal manifest rejects path traversal, Windows drive paths, and non-Dafny proof sources', () => {
+  const traversal = manifest();
+  traversal.operations[0].source = '../locks.dfy';
+  assert.throws(() => normalizeFormalManifest(traversal), /normalized relative POSIX path/u);
 
-  invalid.operations[0].source = 'formal/locks.txt';
-  assert.throws(() => normalizeFormalManifest(invalid), /\.dfy file/u);
+  const windowsDrive = manifest();
+  windowsDrive.operations[0].source = 'C:/formal/locks.dfy';
+  assert.throws(() => normalizeFormalManifest(windowsDrive), /normalized relative POSIX path/u);
+
+  const wrongExtension = manifest();
+  wrongExtension.operations[0].source = 'formal/locks.txt';
+  assert.throws(() => normalizeFormalManifest(wrongExtension), /\.dfy file/u);
 });
 
 test('formal manifest rejects duplicate proof targets and unpinned source digests', () => {
