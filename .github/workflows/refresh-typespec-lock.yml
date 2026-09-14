@@ -1,0 +1,46 @@
+name: refresh TypeSpec 1.16 lock
+
+on:
+  push:
+    branches:
+      - fix/typespec-1.16-audit-20260914
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22.16.0
+      - name: Refresh TypeSpec compiler and JSON Schema emitter together
+        run: npm install --package-lock-only --save-exact @typespec/compiler@1.16.0 @typespec/json-schema@1.16.0
+      - name: Install refreshed lock
+        run: npm ci
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+      - name: Run unit tests
+        run: npm test
+      - name: Run integration tests
+        run: npm run test:integration
+      - name: Run repository checks
+        run: npm run check
+      - name: Upload refreshed manifests
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: typespec-1.16-manifests
+          path: |
+            package.json
+            package-lock.json
+          if-no-files-found: error
+          retention-days: 2
