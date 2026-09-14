@@ -48,7 +48,13 @@ function nonEmptyString(value, label) {
 
 function normalizedRelativePath(value, label) {
   const path = nonEmptyString(value, label);
-  if (path.includes('\\') || path.startsWith('/') || path.endsWith('/') || path.includes('//')) {
+  if (
+    path.includes('\\')
+    || path.startsWith('/')
+    || /^[A-Za-z]:\//u.test(path)
+    || path.endsWith('/')
+    || path.includes('//')
+  ) {
     fail(`${label} must be a normalized relative POSIX path`);
   }
   const segments = path.split('/');
@@ -285,7 +291,7 @@ function dafnySymbolPresent(text, moduleName, symbol) {
   const escapedModule = moduleName.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
   const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
   const modulePattern = new RegExp(`\\bmodule\\s+${escapedModule.split('.').at(-1)}\\b`, 'u');
-  const symbolPattern = new RegExp(`\\b(?:method|function|predicate|lemma)\\s+(?:ghost\\s+)?${escapedSymbol}\\b`, 'u');
+  const symbolPattern = new RegExp(`\\b(?:ghost\\s+)?(?:method|function|predicate|lemma)\\s+${escapedSymbol}\\b`, 'u');
   return modulePattern.test(text) && symbolPattern.test(text);
 }
 
