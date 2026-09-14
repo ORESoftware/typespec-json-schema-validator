@@ -40,6 +40,10 @@
       "import": "./src/formal-verification.mjs",
       "types": "./src/formal-verification.d.mts"
     },
+    "./implementation-verification": {
+      "import": "./src/implementation-verification.mjs",
+      "types": "./src/implementation-verification.d.mts"
+    },
     "./typespec-behavior": {
       "import": "./src/typespec-behavior.mjs",
       "types": "./src/typespec-behavior.d.mts"
@@ -59,6 +63,8 @@
     "./schema/behavior-contract": "./schema/behavior-contract.schema.json",
     "./schema/formal-manifest": "./schema/formal-manifest.schema.json",
     "./schema/formal-verification-receipt": "./schema/formal-verification-receipt.schema.json",
+    "./schema/implementation-proof-manifest": "./schema/implementation-proof-manifest.schema.json",
+    "./schema/implementation-verification-receipt": "./schema/implementation-verification-receipt.schema.json",
     "./schema/consumer-verification-receipt": "./schema/consumer-verification-receipt.schema.json",
     "./schema/contract-ir": "./schema/contract-ir.schema.json",
     "./schema/language-boundaries": "./schema/language-boundaries.schema.json",

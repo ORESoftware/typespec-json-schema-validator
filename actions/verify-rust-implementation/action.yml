@@ -1,0 +1,51 @@
+name: Verify Rust implementation proofs
+description: Bind concrete Rust implementation proofs to the exact behavioral digest and passed L3 formal receipt, then emit deterministic L4 evidence.
+inputs:
+  behavior_contract:
+    description: Independently authored behavior-contract/v1 JSON file.
+    required: true
+  formal_receipt:
+    description: Passed formal-verification-receipt/v1 from the L3 lane.
+    required: true
+  implementation_manifest:
+    description: Consumer-authored implementation-proof-manifest/v1 JSON file.
+    required: true
+  cargo_bin:
+    description: Cargo executable used for cargo kani.
+    required: false
+    default: cargo
+  verus_bin:
+    description: Verus executable.
+    required: false
+    default: verus
+  git_bin:
+    description: Git executable.
+    required: false
+    default: git
+  verification:
+    description: Workspace-relative path for the deterministic implementation verification receipt.
+    required: false
+    default: .typespec-json-schema-validator/implementation-verification.json
+outputs:
+  verification:
+    description: Implementation verification receipt path.
+    value: ${{ inputs.verification }}
+runs:
+  using: composite
+  steps:
+    - name: Install the immutable verifier's lockfile-pinned toolchain
+      shell: bash
+      working-directory: ${{ github.action_path }}/../..
+      run: npm ci --omit=dev
+    - name: Verify concrete Rust implementation evidence
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        TSJSV_IMPLEMENTATION_BEHAVIOR: ${{ inputs.behavior_contract }}
+        TSJSV_IMPLEMENTATION_FORMAL_RECEIPT: ${{ inputs.formal_receipt }}
+        TSJSV_IMPLEMENTATION_MANIFEST: ${{ inputs.implementation_manifest }}
+        TSJSV_IMPLEMENTATION_CARGO_BIN: ${{ inputs.cargo_bin }}
+        TSJSV_IMPLEMENTATION_VERUS_BIN: ${{ inputs.verus_bin }}
+        TSJSV_IMPLEMENTATION_GIT_BIN: ${{ inputs.git_bin }}
+        TSJSV_IMPLEMENTATION_VERIFICATION: ${{ inputs.verification }}
+      run: node "${GITHUB_ACTION_PATH}/../../scripts/verify-rust-implementation.mjs"
