@@ -55,6 +55,37 @@ test('ores-compose machine v1 is executable peer-authority contract evidence', a
   assert.equal(config.typespec, 'main.tsp');
   assert.equal(config.jsonSchema, 'authored.schema.json');
 
+  const typeSpec = await readFile(join(contractRoot, 'main.tsp'), 'utf8');
+  const authored = JSON.parse(await readFile(join(contractRoot, 'authored.schema.json'), 'utf8'));
+  const defs = authored.$defs;
+
+  const ensure = defs.EnsureRequest;
+  assert.equal(ensure.additionalProperties, false);
+  for (const forbidden of ['runtime', 'network', 'command', 'argv', 'cwd', 'shell', 'backend']) {
+    assert.equal(ensure.properties[forbidden], undefined, `EnsureRequest unexpectedly exposes ${forbidden}`);
+  }
+  const ensureTypeSpec = typeSpec.match(/model\s+EnsureRequest\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+  for (const forbidden of ['runtime:', 'network:', 'command:', 'argv:', 'cwd:', 'shell:', 'backend:']) {
+    assert.equal(ensureTypeSpec.includes(forbidden), false, `TypeSpec EnsureRequest unexpectedly exposes ${forbidden}`);
+  }
+
+  const errorCodes = defs.MachineErrorResponse.properties.code.anyOf.map((entry) => entry.const);
+  assert.ok(errorCodes.includes('job_not_found'));
+  assert.match(typeSpec, /\|\s*"job_not_found"/);
+
+  const ingressPattern = new RegExp(defs.MachineIngress.properties.authority.pattern);
+  assert.equal(ingressPattern.test('127.0.0.1:39123'), true);
+  assert.equal(ingressPattern.test('[::1]:39123'), true);
+  assert.equal(ingressPattern.test('/tmp/ores-compose/machine.sock'), true);
+  assert.equal(ingressPattern.test('10.0.0.9:8080'), false);
+  assert.equal(ingressPattern.test('8.8.8.8:53'), false);
+
+  const decimalPattern = '^[1-9][0-9]{0,19}$';
+  assert.equal(defs.EnqueueResponse.properties.job_id.pattern, decimalPattern);
+  assert.equal(defs.JobStatusResponse.properties.job_id.pattern, decimalPattern);
+  assert.equal(defs.ActiveSystem.properties.generation.pattern, decimalPattern);
+  assert.equal(defs.MachineErrorResponse.properties.job_id.pattern, decimalPattern);
+
   const reportPath = join(temp, 'report.json');
   const contractIrPath = join(temp, 'contract-ir.json');
   const generatedDir = join(temp, 'generated');
