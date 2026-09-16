@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { SchemaResolver, validateInstance } from './instance-validator.mjs';
@@ -13,9 +13,7 @@ function boundedInteger(value, fallback, minimum, maximum) {
     : fallback;
 }
 
-async function readRegularJson(path, label, maxBytes = 2 * 1024 * 1024) {
-  const absolute = resolve(path);
-  const info = await lstat(absolute);
+function regularIdentity(info, label, maxBytes) {
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new Error(`${label} must be a regular, non-symlink file`);
   }
@@ -25,8 +23,55 @@ async function readRegularJson(path, label, maxBytes = 2 * 1024 * 1024) {
   if (info.size > maxBytes) {
     throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
   }
-  const text = await readFile(absolute, 'utf8');
-  return { absolute, value: JSON.parse(text) };
+  return { dev: info.dev, ino: info.ino };
+}
+
+function sameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+async function readBoundedUtf8(handle, maxBytes, label) {
+  const chunks = [];
+  let total = 0;
+  const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes + 1));
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, remaining), null);
+    if (bytesRead === 0) break;
+    chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    total += bytesRead;
+  }
+  if (total > maxBytes) {
+    throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, total));
+  } catch {
+    throw new Error(`${label} must be valid UTF-8`);
+  }
+}
+
+async function readRegularJson(path, label, maxBytes = 2 * 1024 * 1024) {
+  const absolute = resolve(path);
+  const before = await lstat(absolute);
+  const beforeIdentity = regularIdentity(before, label, maxBytes);
+  const handle = await open(absolute, 'r');
+  try {
+    const opened = await handle.stat();
+    const openedIdentity = regularIdentity(opened, label, maxBytes);
+    if (!sameIdentity(beforeIdentity, openedIdentity)) {
+      throw new Error(`${label} identity changed while opening`);
+    }
+    const text = await readBoundedUtf8(handle, maxBytes, label);
+    const after = await lstat(absolute);
+    const afterIdentity = regularIdentity(after, label, maxBytes);
+    if (!sameIdentity(openedIdentity, afterIdentity)) {
+      throw new Error(`${label} identity changed while reading`);
+    }
+    return { absolute, value: JSON.parse(text) };
+  } finally {
+    await handle.close();
+  }
 }
 
 function sanitizedSchemaFinding(finding) {
