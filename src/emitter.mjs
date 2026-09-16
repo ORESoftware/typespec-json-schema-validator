@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { basename, dirname, isAbsolute, join, resolve, win32 } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const MAX_CAPTURE_BYTES = 256 * 1024;
@@ -67,6 +67,31 @@ export function resolveCompilerForEmitter(resolvedEmitterPath = resolveJsonSchem
     throw new Error('the resolved TypeSpec compiler is not in the emitter dependency installation root');
   }
   return compilerPath;
+}
+
+/**
+ * Resolve the executable TypeSpec CLI from the exact compiler package seen by
+ * the pinned JSON Schema emitter. Never fall back to a consumer repository's
+ * local `node_modules/.bin/tsp`: a different compiler can successfully load the
+ * emitter while silently losing decorator state, producing invalid comparison
+ * evidence instead of a clean version-mismatch failure.
+ */
+export function resolveCompilerCliForEmitter(resolvedEmitterPath = resolveJsonSchemaEmitter()) {
+  let packageJsonPath;
+  try {
+    packageJsonPath = createRequire(resolvedEmitterPath).resolve('@typespec/compiler/package.json');
+  } catch (error) {
+    throw new Error(`the TypeSpec compiler package adjacent to the resolved emitter could not be resolved: ${error.message}`, {
+      cause: error,
+    });
+  }
+
+  const emitterRoot = dependencyInstallRoot(resolvedEmitterPath);
+  const compilerRoot = dependencyInstallRoot(packageJsonPath);
+  if (resolve(emitterRoot) !== resolve(compilerRoot)) {
+    throw new Error('the resolved TypeSpec compiler CLI is not in the emitter dependency installation root');
+  }
+  return join(dirname(packageJsonPath), 'cmd', 'tsp.js');
 }
 
 async function loadPinnedCompilerApi(emitterPath) {
@@ -189,19 +214,22 @@ function appendBounded(current, chunk, maxBytes) {
 }
 
 /**
- * Keep Windows execution shell-free while translating the two executable forms
- * TJSV legitimately owns: npm's local tsp.cmd shim and explicit Node scripts
- * used as a TypeSpec command in tests/consumers. All argv remains tokenized.
+ * Keep execution shell-free while translating JavaScript CLI entrypoints to
+ * Node explicitly. On Windows, also translate npm's tsp.cmd shim. All argv
+ * remains tokenized on every platform.
  */
 export function normalizeSpawnCommand(command, args, options = {}) {
   const platform = options.platform ?? process.platform;
   const nodeExecutable = options.nodeExecutable ?? process.execPath;
-  if (platform !== 'win32') return { command, args: [...args] };
+  const windows = platform === 'win32';
+  const absolute = windows ? win32.isAbsolute(command) : isAbsolute(command);
+  const extension = (windows ? win32.extname(command) : extname(command)).toLowerCase();
 
-  const extension = win32.extname(command).toLowerCase();
-  if (win32.isAbsolute(command) && ['.js', '.mjs', '.cjs'].includes(extension)) {
+  if (absolute && ['.js', '.mjs', '.cjs'].includes(extension)) {
     return { command: nodeExecutable, args: [command, ...args] };
   }
+
+  if (!windows) return { command, args: [...args] };
 
   const directory = win32.dirname(command);
   if (
@@ -255,28 +283,16 @@ export function runCommand(command, args, options = {}) {
   });
 }
 
-async function executableCandidate(paths) {
-  for (const path of paths) {
-    if (!path) {
-      continue;
-    }
-    if (await exists(path)) {
-      return path;
-    }
-  }
-  return undefined;
-}
-
+/**
+ * Resolve the TypeSpec CLI coupled to the pinned emitter. An explicit CLI is
+ * still honored for controlled compatibility tests; normal execution never
+ * searches the consumer working directory or PATH for an unrelated compiler.
+ */
 export async function resolveTspBinary(explicit) {
   if (explicit) {
     return explicit;
   }
-  const executable = process.platform === 'win32' ? 'tsp.cmd' : 'tsp';
-  const local = await executableCandidate([
-    join(MODULE_ROOT, 'node_modules', '.bin', executable),
-    join(process.cwd(), 'node_modules', '.bin', executable),
-  ]);
-  return local ?? executable;
+  return resolveCompilerCliForEmitter();
 }
 
 export async function toolVersion(command, args = ['--version'], options = {}) {
