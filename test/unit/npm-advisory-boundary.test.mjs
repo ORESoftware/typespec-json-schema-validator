@@ -27,11 +27,25 @@ test('temporary GHSA-2q42-4q24-7rgv exception excludes the vulnerable OpenAPI3 e
   assert.doesNotMatch(emitterText, /@typespec\/openapi3/u);
 });
 
-test('pinned action compiler binary is preferred over a caller-workspace compiler', async () => {
+test('default compiler CLI is coupled to the pinned emitter dependency tree', async () => {
   const emitterText = await read('src/emitter.mjs');
-  const pinned = emitterText.indexOf("join(MODULE_ROOT, 'node_modules', '.bin', executable)");
-  const caller = emitterText.indexOf("join(process.cwd(), 'node_modules', '.bin', executable)");
-  assert.ok(pinned >= 0, 'missing module-root compiler candidate');
-  assert.ok(caller >= 0, 'missing caller-workspace compatibility candidate');
-  assert.ok(pinned < caller, 'caller workspace must not shadow the action lockfile-pinned compiler');
+
+  assert.match(
+    emitterText,
+    /export function resolveCompilerCliForEmitter\(resolvedEmitterPath = resolveJsonSchemaEmitter\(\)\)/u,
+  );
+  assert.match(
+    emitterText,
+    /const compilerPath = resolveCompilerForEmitter\(resolvedEmitterPath\);/u,
+  );
+  assert.match(
+    emitterText,
+    /return join\(compilerRoot, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp\.js'\);/u,
+  );
+  assert.match(emitterText, /return resolveCompilerCliForEmitter\(\);/u);
+  assert.doesNotMatch(
+    emitterText,
+    /join\(process\.cwd\(\), 'node_modules', '\.bin', executable\)/u,
+    'consumer workspace must not influence the default TypeSpec compiler selection',
+  );
 });
