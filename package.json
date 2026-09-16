@@ -12,6 +12,7 @@
       "import": "./src/index.mjs",
       "types": "./src/index.d.ts"
     },
+    "./config-instance": "./src/config-instance.mjs",
     "./runtime-conformance": {
       "import": "./src/runtime-conformance/index.mjs",
       "types": "./src/runtime-conformance/index.d.mts"
@@ -90,6 +91,7 @@
   "types": "./src/index.d.ts",
   "bin": {
     "tjsv": "./bin/typespec-json-schema-validator.mjs",
+    "tjsv-config": "./bin/config-shape.mjs",
     "tsjsv": "./bin/typespec-json-schema-validator.mjs",
     "typespec-json-schema-validator": "./bin/typespec-json-schema-validator.mjs"
   },
