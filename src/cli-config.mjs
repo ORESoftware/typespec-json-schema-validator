@@ -77,6 +77,7 @@ export function loadCliConfiguration(argv = process.argv) {
       verification: env.TSJSV_VERIFICATION || undefined,
       projectionRoot: env.TSJSV_PROJECTION_ROOT || undefined,
       projectionVerification: env.TSJSV_PROJECTION_VERIFICATION || undefined,
+      configMode: env.TSJSV_CONFIG_MODE || undefined,
     });
   }
   const command = parsedCommand;
@@ -102,6 +103,26 @@ export function loadCliConfiguration(argv = process.argv) {
   }
 
   switch (command) {
+    case 'config': {
+      const mode = env.TSJSV_CONFIG_MODE || 'build';
+      if (!['build', 'runtime'].includes(mode)) {
+        throw new CliUsageError('--mode must be build or runtime', { command, configMode: mode });
+      }
+      const maxErrors = integerValue(env.TSJSV_CONFIG_MAX_ERRORS, 32);
+      if (maxErrors < 1 || maxErrors > 256) {
+        throw new CliUsageError('--max-errors must be between 1 and 256', {
+          command,
+          configMode: mode,
+        });
+      }
+      return {
+        ...common,
+        authoredSchema: required(env, 'TSJSV_AUTHORED_SCHEMA', '--schema'),
+        configInstance: env.TSJSV_CONFIG_INSTANCE || '-',
+        configMode: mode,
+        maxErrors,
+      };
+    }
     case 'legal-rollout': {
       const minExternal = integerValue(env.TSJSV_LEGAL_MIN_EXTERNAL, 5);
       const minInternal = integerValue(env.TSJSV_LEGAL_MIN_INTERNAL, 3);
