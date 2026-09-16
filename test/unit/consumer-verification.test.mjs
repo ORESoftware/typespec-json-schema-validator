@@ -7,7 +7,7 @@ function fixture() {
     contractIr: {
       schema: 'ores.typespec-json-schema-validator.contract-ir/v1',
       status: 'passed', admissible: true, irId: hex('a'),
-      admission: { scope: { complete: true, admittedDeclarations: 2 } },
+      admission: { scope: { complete: true, admittedDeclarations: 2, excludedDeclarations: 0, outOfScopeDeclarations: 0 } },
       declarations: [{ id: 'Example.User' }, { id: 'Example.Role' }],
       excludedDeclarations: [], outOfScopeDeclarations: [],
     },
@@ -31,8 +31,37 @@ test('invokes the canonical verifier with explicit caller paths and preserves in
   });
   assert.equal(calls, 1); assert.deepEqual(options, original);
   assert.deepEqual(result.declarationIds, ['Example.Role', 'Example.User']);
-  assert.equal(Object.isFrozen(result), true); assert.equal(Object.isFrozen(result.declarationIds), true);
+  assert.deepEqual(result.excludedDeclarationIds, []);
+  assert.deepEqual(result.outOfScopeDeclarationIds, []);
+  assert.equal(Object.isFrozen(result), true);
+  assert.equal(Object.isFrozen(result.declarationIds), true);
+  assert.equal(Object.isFrozen(result.excludedDeclarationIds), true);
+  assert.equal(Object.isFrozen(result.outOfScopeDeclarationIds), true);
 });
+
+test('admits only explicitly reviewed compiler helpers and non-schema declarations', async () => {
+  const options = fixture();
+  options.contractIr.admission.scope = {
+    complete: false,
+    admittedDeclarations: 2,
+    excludedDeclarations: 1,
+    outOfScopeDeclarations: 2,
+  };
+  options.contractIr.excludedDeclarations = [
+    { authority: 'typespec-generated-json-schema', id: 'RecordUnknown', kind: 'model' },
+  ];
+  options.contractIr.outOfScopeDeclarations = [
+    { authority: 'typespec', id: 'Ores.table', kind: 'dec', reason: 'not representable as a JSON Schema declaration' },
+    { authority: 'typespec', id: '$decorators', kind: 'const', reason: 'not representable as a JSON Schema declaration' },
+  ];
+  options.expectedExcludedDeclarations = ['typespec-generated-json-schema:RecordUnknown'];
+  options.expectedOutOfScopeDeclarations = ['typespec:Ores.table', 'typespec:$decorators'];
+
+  const result = await verifyConsumerContract(options, passed);
+  assert.deepEqual(result.excludedDeclarationIds, ['typespec-generated-json-schema:RecordUnknown']);
+  assert.deepEqual(result.outOfScopeDeclarationIds, ['typespec:$decorators', 'typespec:Ores.table']);
+});
+
 for (const [label, mutate] of [
   ['missing TypeSpec path', (x) => { delete x.typespec; }],
   ['missing authored path', (x) => { x.authoredSchema = ''; }],
@@ -40,13 +69,15 @@ for (const [label, mutate] of [
   ['empty expected inventory', (x) => { x.expectedDeclarations = []; }],
   ['duplicate expected inventory', (x) => { x.expectedDeclarations.push('Example.User'); }],
   ['invalid expected identity', (x) => { x.expectedDeclarations[0] = null; }],
+  ['duplicate reviewed exclusion', (x) => { x.expectedExcludedDeclarations = ['typespec:X', 'typespec:X']; }],
+  ['invalid reviewed out-of-scope identity', (x) => { x.expectedOutOfScopeDeclarations = ['']; }],
   ['unknown IR version', (x) => { x.contractIr.schema += '/unknown'; }],
   ['tombstone', (x) => { x.contractIr.admissible = false; }],
   ['copied string true', (x) => { x.contractIr.admissible = 'true'; }],
   ['stopped IR', (x) => { x.contractIr.status = 'stopped_for_evaluation'; }],
   ['incomplete scope', (x) => { x.contractIr.admission.scope.complete = false; }],
-  ['excluded declarations', (x) => { x.contractIr.excludedDeclarations.push({ id: 'Hidden' }); }],
-  ['out-of-scope operations', (x) => { x.contractIr.outOfScopeDeclarations.push({ id: 'read' }); }],
+  ['excluded declarations', (x) => { x.contractIr.excludedDeclarations.push({ authority: 'typespec', id: 'Hidden' }); }],
+  ['out-of-scope operations', (x) => { x.contractIr.outOfScopeDeclarations.push({ authority: 'typespec', id: 'read' }); }],
   ['missing inventory', (x) => { delete x.contractIr.declarations; }],
   ['partial inventory', (x) => { x.contractIr.declarations.pop(); }],
   ['duplicate actual identity', (x) => { x.contractIr.declarations[0].id = 'Example.Role'; }],
@@ -55,6 +86,25 @@ for (const [label, mutate] of [
   const options = fixture(); mutate(options);
   await assert.rejects(verifyConsumerContract(options, () => { assert.fail('must fail before verifier'); }), /STOPPED_FOR_EVALUATION/);
 });
+
+test('rejects reviewed exclusion inventories that omit or invent declarations', async () => {
+  const options = fixture();
+  options.contractIr.admission.scope = {
+    complete: false,
+    admittedDeclarations: 2,
+    excludedDeclarations: 1,
+    outOfScopeDeclarations: 0,
+  };
+  options.contractIr.excludedDeclarations = [
+    { authority: 'typespec-generated-json-schema', id: 'RecordUnknown' },
+  ];
+  options.expectedExcludedDeclarations = ['typespec-generated-json-schema:DifferentHelper'];
+  await assert.rejects(
+    verifyConsumerContract(options, () => { assert.fail('must fail before verifier'); }),
+    /excluded declaration inventory does not match/,
+  );
+});
+
 for (const [label, mutate] of [
   ['failed verification', (x) => { x.status = 'failed'; }],
   ['non-admissible verification', (x) => { x.admissible = false; }],

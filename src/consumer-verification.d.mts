@@ -10,6 +10,10 @@ export interface ConsumerVerificationOptions {
   generatedSchema: string;
   authoredSchema: string;
   expectedDeclarations: string[];
+  /** Reviewed non-admitted declaration identities as `<authority>:<id>`. */
+  expectedExcludedDeclarations?: string[];
+  /** Reviewed non-schema declaration identities as `<authority>:<id>`. */
+  expectedOutOfScopeDeclarations?: string[];
 }
 
 export interface ConsumerContractVerification {
@@ -21,13 +25,17 @@ export interface ConsumerContractVerification {
   expectedIrId: string;
   receiptRunId: string;
   declarationIds: readonly string[];
+  excludedDeclarationIds: readonly string[];
+  outOfScopeDeclarationIds: readonly string[];
   [key: string]: unknown;
 }
 
 /**
  * Verify an admissible Contract IR and parity receipt against the caller's exact
  * current TypeSpec, generated Schema B and independently authored Schema A,
- * while also enforcing a complete explicit declaration scope.
+ * while enforcing an explicit declaration inventory. Compiler helpers or
+ * non-schema TypeSpec declarations are accepted only when the caller explicitly
+ * reviews their exact `<authority>:<id>` identities.
  */
 export function verifyConsumerContract(
   options: ConsumerVerificationOptions,

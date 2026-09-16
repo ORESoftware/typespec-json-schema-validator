@@ -6,7 +6,14 @@ const seed = () => ({
   contractIr: {
     schema: 'ores.typespec-json-schema-validator.contract-ir/v1',
     status: 'passed', admissible: true, irId: 'a'.repeat(64),
-    admission: { scope: { complete: true, admittedDeclarations: 1 } },
+    admission: {
+      scope: {
+        complete: true,
+        admittedDeclarations: 1,
+        excludedDeclarations: 0,
+        outOfScopeDeclarations: 0,
+      },
+    },
     excludedDeclarations: [], outOfScopeDeclarations: [],
     declarations: [{ id: 'Domain.Item' }],
   },
@@ -62,7 +69,11 @@ test('dense explicit inventories preserve admission and frozen normalized result
   assert.equal(calls, 1);
   assert.equal(result.admissible, true);
   assert.deepEqual(result.declarationIds, ['Domain.Item']);
+  assert.deepEqual(result.excludedDeclarationIds, []);
+  assert.deepEqual(result.outOfScopeDeclarationIds, []);
   assert.deepEqual(options, before);
   assert.ok(Object.isFrozen(result));
   assert.ok(Object.isFrozen(result.declarationIds));
+  assert.ok(Object.isFrozen(result.excludedDeclarationIds));
+  assert.ok(Object.isFrozen(result.outOfScopeDeclarationIds));
 });
