@@ -7,7 +7,9 @@ import {
   dependencyInstallRoot,
   nodeModuleOverlayCandidate,
   normalizeSpawnCommand,
+  resolveCompilerCliForEmitter,
   resolveCompilerForEmitter,
+  resolveTspBinary,
 } from '../../src/emitter.mjs';
 
 test('Windows npm tsp.cmd is executed through node without a shell', () => {
@@ -43,7 +45,17 @@ test('explicit JavaScript TypeSpec commands use Node on Windows', () => {
   assert.deepEqual(result.args, [script, 'compile', 'main.tsp']);
 });
 
-test('non-TypeSpec commands and non-Windows platforms are left untouched', () => {
+test('absolute JavaScript compiler entrypoints use Node on non-Windows platforms', () => {
+  const script = '/opt/tjsv/node_modules/@typespec/compiler/cmd/tsp.js';
+  const result = normalizeSpawnCommand(script, ['--version'], {
+    platform: 'linux',
+    nodeExecutable: '/usr/bin/node',
+  });
+  assert.equal(result.command, '/usr/bin/node');
+  assert.deepEqual(result.args, [script, '--version']);
+});
+
+test('non-JavaScript commands are left untouched', () => {
   assert.deepEqual(
     normalizeSpawnCommand('/usr/bin/tsp', ['--version'], { platform: 'linux' }),
     { command: '/usr/bin/tsp', args: ['--version'] },
@@ -102,4 +114,16 @@ test('fallback compiler resolves from the same dependency install root as the em
   const emitter = fileURLToPath(import.meta.resolve('@typespec/json-schema'));
   const compiler = resolveCompilerForEmitter(emitter);
   assert.equal(dependencyInstallRoot(compiler), dependencyInstallRoot(emitter));
+});
+
+test('default TypeSpec CLI comes from the same dependency tree as the pinned emitter', async () => {
+  const emitter = fileURLToPath(import.meta.resolve('@typespec/json-schema'));
+  const cli = resolveCompilerCliForEmitter(emitter);
+  assert.equal(dependencyInstallRoot(cli), dependencyInstallRoot(emitter));
+  assert.match(cli.replaceAll('\\', '/'), /\/node_modules\/@typespec\/compiler\/cmd\/tsp\.js$/u);
+  assert.equal(await resolveTspBinary(), cli);
+});
+
+test('explicit TypeSpec CLI remains available for controlled compatibility tests', async () => {
+  assert.equal(await resolveTspBinary('/tmp/legacy-tsp'), '/tmp/legacy-tsp');
 });
