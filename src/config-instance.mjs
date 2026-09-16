@@ -170,6 +170,29 @@ export function validateConfigValue({
   }
 }
 
+export async function validateConfigValueWithSchemaFile({
+  schemaPath,
+  instance,
+  instanceSource = '<memory>',
+  mode = 'build',
+  formatAssertion = false,
+  maxErrors = 32,
+}) {
+  const { absolute: schemaSource, value: schema } = await readRegularJson(
+    schemaPath,
+    'authored JSON Schema',
+  );
+  return validateConfigValue({
+    schema,
+    instance,
+    schemaSource,
+    instanceSource,
+    mode,
+    formatAssertion,
+    maxErrors,
+  });
+}
+
 export async function validateConfigJsonFile({
   schemaPath,
   instancePath,
