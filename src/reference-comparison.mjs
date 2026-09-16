@@ -135,6 +135,27 @@ function safeInlineHelper(target) {
   return safeInlineStringLeaf(target) ?? safeInlineRecordLeaf(target);
 }
 
+function safeInlineUnconstrainedRecordWithSibling(assertionNode, target) {
+  const keys = Object.keys(assertionNode).sort();
+  if (
+    keys.length !== 2
+    || keys[0] !== '$ref'
+    || keys[1] !== 'additionalProperties'
+    || typeof assertionNode.$ref !== 'string'
+  ) {
+    return null;
+  }
+  const leaf = safeInlineRecordLeaf(target);
+  if (!leaf || Object.keys(leaf).length !== 1 || leaf.type !== 'object') return null;
+  const value = assertionNode.additionalProperties;
+  if (value !== true && value !== false && !isPlainObject(value)) return null;
+  // Draft 2020-12 treats $ref siblings conjunctively. For an ignored helper that
+  // proves only `type: object` and otherwise accepts every property, moving the
+  // sibling additionalProperties assertion onto that object is exactly the same
+  // executable schema. This is comparison-only; neither authority is rewritten.
+  return { type: 'object', additionalProperties: value };
+}
+
 /** Bind references before comparison is allowed to remove resource metadata. */
 export function createScopedSchemaComparison({ collection, schemaMap, expectedDeclarations, lane, onFinding }) {
   // Declaration-only callers can perform a structural comparison, but have no
@@ -174,12 +195,18 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
       .filter(([key]) => !NON_VALIDATING_ORES_ANNOTATIONS.has(key));
     const assertionNode = Object.fromEntries(assertionEntries);
     const nodeKeys = Object.keys(assertionNode);
-    if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof assertionNode.$ref === 'string') {
+    if (typeof assertionNode.$ref === 'string') {
       const target = resolver.resolve(assertionNode.$ref, base);
       if (target && targetIdentity(target) === undefined) {
-        const leaf = safeInlineHelper(target);
-        if (leaf) {
-          return visit(leaf, target.parentBase, target.pointer, declaration);
+        if (nodeKeys.length === 1) {
+          const leaf = safeInlineHelper(target);
+          if (leaf) {
+            return visit(leaf, target.parentBase, target.pointer, declaration);
+          }
+        }
+        const constrainedRecord = safeInlineUnconstrainedRecordWithSibling(assertionNode, target);
+        if (constrainedRecord) {
+          return visit(constrainedRecord, target.parentBase, target.pointer, declaration);
         }
       }
     }
