@@ -71,27 +71,16 @@ export function resolveCompilerForEmitter(resolvedEmitterPath = resolveJsonSchem
 
 /**
  * Resolve the executable TypeSpec CLI from the exact compiler package seen by
- * the pinned JSON Schema emitter. Never fall back to a consumer repository's
- * local `node_modules/.bin/tsp`: a different compiler can successfully load the
- * emitter while silently losing decorator state, producing invalid comparison
- * evidence instead of a clean version-mismatch failure.
+ * the pinned JSON Schema emitter. Derive the package directory from the
+ * already-resolved compiler module instead of resolving compiler/package.json:
+ * package export maps are allowed to hide package.json even when the compiler
+ * itself is resolvable. This keeps the CLI in the same validated installation
+ * root without consulting a consumer repository's node_modules tree or PATH.
  */
 export function resolveCompilerCliForEmitter(resolvedEmitterPath = resolveJsonSchemaEmitter()) {
-  let packageJsonPath;
-  try {
-    packageJsonPath = createRequire(resolvedEmitterPath).resolve('@typespec/compiler/package.json');
-  } catch (error) {
-    throw new Error(`the TypeSpec compiler package adjacent to the resolved emitter could not be resolved: ${error.message}`, {
-      cause: error,
-    });
-  }
-
-  const emitterRoot = dependencyInstallRoot(resolvedEmitterPath);
-  const compilerRoot = dependencyInstallRoot(packageJsonPath);
-  if (resolve(emitterRoot) !== resolve(compilerRoot)) {
-    throw new Error('the resolved TypeSpec compiler CLI is not in the emitter dependency installation root');
-  }
-  return join(dirname(packageJsonPath), 'cmd', 'tsp.js');
+  const compilerPath = resolveCompilerForEmitter(resolvedEmitterPath);
+  const compilerRoot = dependencyInstallRoot(compilerPath);
+  return join(compilerRoot, 'node_modules', '@typespec', 'compiler', 'cmd', 'tsp.js');
 }
 
 async function loadPinnedCompilerApi(emitterPath) {
