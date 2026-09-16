@@ -13,6 +13,10 @@
       "types": "./src/index.d.ts"
     },
     "./config-instance": "./src/config-instance.mjs",
+    "./consumer-verification": {
+      "import": "./src/consumer-verification.mjs",
+      "types": "./src/consumer-verification.d.mts"
+    },
     "./runtime-conformance": {
       "import": "./src/runtime-conformance/index.mjs",
       "types": "./src/runtime-conformance/index.d.mts"
