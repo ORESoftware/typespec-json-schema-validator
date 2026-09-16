@@ -67,6 +67,81 @@ test('ignored string helper still exposes changed inline constraints', () => {
   );
 });
 
+test('ignored UUID helper with description is equivalent to inline UUID assertions', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'uuid.json',
+    type: 'string',
+    format: 'uuid',
+    description: 'Wire-level UUID helper.',
+  };
+  generated.$defs.Payload.properties.id = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.id = { type: 'string', format: 'uuid' };
+
+  const result = compare(generated, authored);
+  assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
+});
+
+test('ignored UUID resource ref with reviewed ORES sibling is equivalent to inline UUID assertions', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'uuid.json',
+    type: 'string',
+    format: 'uuid',
+  };
+  generated.$defs.Payload.properties.id = {
+    $ref: 'uuid.json',
+    'x-ores-references': 'Other.id',
+  };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.id = {
+    type: 'string',
+    format: 'uuid',
+    'x-ores-references': 'Other.id',
+  };
+
+  const result = compare(generated, authored);
+  assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
+});
+
+test('reviewed ORES persistence annotations do not create runtime schema drift', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = { type: 'string', format: 'uuid' };
+  generated.$defs.Payload.properties.id = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload['x-ores-table'] = 'payloads';
+  authored.$defs.Payload['x-ores-indexes'] = [['id']];
+  authored.$defs.Payload['x-ores-unique'] = [['id']];
+  authored.$defs.Payload.properties.id['x-ores-primary-key'] = true;
+  authored.$defs.Payload.properties.id['x-ores-references'] = 'Other.id';
+
+  const result = compare(generated, authored);
+  assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
+});
+
+test('unknown ORES extensions remain fail-closed', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = { type: 'string' };
+  generated.$defs.Payload.properties.value = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload['x-ores-unreviewed-policy'] = 'opaque';
+
+  const result = compare(generated, authored);
+  assert.ok(
+    result.findings.some(({ ruleId, pointer }) =>
+      ruleId === 'generated-authored-semantic-mismatch'
+      && pointer.endsWith('/x-ores-unreviewed-policy')),
+    canonicalStringify(result.findings),
+  );
+});
+
 test('ignored object helper remains outside static comparison admission', () => {
   const generated = baseSchema();
   generated.$defs.Helper = {
