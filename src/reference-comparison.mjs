@@ -84,16 +84,18 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
 
     // Comparison may inline one deliberately narrow class of ignored helper:
-    // a reference-only node that resolves to a self-contained string leaf made
-    // solely of scalar string assertions plus its own Draft-2020-12 `$schema`,
-    // string `$id`, and description metadata. This covers emitter helper scalars
-    // such as UUID/BoundedString/Hostname when the authored peer writes the exact
-    // same constraints inline. Runtime validation is unchanged. Mapped refs,
-    // refs with siblings, composed/nested-resource targets and recursive refs
-    // continue through the ordinary fail-closed reference path below.
-    const nodeKeys = Object.keys(node);
-    if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof node.$ref === 'string') {
-      const target = resolver.resolve(node.$ref, base);
+    // a reference-only assertion node that resolves to a self-contained string
+    // leaf made solely of scalar string assertions plus its own Draft-2020-12
+    // `$schema`, string `$id`, and description metadata. Reviewed ORES
+    // persistence extensions are non-validating annotations, so they may sit
+    // beside the $ref without blocking this comparison-only inlining. Unknown
+    // annotations or any assertion/composition sibling still fail closed.
+    const assertionEntries = Object.entries(node)
+      .filter(([key]) => !NON_VALIDATING_ORES_ANNOTATIONS.has(key));
+    const assertionNode = Object.fromEntries(assertionEntries);
+    const nodeKeys = Object.keys(assertionNode);
+    if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof assertionNode.$ref === 'string') {
+      const target = resolver.resolve(assertionNode.$ref, base);
       if (target && targetIdentity(target) === undefined) {
         const leaf = safeInlineStringLeaf(target);
         if (leaf) {
