@@ -26,6 +26,7 @@ outputs = [
 
 [bin]
 tjsv = "bin/typespec-json-schema-validator.mjs"
+tjsv-config = "bin/config-shape.mjs"
 tsjsv = "bin/typespec-json-schema-validator.mjs"
 typespec-json-schema-validator = "bin/typespec-json-schema-validator.mjs"
 
@@ -40,7 +41,7 @@ bins = ["tjsv", "tsjsv", "typespec-json-schema-validator"]
 [publish]
 include_readme = true
 tag_format = "v{version}"
-smoke_test = 'node "$ZED_PKG_TEST_TARGET/bin/typespec-json-schema-validator.mjs" doctor --quiet'
+smoke_test = 'node "$ZED_PKG_TEST_TARGET/bin/typespec-json-schema-validator.mjs" doctor --quiet && test -f "$ZED_PKG_TEST_TARGET/bin/config-shape.mjs"'
 exclude = [
   ".env",
   ".env.*",
