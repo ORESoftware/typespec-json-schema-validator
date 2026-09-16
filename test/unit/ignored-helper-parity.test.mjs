@@ -151,6 +151,85 @@ test('Record unknown helper is equivalent to an inline unconstrained JSON object
   assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
 });
 
+test('Record string helper preserves value constraints across closure encodings', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'RecordString.json',
+    type: 'object',
+    properties: {},
+    unevaluatedProperties: { type: 'string', maxLength: 128 },
+  };
+  generated.$defs.Payload.properties.headers = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Helper = {
+    type: 'object',
+    properties: {},
+    additionalProperties: { type: 'string', maxLength: 128 },
+    unevaluatedProperties: false,
+  };
+  authored.$defs.Payload.properties.headers = { $ref: '#/$defs/Helper' };
+
+  const result = compare(generated, authored);
+  assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
+});
+
+test('Record array-of-string helper preserves nested item constraints', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    type: 'object',
+    properties: {},
+    unevaluatedProperties: {
+      type: 'array',
+      items: { type: 'string', minLength: 1 },
+      maxItems: 16,
+    },
+  };
+  generated.$defs.Payload.properties.query = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Helper = {
+    type: 'object',
+    properties: {},
+    additionalProperties: {
+      type: 'array',
+      items: { type: 'string', minLength: 1 },
+      maxItems: 16,
+    },
+    unevaluatedProperties: false,
+  };
+
+  const result = compare(generated, authored);
+  assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
+});
+
+test('changed Record value constraint remains a semantic mismatch', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    type: 'object',
+    properties: {},
+    unevaluatedProperties: { type: 'string', maxLength: 128 },
+  };
+  generated.$defs.Payload.properties.headers = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Helper = {
+    type: 'object',
+    properties: {},
+    additionalProperties: { type: 'string', maxLength: 129 },
+    unevaluatedProperties: false,
+  };
+
+  const result = compare(generated, authored);
+  assert.ok(
+    result.findings.some(({ ruleId, pointer }) =>
+      ruleId === 'generated-authored-semantic-mismatch'
+      && pointer.includes('/properties/headers')),
+    canonicalStringify(result.findings),
+  );
+});
+
 test('unknown ORES extensions remain fail-closed', () => {
   const generated = baseSchema();
   generated.$defs.Helper = { type: 'string' };
@@ -189,7 +268,7 @@ test('ignored structured object helper remains outside static comparison admissi
   );
 });
 
-test('ignored constrained object helper remains fail-closed', () => {
+test('ignored constrained Record helper is compared rather than silently admitted', () => {
   const generated = baseSchema();
   generated.$defs.Helper = {
     type: 'object',
@@ -203,7 +282,7 @@ test('ignored constrained object helper remains fail-closed', () => {
 
   const result = compare(generated, authored);
   assert.ok(
-    result.findings.some(({ ruleId }) => ruleId === 'json-schema-uncompared-ref-target'),
+    result.findings.some(({ ruleId }) => ruleId === 'generated-authored-semantic-mismatch'),
     canonicalStringify(result.findings),
   );
 });

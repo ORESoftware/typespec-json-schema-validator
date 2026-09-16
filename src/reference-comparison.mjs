@@ -15,8 +15,11 @@ const SAFE_INLINE_STRING_LEAF_KEYS = new Set([
 const SAFE_INLINE_STRING_ASSERTION_KEYS = new Set([
   'type', 'minLength', 'maxLength', 'pattern', 'format',
 ]);
-const SAFE_INLINE_OPEN_OBJECT_LEAF_KEYS = new Set([
+const SAFE_INLINE_RECORD_LEAF_KEYS = new Set([
   '$schema', '$id', 'type', 'properties', 'additionalProperties', 'unevaluatedProperties', 'description',
+]);
+const SAFE_INLINE_ARRAY_VALUE_KEYS = new Set([
+  'type', 'items', 'minItems', 'maxItems', 'uniqueItems',
 ]);
 
 // These ORES extensions are deliberately non-validating JSON Schema annotations.
@@ -51,47 +54,85 @@ function validLeafResourceMetadata(schema) {
   return true;
 }
 
-function safeInlineStringLeaf(target) {
-  if (!isPlainObject(target?.schema) || target.schema.type !== 'string') return null;
-  const keys = Object.keys(target.schema);
+function safeInlineStringSchema(schema) {
+  if (!isPlainObject(schema) || schema.type !== 'string') return null;
+  const keys = Object.keys(schema);
   if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_STRING_LEAF_KEYS.has(key))) {
     return null;
   }
-  if (!validLeafResourceMetadata(target.schema)) return null;
-  // `$schema`, `$id`, and description establish resource/presentation metadata,
-  // but this narrow leaf contains no references or compositional keywords whose
-  // meaning can depend on that identity. Static comparison therefore retains
-  // only its executable scalar assertions.
+  if (!validLeafResourceMetadata(schema)) return null;
   return Object.fromEntries(
-    Object.entries(target.schema).filter(([key]) => SAFE_INLINE_STRING_ASSERTION_KEYS.has(key)),
+    Object.entries(schema).filter(([key]) => SAFE_INLINE_STRING_ASSERTION_KEYS.has(key)),
   );
 }
 
-function safeInlineOpenObjectLeaf(target) {
+function safeInlineStringLeaf(target) {
+  return safeInlineStringSchema(target?.schema);
+}
+
+function safeInlineRecordValue(schema) {
+  if (schema === true) return {};
+  if (!isPlainObject(schema)) return null;
+  if (Object.keys(schema).length === 0) return {};
+
+  const stringSchema = safeInlineStringSchema(schema);
+  if (stringSchema) return stringSchema;
+
+  if (schema.type !== 'array') return null;
+  const keys = Object.keys(schema);
+  if (keys.some((key) => !SAFE_INLINE_ARRAY_VALUE_KEYS.has(key))) return null;
+  if (!Object.hasOwn(schema, 'items')) return null;
+  const items = safeInlineStringSchema(schema.items);
+  if (!items) return null;
+  const result = { type: 'array', items };
+  for (const key of ['minItems', 'maxItems', 'uniqueItems']) {
+    if (Object.hasOwn(schema, key)) result[key] = schema[key];
+  }
+  return result;
+}
+
+function safeInlineRecordLeaf(target) {
   if (!isPlainObject(target?.schema) || target.schema.type !== 'object') return null;
   const schema = target.schema;
   const keys = Object.keys(schema);
-  if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_OPEN_OBJECT_LEAF_KEYS.has(key))) {
+  if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_RECORD_LEAF_KEYS.has(key))) {
     return null;
   }
   if (!validLeafResourceMetadata(schema)) return null;
   if (Object.hasOwn(schema, 'properties')) {
     if (!isPlainObject(schema.properties) || Object.keys(schema.properties).length !== 0) return null;
   }
-  // Empty schema values accept every instance. This is the exact shape emitted
-  // for Record<unknown>: an object with no named properties and an unconstrained
-  // additional/unevaluated-property schema. Any non-empty assertion remains
-  // outside comparison admission and therefore fails closed.
-  for (const key of ['additionalProperties', 'unevaluatedProperties']) {
-    if (Object.hasOwn(schema, key)) {
-      if (!isPlainObject(schema[key]) || Object.keys(schema[key]).length !== 0) return null;
-    }
+
+  const hasAdditional = Object.hasOwn(schema, 'additionalProperties');
+  const hasUnevaluated = Object.hasOwn(schema, 'unevaluatedProperties');
+  const additional = hasAdditional ? schema.additionalProperties : undefined;
+  const unevaluated = hasUnevaluated ? schema.unevaluatedProperties : undefined;
+
+  // Normalize the two equivalent dictionary encodings used by the TypeSpec
+  // JSON Schema emitter and independently authored Draft 2020-12 schemas:
+  //   { unevaluatedProperties: <value-schema> }
+  //   { additionalProperties: <value-schema>, unevaluatedProperties: false }
+  // No named properties, compositions, refs, patterns, or mixed assertion
+  // channels are admitted here. The value schema itself is retained exactly
+  // enough for comparison; a changed constraint therefore remains visible.
+  let valueSchema;
+  if (hasAdditional && additional !== false) {
+    if (hasUnevaluated && unevaluated !== false) return null;
+    valueSchema = additional;
+  } else if (!hasAdditional && hasUnevaluated && unevaluated !== false) {
+    valueSchema = unevaluated;
+  } else {
+    return null;
   }
-  return { type: 'object' };
+
+  const value = safeInlineRecordValue(valueSchema);
+  if (value === null) return null;
+  if (Object.keys(value).length === 0) return { type: 'object' };
+  return { type: 'object', additionalProperties: value };
 }
 
 function safeInlineHelper(target) {
-  return safeInlineStringLeaf(target) ?? safeInlineOpenObjectLeaf(target);
+  return safeInlineStringLeaf(target) ?? safeInlineRecordLeaf(target);
 }
 
 /** Bind references before comparison is allowed to remove resource metadata. */
@@ -124,8 +165,9 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
 
     // Comparison may inline deliberately narrow ignored helpers: a reference-only
-    // assertion node that resolves either to a self-contained string leaf or to
-    // the unconstrained object shape emitted for Record<unknown>. Reviewed ORES
+    // assertion node that resolves to a self-contained string leaf or a pure
+    // Record<T> dictionary helper whose value schema is a reviewed scalar/array
+    // shape. Constraints are preserved during normalization. Reviewed ORES
     // annotations may sit beside the $ref because they are non-validating.
     // Unknown annotations or any other assertion/composition sibling fail closed.
     const assertionEntries = Object.entries(node)
