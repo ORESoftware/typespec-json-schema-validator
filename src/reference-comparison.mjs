@@ -15,20 +15,41 @@ const SAFE_INLINE_STRING_LEAF_KEYS = new Set([
 const SAFE_INLINE_STRING_ASSERTION_KEYS = new Set([
   'type', 'minLength', 'maxLength', 'pattern', 'format',
 ]);
+const SAFE_INLINE_OPEN_OBJECT_LEAF_KEYS = new Set([
+  '$schema', '$id', 'type', 'properties', 'additionalProperties', 'unevaluatedProperties', 'description',
+]);
 
-// These ORES persistence extensions are deliberately non-validating JSON Schema
-// annotations. They are consumed and independently checked by ores-contracts;
-// the runtime/language TJSV lane must not mistake their presence in an authored
-// schema for a data-validation difference when the official TypeSpec JSON Schema
-// emitter cannot carry them. The list is closed and reviewed: unknown `x-*`
-// keywords remain visible to structural parity and therefore fail closed.
+// These ORES extensions are deliberately non-validating JSON Schema annotations.
+// Persistence/code-generation annotations are independently checked by
+// ores-contracts; x-ores-invariants is a runtime documentation marker whose
+// corresponding rule must be enforced by the owning runtime contract tests.
+// The runtime/language TJSV lane must not mistake their presence in an authored
+// schema for an executable JSON Schema difference when the official TypeSpec
+// JSON Schema emitter cannot carry them. The list is closed and reviewed:
+// unknown `x-*` keywords remain visible to structural parity and fail closed.
 const NON_VALIDATING_ORES_ANNOTATIONS = new Set([
   'x-ores-indexes',
+  'x-ores-invariants',
+  'x-ores-json',
   'x-ores-primary-key',
   'x-ores-references',
   'x-ores-table',
   'x-ores-unique',
+  'x-ores-width',
 ]);
+
+function validLeafResourceMetadata(schema) {
+  if (
+    Object.hasOwn(schema, '$schema')
+    && schema.$schema !== JSON_SCHEMA_DRAFT_2020_12
+  ) {
+    return false;
+  }
+  if (Object.hasOwn(schema, '$id') && typeof schema.$id !== 'string') {
+    return false;
+  }
+  return true;
+}
 
 function safeInlineStringLeaf(target) {
   if (!isPlainObject(target?.schema) || target.schema.type !== 'string') return null;
@@ -36,15 +57,7 @@ function safeInlineStringLeaf(target) {
   if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_STRING_LEAF_KEYS.has(key))) {
     return null;
   }
-  if (
-    Object.hasOwn(target.schema, '$schema')
-    && target.schema.$schema !== JSON_SCHEMA_DRAFT_2020_12
-  ) {
-    return null;
-  }
-  if (Object.hasOwn(target.schema, '$id') && typeof target.schema.$id !== 'string') {
-    return null;
-  }
+  if (!validLeafResourceMetadata(target.schema)) return null;
   // `$schema`, `$id`, and description establish resource/presentation metadata,
   // but this narrow leaf contains no references or compositional keywords whose
   // meaning can depend on that identity. Static comparison therefore retains
@@ -52,6 +65,33 @@ function safeInlineStringLeaf(target) {
   return Object.fromEntries(
     Object.entries(target.schema).filter(([key]) => SAFE_INLINE_STRING_ASSERTION_KEYS.has(key)),
   );
+}
+
+function safeInlineOpenObjectLeaf(target) {
+  if (!isPlainObject(target?.schema) || target.schema.type !== 'object') return null;
+  const schema = target.schema;
+  const keys = Object.keys(schema);
+  if (keys.length === 0 || keys.some((key) => !SAFE_INLINE_OPEN_OBJECT_LEAF_KEYS.has(key))) {
+    return null;
+  }
+  if (!validLeafResourceMetadata(schema)) return null;
+  if (Object.hasOwn(schema, 'properties')) {
+    if (!isPlainObject(schema.properties) || Object.keys(schema.properties).length !== 0) return null;
+  }
+  // Empty schema values accept every instance. This is the exact shape emitted
+  // for Record<unknown>: an object with no named properties and an unconstrained
+  // additional/unevaluated-property schema. Any non-empty assertion remains
+  // outside comparison admission and therefore fails closed.
+  for (const key of ['additionalProperties', 'unevaluatedProperties']) {
+    if (Object.hasOwn(schema, key)) {
+      if (!isPlainObject(schema[key]) || Object.keys(schema[key]).length !== 0) return null;
+    }
+  }
+  return { type: 'object' };
+}
+
+function safeInlineHelper(target) {
+  return safeInlineStringLeaf(target) ?? safeInlineOpenObjectLeaf(target);
 }
 
 /** Bind references before comparison is allowed to remove resource metadata. */
@@ -83,13 +123,11 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
     if (!isPlainObject(node)) return node;
     const base = typeof node.$id === 'string' ? new URL(node.$id, inheritedBase).href.split('#')[0] : inheritedBase;
 
-    // Comparison may inline one deliberately narrow class of ignored helper:
-    // a reference-only assertion node that resolves to a self-contained string
-    // leaf made solely of scalar string assertions plus its own Draft-2020-12
-    // `$schema`, string `$id`, and description metadata. Reviewed ORES
-    // persistence extensions are non-validating annotations, so they may sit
-    // beside the $ref without blocking this comparison-only inlining. Unknown
-    // annotations or any assertion/composition sibling still fail closed.
+    // Comparison may inline deliberately narrow ignored helpers: a reference-only
+    // assertion node that resolves either to a self-contained string leaf or to
+    // the unconstrained object shape emitted for Record<unknown>. Reviewed ORES
+    // annotations may sit beside the $ref because they are non-validating.
+    // Unknown annotations or any other assertion/composition sibling fail closed.
     const assertionEntries = Object.entries(node)
       .filter(([key]) => !NON_VALIDATING_ORES_ANNOTATIONS.has(key));
     const assertionNode = Object.fromEntries(assertionEntries);
@@ -97,7 +135,7 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
     if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof assertionNode.$ref === 'string') {
       const target = resolver.resolve(assertionNode.$ref, base);
       if (target && targetIdentity(target) === undefined) {
-        const leaf = safeInlineStringLeaf(target);
+        const leaf = safeInlineHelper(target);
         if (leaf) {
           return visit(leaf, target.parentBase, target.pointer, declaration);
         }

@@ -109,17 +109,43 @@ test('ignored UUID resource ref with reviewed ORES sibling is equivalent to inli
   assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
 });
 
-test('reviewed ORES persistence annotations do not create runtime schema drift', () => {
+test('reviewed ORES non-validating annotations do not create runtime schema drift', () => {
   const generated = baseSchema();
   generated.$defs.Helper = { type: 'string', format: 'uuid' };
   generated.$defs.Payload.properties.id = { $ref: '#/$defs/Helper' };
+  generated.$defs.Payload.properties.count = { type: 'integer' };
+  generated.$defs.Payload.properties.metadata = { type: 'object' };
 
   const authored = structuredClone(generated);
   authored.$defs.Payload['x-ores-table'] = 'payloads';
   authored.$defs.Payload['x-ores-indexes'] = [['id']];
   authored.$defs.Payload['x-ores-unique'] = [['id']];
+  authored.$defs.Payload['x-ores-invariants'] = ['runtime-owned invariant'];
   authored.$defs.Payload.properties.id['x-ores-primary-key'] = true;
   authored.$defs.Payload.properties.id['x-ores-references'] = 'Other.id';
+  authored.$defs.Payload.properties.count['x-ores-width'] = 64;
+  authored.$defs.Payload.properties.metadata['x-ores-json'] = true;
+
+  const result = compare(generated, authored);
+  assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
+});
+
+test('Record unknown helper is equivalent to an inline unconstrained JSON object', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'RecordUnknown.json',
+    type: 'object',
+    properties: {},
+    unevaluatedProperties: {},
+  };
+  generated.$defs.Payload.properties.metadata = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.metadata = {
+    type: 'object',
+    'x-ores-json': true,
+  };
 
   const result = compare(generated, authored);
   assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
@@ -142,7 +168,7 @@ test('unknown ORES extensions remain fail-closed', () => {
   );
 });
 
-test('ignored object helper remains outside static comparison admission', () => {
+test('ignored structured object helper remains outside static comparison admission', () => {
   const generated = baseSchema();
   generated.$defs.Helper = {
     type: 'object',
@@ -155,6 +181,25 @@ test('ignored object helper remains outside static comparison admission', () => 
     type: 'object',
     properties: { value: { type: 'string' } },
   };
+
+  const result = compare(generated, authored);
+  assert.ok(
+    result.findings.some(({ ruleId }) => ruleId === 'json-schema-uncompared-ref-target'),
+    canonicalStringify(result.findings),
+  );
+});
+
+test('ignored constrained object helper remains fail-closed', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    type: 'object',
+    properties: {},
+    unevaluatedProperties: { type: 'string' },
+  };
+  generated.$defs.Payload.properties.metadata = { $ref: '#/$defs/Helper' };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.metadata = { type: 'object' };
 
   const result = compare(generated, authored);
   assert.ok(
