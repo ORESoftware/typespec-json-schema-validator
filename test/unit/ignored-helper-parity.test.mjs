@@ -85,6 +85,30 @@ test('ignored UUID helper with description is equivalent to inline UUID assertio
   assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
 });
 
+test('ignored UUID resource ref with reviewed ORES sibling is equivalent to inline UUID assertions', () => {
+  const generated = baseSchema();
+  generated.$defs.Helper = {
+    $schema: JSON_SCHEMA_DRAFT_2020_12,
+    $id: 'uuid.json',
+    type: 'string',
+    format: 'uuid',
+  };
+  generated.$defs.Payload.properties.id = {
+    $ref: 'uuid.json',
+    'x-ores-references': 'Other.id',
+  };
+
+  const authored = structuredClone(generated);
+  authored.$defs.Payload.properties.id = {
+    type: 'string',
+    format: 'uuid',
+    'x-ores-references': 'Other.id',
+  };
+
+  const result = compare(generated, authored);
+  assert.deepEqual(result.findings, [], canonicalStringify(result.findings));
+});
+
 test('reviewed ORES persistence annotations do not create runtime schema drift', () => {
   const generated = baseSchema();
   generated.$defs.Helper = { type: 'string', format: 'uuid' };
