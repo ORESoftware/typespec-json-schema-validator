@@ -10,6 +10,20 @@ test('tjsv is canonical while compatibility aliases and config evaluator remain'
   assert.equal(pkg.bin['typespec-json-schema-validator'], pkg.bin.tjsv);
 });
 
+test('tjsv-config delegates to the same flags-2-env command contract', async () => {
+  const [aliasSource, mainSource, flags] = await Promise.all([
+    readFile(new URL('../../bin/config-shape.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../../bin/typespec-json-schema-validator.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../../.cli-flags.toml', import.meta.url), 'utf8'),
+  ]);
+  assert.match(aliasSource, /runConfigCommand/u);
+  assert.doesNotMatch(aliasSource, /function\s+(?:option|flag)\s*\(/u);
+  assert.match(mainSource, /process\.argv\[2\]\s*===\s*'config'/u);
+  assert.match(flags, /\[commands\.config\]/u);
+  assert.match(flags, /TSJSV_CONFIG_MODE/u);
+  assert.match(flags, /TSJSV_CONFIG_MAX_ERRORS/u);
+});
+
 test('Zed retains the package-owned flags contract and exposes the config evaluator', async () => {
   const manifest = (await readFile(new URL('../../.zpkg.toml', import.meta.url), 'utf8'))
     .replace(/\r\n?/gu, '\n');

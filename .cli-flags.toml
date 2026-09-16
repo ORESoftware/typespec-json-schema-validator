@@ -82,6 +82,38 @@ type = "bool"
 default = "false"
 help = "Suppress the human-readable summary; the JSON report is still written."
 
+[commands.config]
+help = "Validate one parsed configuration instance against independently authored JSON Schema A after peer-authority parity has been admitted separately by tjsv check."
+env = "TSJSV_COMMAND_CONFIG"
+
+[commands.config.flags.schema]
+env = "TSJSV_AUTHORED_SCHEMA"
+aliases = ["schema", "authored-schema"]
+short = "s"
+type = "string"
+help = "Independently authored Draft 2020-12 JSON Schema A used for config-instance admission."
+
+[commands.config.flags.instance]
+env = "TSJSV_CONFIG_INSTANCE"
+aliases = ["instance"]
+type = "string"
+default = "-"
+help = "JSON config instance path, or - to read one bounded JSON value from stdin."
+
+[commands.config.flags.mode]
+env = "TSJSV_CONFIG_MODE"
+aliases = ["mode"]
+type = "string"
+default = "build"
+help = "Admission mode: build fails closed; runtime emits warning receipts and continues."
+
+[commands.config.flags.max-errors]
+env = "TSJSV_CONFIG_MAX_ERRORS"
+aliases = ["max-errors"]
+type = "integer"
+default = 32
+help = "Maximum retained sanitized config-instance validation errors (1..256)."
+
 [commands.check]
 help = "Compile TypeSpec to comparison-only JSON Schema, then compare it with the independently authored JSON Schema."
 env = "TSJSV_COMMAND_CHECK"
