@@ -135,6 +135,32 @@ function safeInlineHelper(target) {
   return safeInlineStringLeaf(target) ?? safeInlineRecordLeaf(target);
 }
 
+function safeInlineUnconstrainedRecordWithAdditionalProperties(node, target) {
+  if (!isPlainObject(node) || typeof node.$ref !== 'string') return null;
+  const keys = Object.keys(node);
+  if (
+    keys.length !== 2
+    || !Object.hasOwn(node, 'additionalProperties')
+    || !keys.every((key) => key === '$ref' || key === 'additionalProperties')
+  ) {
+    return null;
+  }
+
+  const helper = safeInlineRecordLeaf(target);
+  if (!helper || Object.keys(helper).length !== 1 || helper.type !== 'object') return null;
+
+  // The TypeSpec JSON Schema emitter represents an annotated Record<unknown>
+  // as a permissive Record helper plus a sibling additionalProperties schema.
+  // Draft 2020-12 applies the sibling conjunctively with the $ref. Because this
+  // admitted helper contributes only the object type, replacing the pair with
+  // an inline object and the exact sibling schema preserves validation semantics
+  // and keeps every value constraint visible to the normal recursive comparison.
+  return {
+    type: 'object',
+    additionalProperties: node.additionalProperties,
+  };
+}
+
 /** Bind references before comparison is allowed to remove resource metadata. */
 export function createScopedSchemaComparison({ collection, schemaMap, expectedDeclarations, lane, onFinding }) {
   // Declaration-only callers can perform a structural comparison, but have no
@@ -167,19 +193,30 @@ export function createScopedSchemaComparison({ collection, schemaMap, expectedDe
     // Comparison may inline deliberately narrow ignored helpers: a reference-only
     // assertion node that resolves to a self-contained string leaf or a pure
     // Record<T> dictionary helper whose value schema is a reviewed scalar/array
-    // shape. Constraints are preserved during normalization. Reviewed ORES
-    // annotations may sit beside the $ref because they are non-validating.
-    // Unknown annotations or any other assertion/composition sibling fail closed.
+    // shape. A permissive Record<unknown> may also carry the TypeSpec emitter's
+    // sibling additionalProperties assertion; that assertion is preserved exactly.
+    // Reviewed ORES annotations may sit beside the $ref because they are
+    // non-validating. Unknown annotations or any other assertion/composition
+    // sibling fail closed.
     const assertionEntries = Object.entries(node)
       .filter(([key]) => !NON_VALIDATING_ORES_ANNOTATIONS.has(key));
     const assertionNode = Object.fromEntries(assertionEntries);
     const nodeKeys = Object.keys(assertionNode);
-    if (nodeKeys.length === 1 && nodeKeys[0] === '$ref' && typeof assertionNode.$ref === 'string') {
+    if (typeof assertionNode.$ref === 'string') {
       const target = resolver.resolve(assertionNode.$ref, base);
       if (target && targetIdentity(target) === undefined) {
-        const leaf = safeInlineHelper(target);
-        if (leaf) {
-          return visit(leaf, target.parentBase, target.pointer, declaration);
+        if (nodeKeys.length === 1) {
+          const leaf = safeInlineHelper(target);
+          if (leaf) {
+            return visit(leaf, target.parentBase, target.pointer, declaration);
+          }
+        }
+        const recordWithSibling = safeInlineUnconstrainedRecordWithAdditionalProperties(
+          assertionNode,
+          target,
+        );
+        if (recordWithSibling) {
+          return visit(recordWithSibling, base, pointer, declaration);
         }
       }
     }
