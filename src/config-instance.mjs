@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises';
+import { lstat, open } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { SchemaResolver, validateInstance } from './instance-validator.mjs';
@@ -13,20 +13,72 @@ function boundedInteger(value, fallback, minimum, maximum) {
     : fallback;
 }
 
-async function readRegularJson(path, label, maxBytes = 2 * 1024 * 1024) {
-  const absolute = resolve(path);
-  const info = await lstat(absolute);
+function regularIdentity(info, label, maxBytes) {
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new Error(`${label} must be a regular, non-symlink file`);
   }
-  if (info.nlink !== 1) {
+  if (info.nlink !== 1n) {
     throw new Error(`${label} must not have multiple hard links`);
   }
-  if (info.size > maxBytes) {
+  if (info.size > BigInt(maxBytes)) {
     throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
   }
-  const text = await readFile(absolute, 'utf8');
-  return { absolute, value: JSON.parse(text) };
+  return { dev: info.dev, ino: info.ino };
+}
+
+function sameIdentity(left, right) {
+  return left.dev === right.dev && left.ino === right.ino;
+}
+
+async function readBoundedUtf8(handle, maxBytes, label) {
+  const chunks = [];
+  let total = 0;
+  const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, maxBytes + 1));
+  while (total <= maxBytes) {
+    const remaining = maxBytes + 1 - total;
+    const { bytesRead } = await handle.read(buffer, 0, Math.min(buffer.length, remaining), null);
+    if (bytesRead === 0) break;
+    chunks.push(Buffer.from(buffer.subarray(0, bytesRead)));
+    total += bytesRead;
+  }
+  if (total > maxBytes) {
+    throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
+  }
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks, total));
+  } catch {
+    throw new Error(`${label} must be valid UTF-8`);
+  }
+}
+
+async function readRegularJson(path, label, maxBytes = 2 * 1024 * 1024) {
+  const absolute = resolve(path);
+  // Keep pathname identity comparisons and opened-handle identity comparisons
+  // within the same stat source. Windows can report stable but non-comparable
+  // dev/ino values for lstat(path) versus FileHandle.stat(), so cross-source
+  // equality creates false replacement failures. Comparing each source before
+  // and after still detects pathname replacement and handle identity drift.
+  const before = await lstat(absolute, { bigint: true });
+  const beforeIdentity = regularIdentity(before, label, maxBytes);
+  const handle = await open(absolute, 'r');
+  try {
+    const opened = await handle.stat({ bigint: true });
+    const openedIdentity = regularIdentity(opened, label, maxBytes);
+    const text = await readBoundedUtf8(handle, maxBytes, label);
+    const openedAfter = await handle.stat({ bigint: true });
+    const openedAfterIdentity = regularIdentity(openedAfter, label, maxBytes);
+    if (!sameIdentity(openedIdentity, openedAfterIdentity)) {
+      throw new Error(`${label} opened-file identity changed while reading`);
+    }
+    const after = await lstat(absolute, { bigint: true });
+    const afterIdentity = regularIdentity(after, label, maxBytes);
+    if (!sameIdentity(beforeIdentity, afterIdentity)) {
+      throw new Error(`${label} pathname identity changed while reading`);
+    }
+    return { absolute, value: JSON.parse(text) };
+  } finally {
+    await handle.close();
+  }
 }
 
 function sanitizedSchemaFinding(finding) {
@@ -123,6 +175,29 @@ export function validateConfigValue({
       refusal: String(error?.name ?? 'SchemaEvaluationError'),
     });
   }
+}
+
+export async function validateConfigValueWithSchemaFile({
+  schemaPath,
+  instance,
+  instanceSource = '<memory>',
+  mode = 'build',
+  formatAssertion = false,
+  maxErrors = 32,
+}) {
+  const { absolute: schemaSource, value: schema } = await readRegularJson(
+    schemaPath,
+    'authored JSON Schema',
+  );
+  return validateConfigValue({
+    schema,
+    instance,
+    schemaSource,
+    instanceSource,
+    mode,
+    formatAssertion,
+    maxErrors,
+  });
 }
 
 export async function validateConfigJsonFile({
