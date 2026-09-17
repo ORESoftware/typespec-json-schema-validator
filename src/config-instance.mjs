@@ -17,10 +17,10 @@ function regularIdentity(info, label, maxBytes) {
   if (!info.isFile() || info.isSymbolicLink()) {
     throw new Error(`${label} must be a regular, non-symlink file`);
   }
-  if (info.nlink !== 1) {
+  if (info.nlink !== 1n) {
     throw new Error(`${label} must not have multiple hard links`);
   }
-  if (info.size > maxBytes) {
+  if (info.size > BigInt(maxBytes)) {
     throw new Error(`${label} exceeds the ${maxBytes}-byte limit`);
   }
   return { dev: info.dev, ino: info.ino };
@@ -53,17 +53,20 @@ async function readBoundedUtf8(handle, maxBytes, label) {
 
 async function readRegularJson(path, label, maxBytes = 2 * 1024 * 1024) {
   const absolute = resolve(path);
-  const before = await lstat(absolute);
+  // BigInt Stats preserve the full platform file identity. On Windows, dev/ino
+  // can exceed Number's exact integer range, which made a stable pathname and
+  // its opened handle appear to be different files after numeric rounding.
+  const before = await lstat(absolute, { bigint: true });
   const beforeIdentity = regularIdentity(before, label, maxBytes);
   const handle = await open(absolute, 'r');
   try {
-    const opened = await handle.stat();
+    const opened = await handle.stat({ bigint: true });
     const openedIdentity = regularIdentity(opened, label, maxBytes);
     if (!sameIdentity(beforeIdentity, openedIdentity)) {
       throw new Error(`${label} identity changed while opening`);
     }
     const text = await readBoundedUtf8(handle, maxBytes, label);
-    const after = await lstat(absolute);
+    const after = await lstat(absolute, { bigint: true });
     const afterIdentity = regularIdentity(after, label, maxBytes);
     if (!sameIdentity(openedIdentity, afterIdentity)) {
       throw new Error(`${label} identity changed while reading`);
