@@ -53,23 +53,27 @@ async function readBoundedUtf8(handle, maxBytes, label) {
 
 async function readRegularJson(path, label, maxBytes = 2 * 1024 * 1024) {
   const absolute = resolve(path);
-  // BigInt Stats preserve the full platform file identity. On Windows, dev/ino
-  // can exceed Number's exact integer range, which made a stable pathname and
-  // its opened handle appear to be different files after numeric rounding.
+  // Keep pathname identity comparisons and opened-handle identity comparisons
+  // within the same stat source. Windows can report stable but non-comparable
+  // dev/ino values for lstat(path) versus FileHandle.stat(), so cross-source
+  // equality creates false replacement failures. Comparing each source before
+  // and after still detects pathname replacement and handle identity drift.
   const before = await lstat(absolute, { bigint: true });
   const beforeIdentity = regularIdentity(before, label, maxBytes);
   const handle = await open(absolute, 'r');
   try {
     const opened = await handle.stat({ bigint: true });
     const openedIdentity = regularIdentity(opened, label, maxBytes);
-    if (!sameIdentity(beforeIdentity, openedIdentity)) {
-      throw new Error(`${label} identity changed while opening`);
-    }
     const text = await readBoundedUtf8(handle, maxBytes, label);
+    const openedAfter = await handle.stat({ bigint: true });
+    const openedAfterIdentity = regularIdentity(openedAfter, label, maxBytes);
+    if (!sameIdentity(openedIdentity, openedAfterIdentity)) {
+      throw new Error(`${label} opened-file identity changed while reading`);
+    }
     const after = await lstat(absolute, { bigint: true });
     const afterIdentity = regularIdentity(after, label, maxBytes);
-    if (!sameIdentity(openedIdentity, afterIdentity)) {
-      throw new Error(`${label} identity changed while reading`);
+    if (!sameIdentity(beforeIdentity, afterIdentity)) {
+      throw new Error(`${label} pathname identity changed while reading`);
     }
     return { absolute, value: JSON.parse(text) };
   } finally {
