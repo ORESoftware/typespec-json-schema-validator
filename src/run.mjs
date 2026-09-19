@@ -87,8 +87,22 @@ function intersectDeclarations(generatedCollection, authoredCollection, mapping)
   return pairs.sort((left, right) => left.generated.localeCompare(right.generated));
 }
 
+function corpusIdentity(corpus) {
+  return sha256(canonicalStringify(corpus.map(({ declaration, expectation, relativePath, instance }) => ({
+    declaration,
+    expectation,
+    relativePath,
+    instance,
+  }))));
+}
+
 /**
  * Run the differential lane unless it has been explicitly disabled.
+ *
+ * The corpus digest intentionally excludes absolute filesystem locations. An explicit
+ * corpus is often materialized under an invocation-specific temporary directory; that
+ * location is useful diagnostic metadata but is not part of the contract evidence's
+ * semantic identity.
  *
  * @returns {Promise<object|null>} `null` when the lane is switched off.
  */
@@ -97,7 +111,7 @@ async function runDifferentialLane(options, generatedCollection, authoredCollect
     return null;
   }
   const corpus = await loadInstanceCorpus(options.instances);
-  return crossValidate({
+  const result = crossValidate({
     generatedCollection,
     authoredCollection,
     declarationMap,
@@ -106,6 +120,10 @@ async function runDifferentialLane(options, generatedCollection, authoredCollect
     maxFindings: options.maxFindings,
     formatAssertion: options.formatAssertion === true,
   });
+  return {
+    ...result,
+    corpusDigest: options.instances ? corpusIdentity(corpus) : null,
+  };
 }
 
 function buildRunId(material) {
@@ -144,6 +162,7 @@ async function buildPassedOrStoppedReport({
       maxProbesPerDeclarationPerLane: options.maxProbes ?? 64,
       formatAssertion: options.formatAssertion === true,
       instanceCorpus: options.instances ? relativeDisplay(options.instances) : null,
+      instanceCorpusDigest: differential?.corpusDigest ?? null,
     },
   };
   const inputs = {
@@ -171,10 +190,17 @@ async function buildPassedOrStoppedReport({
     typespecCompiler: tspVersion,
     jsonSchemaEmitter: '@typespec/json-schema',
   };
+  const runIdentityConfiguration = {
+    ...configuration,
+    differential: {
+      ...configuration.differential,
+      instanceCorpus: null,
+    },
+  };
   const runId = buildRunId({
     schema: REPORT_SCHEMA,
     status,
-    configuration,
+    configuration: runIdentityConfiguration,
     inputDigests: {
       typespec: typespecInventory?.digest ?? null,
       authored: authoredCollection.digest,
