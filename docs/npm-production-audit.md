@@ -34,9 +34,23 @@ Three mechanisms make that visible before it bites, none of which relaxes the ga
 
 - Every gate run, including a passing one and including runs inside a consumer's pinned action, emits a warning (a GitHub `::warning::` annotation under Actions) for each applied exception expiring within the warning window, naming the package, advisory, expiry instant, days remaining, and owner.
 - The window is `30` days by default and can be widened or narrowed with `TSJSV_NPM_AUDIT_EXPIRY_WARNING_DAYS`. A malformed value fails the gate rather than silently reverting to the default. The window only affects when a warning is emitted; enforcement still happens exactly at `expiresAt`.
-- The scheduled `npm-advisory-exception-expiry` workflow runs the same gate daily in this repository and opens or updates one tracking issue while any exception is expired or inside the window.
+- The scheduled `npm-advisory-exception-expiry` workflow runs the same gate daily in this repository and reconciles one tracking issue on every run, on the clean path as well as the alert path.
 
 The receipt records `scope.expiryWarningDays` and an `exceptionsExpiringSoon` array, and an unwaived finding carries the ordered `remediation` steps, so both the human-readable output and the retained evidence say what to do next.
+
+### Tracking issue lifecycle
+
+The tracker is identified by a stable identity, never by its title or its position in a listing: an issue (not a pull request) carrying both the `tjsv-npm-advisory-exception-expiry` label and the hidden body marker `<!-- tjsv:npm-advisory-exception-expiry-tracker -->`. Applying a label needs triage permission, so an outside reporter who pastes the marker cannot get an issue adopted or closed; the marker keeps an unrelated issue that a maintainer labeled from being touched. Do not remove either from the tracker.
+
+| Alert | Open tracker | Closed tracker | Action |
+| --- | --- | --- | --- |
+| yes | no | no | **create** the labeled, marked issue (and the label, if missing) |
+| yes | yes | any | **update** the oldest open tracker's title and body and add a comment; never create a duplicate. Extra open trackers are closed as duplicates of it |
+| yes | no | yes | **reopen** the most recently closed tracker, so one issue keeps the whole history, rather than opening a new one |
+| no | yes | any | **close** every open tracker with a `Resolved:` comment naming the scheduled run and commit — only when the audit gate also passed |
+| no | no | any | **noop**; a run with no tracker is a normal state and never fails the schedule |
+
+The decision is the pure function `planExpiryTrackerReconciliation` in `src/npm-audit-expiry-tracker.mjs`; it returns the exact REST operations and the workflow step only fetches state and executes them. It fails closed in its own right: the alert verdict must be the literal `true` or `false` (a missing or malformed verdict, or an unreadable issue listing, stops the step instead of being read as "clean"), and a clean verdict while the production audit gate is red holds the tracker open. The lifecycle never feeds back into enforcement: the final step still fails the run whenever the gate did not pass.
 
 ## When an exception expires
 

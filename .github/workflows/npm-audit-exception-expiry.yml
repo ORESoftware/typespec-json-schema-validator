@@ -65,26 +65,42 @@ jobs:
           TSJSV_NPM_AUDIT_ALERT_BODY: ${{ runner.temp }}/tjsv-exception-alert.md
         run: node ./scripts/npm-audit-expiry-watch.mjs
 
-      - name: Open or update the expiry tracking issue
-        if: ${{ steps.expiry.outputs.alert == 'true' }}
+      # Reconcile on BOTH verdicts: alert opens/updates/reopens the tracker, a
+      # clean and passing run closes it. Lookup is by stable label plus hidden
+      # body marker (see src/npm-audit-expiry-tracker.mjs), never by title. The
+      # decision is made by the unit-tested planner; this step only fetches
+      # state and executes the planned REST operations. An empty listing is a
+      # normal state, not an error.
+      - name: Reconcile the expiry tracking issue
+        id: tracker
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          TITLE: ${{ steps.expiry.outputs.title }}
-          BODY_PATH: ${{ steps.expiry.outputs.body_path }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TRACKER_LABEL: tjsv-npm-advisory-exception-expiry
+          TSJSV_EXPIRY_TRACKER_ALERT: ${{ steps.expiry.outputs.alert }}
+          TSJSV_EXPIRY_TRACKER_GATE_OUTCOME: ${{ steps.audit.outcome }}
+          TSJSV_EXPIRY_TRACKER_TITLE: ${{ steps.expiry.outputs.title }}
+          TSJSV_NPM_AUDIT_ALERT_BODY: ${{ steps.expiry.outputs.body_path }}
+          TSJSV_EXPIRY_TRACKER_ISSUES: ${{ runner.temp }}/tjsv-expiry-tracker-issues.json
+          TSJSV_EXPIRY_TRACKER_LABELS: ${{ runner.temp }}/tjsv-expiry-tracker-labels.json
+          TSJSV_EXPIRY_TRACKER_PLAN: ${{ runner.temp }}/tjsv-expiry-tracker-plan.json
+          TSJSV_EXPIRY_TRACKER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TSJSV_EXPIRY_TRACKER_COMMIT: ${{ github.sha }}
+          OPERATIONS_PATH: ${{ runner.temp }}/tjsv-expiry-tracker-operations.jsonl
         run: |
           set -euo pipefail
-          printf '\nScheduled run: %s\n' "$RUN_URL" >> "$BODY_PATH"
-          existing="$(gh api "repos/$REPO/issues?state=open&per_page=100" \
-            --jq '[.[] | select(.pull_request == null) | select(.title | startswith("TJSV npm advisory exception")) | .number] | first // empty')"
-          if [ -n "$existing" ]; then
-            gh api -X POST "repos/$REPO/issues/$existing/comments" -F "body=@$BODY_PATH" --silent
-            gh api -X PATCH "repos/$REPO/issues/$existing" -f "title=$TITLE" --silent
-            echo "updated issue #$existing"
-          else
-            gh api -X POST "repos/$REPO/issues" -f "title=$TITLE" -F "body=@$BODY_PATH" --jq '.number'
-          fi
+          gh api --paginate "repos/$REPO/issues?state=all&labels=$TRACKER_LABEL&per_page=100" \
+            | jq -s 'add // []' > "$TSJSV_EXPIRY_TRACKER_ISSUES"
+          gh api --paginate "repos/$REPO/labels?per_page=100" \
+            | jq -s '[add // [] | .[].name]' > "$TSJSV_EXPIRY_TRACKER_LABELS"
+          node ./scripts/npm-audit-expiry-tracker.mjs
+          jq -c '.operations[]' "$TSJSV_EXPIRY_TRACKER_PLAN" > "$OPERATIONS_PATH"
+          while IFS= read -r operation; do
+            method="$(jq -r '.method' <<<"$operation")"
+            path="$(jq -r '.path' <<<"$operation")"
+            jq -c '.body' <<<"$operation" | gh api -X "$method" "repos/$REPO/$path" --input - --silent
+            echo "executed $method $path"
+          done < "$OPERATIONS_PATH"
 
       - name: Fail when the production audit gate did not pass
         if: ${{ steps.audit.outcome != 'success' }}
