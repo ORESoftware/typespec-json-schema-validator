@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildExceptionExpiryAlert,
   collectAuditFindings,
+  DEFAULT_EXPIRY_WARNING_DAYS,
   evaluateAudit,
+  EXCEPTION_REMEDIATION,
   EXCEPTION_SCHEMA,
+  normalizeExpiryWarningDays,
   parseExceptionLedger,
   validateAuditEnvironment,
 } from '../../src/npm-audit-policy.mjs';
@@ -261,3 +265,102 @@ for (const [name, value, pattern] of [
     assert.throws(() => validateAuditEnvironment(value), pattern);
   });
 }
+
+// Expiry visibility: this gate fails closed on a calendar date, so an upcoming
+// expiry has to be announced while the run still passes.
+
+function evaluateAt(now, auditDocument, exceptionLedger, expiryWarningDays) {
+  return evaluateAudit({
+    auditDocument,
+    exceptionLedger,
+    now,
+    auditExitCode: 1,
+    npmVersion: '11.6.0',
+    registry: 'https://registry.npmjs.org/',
+    packageLockDigest: 'a'.repeat(64),
+    packageJsonDigest: 'b'.repeat(64),
+    auditDocumentDigest: 'c'.repeat(64),
+    expiryWarningDays,
+  });
+}
+
+test('an exception inside the warning window is announced while the gate still passes', () => {
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-09-30T04:00:00.000Z';
+  const receipt = evaluateAt(NOW, auditWith(), ledger([exception]));
+  assert.equal(receipt.status, 'passed');
+  assert.equal(receipt.exceptionsExpiringSoon.length, 1);
+  assert.equal(receipt.exceptionsExpiringSoon[0].package, 'transitive-pkg');
+  assert.equal(receipt.exceptionsExpiringSoon[0].daysRemaining, 21);
+  assert.equal(receipt.scope.expiryWarningDays, DEFAULT_EXPIRY_WARNING_DAYS);
+});
+
+test('an exception beyond the warning window is not announced', () => {
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-12-31T04:00:00.000Z';
+  const receipt = evaluateAt(NOW, auditWith(), ledger([exception]));
+  assert.equal(receipt.status, 'passed');
+  assert.deepEqual(receipt.exceptionsExpiringSoon, []);
+});
+
+test('the warning window is configurable without changing the enforcement boundary', () => {
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-12-31T04:00:00.000Z';
+  const receipt = evaluateAt(NOW, auditWith(), ledger([exception]), 200);
+  assert.equal(receipt.status, 'passed');
+  assert.equal(receipt.exceptionsExpiringSoon.length, 1);
+  assert.equal(receipt.scope.expiryWarningDays, 200);
+});
+
+test('warning never waives: an expired exception still fails closed inside the window', () => {
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-09-09T03:59:59.000Z';
+  const receipt = evaluateAt(NOW, auditWith(), ledger([exception]), 365);
+  assert.equal(receipt.status, 'stopped_for_evaluation');
+  assert.deepEqual(receipt.exceptionsExpiringSoon, []);
+});
+
+test('an expired finding carries ordered remediation with upgrade first', () => {
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-09-09T03:59:59.000Z';
+  const receipt = evaluateAt(NOW, auditWith(), ledger([exception]));
+  const [finding] = receipt.unwaivedHighOrCritical;
+  assert.equal(finding.exceptionExpiresAt, '2026-09-09T03:59:59.000Z');
+  assert.equal(finding.exceptionOwner, 'security@example.invalid');
+  assert.deepEqual(finding.remediation, EXCEPTION_REMEDIATION);
+  assert.match(finding.remediation[0], /^upgrade the affected production dependency/u);
+});
+
+test('a malformed warning window fails closed instead of defaulting', () => {
+  assert.throws(() => normalizeExpiryWarningDays('soon'), /integer number of days/);
+  assert.throws(() => normalizeExpiryWarningDays(-1), /integer number of days/);
+  assert.throws(() => normalizeExpiryWarningDays(9000), /integer number of days/);
+  assert.throws(() => normalizeExpiryWarningDays(''), /integer number of days/);
+  assert.equal(normalizeExpiryWarningDays(undefined), DEFAULT_EXPIRY_WARNING_DAYS);
+  assert.equal(normalizeExpiryWarningDays('45'), 45);
+});
+
+test('a clean receipt raises no expiry alert', () => {
+  const receipt = evaluateAt(NOW, auditWith({ severity: 'moderate' }), ledger());
+  assert.equal(buildExceptionExpiryAlert(receipt).alert, false);
+});
+
+test('an expiring exception raises a forward-looking alert', () => {
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-09-30T04:00:00.000Z';
+  const alert = buildExceptionExpiryAlert(evaluateAt(NOW, auditWith(), ledger([exception])));
+  assert.equal(alert.alert, true);
+  assert.match(alert.title, /expiring soon/);
+  assert.match(alert.body, /2026-09-30T04:00:00\.000Z/);
+  assert.match(alert.body, /upgrade the affected production dependency/);
+});
+
+test('an expired exception raises an outage-grade alert', () => {
+  const exception = exceptionFor('transitive-pkg');
+  exception.expiresAt = '2026-09-09T03:59:59.000Z';
+  const alert = buildExceptionExpiryAlert(evaluateAt(NOW, auditWith(), ledger([exception])));
+  assert.equal(alert.alert, true);
+  assert.match(alert.title, /expired/);
+  assert.equal(alert.expired.length, 1);
+  assert.match(alert.body, /failing closed now/);
+});

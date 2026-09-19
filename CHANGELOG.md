@@ -6,6 +6,9 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- Early warning for npm advisory exceptions: every production audit run, including a passing one and including runs inside a consumer's pinned action, warns for each applied exception expiring within `TSJSV_NPM_AUDIT_EXPIRY_WARNING_DAYS` (default 30) and records `scope.expiryWarningDays` plus an `exceptionsExpiringSoon` array in the receipt.
+- Scheduled `npm-advisory-exception-expiry` workflow that runs the same gate daily and reconciles a single tracking issue, identified by the `tjsv-npm-advisory-exception-expiry` label plus a hidden body marker: created or updated (never duplicated) while any exception is expired or inside the warning window, closed with a resolution comment naming the run and commit once a passing run is clean, and reopened if an alert arises again.
+- Ordered remediation, upgrade first, on every unwaived high/critical finding, in both the gate's stderr output and the retained receipt.
 - First-class `verify-ir` CLI admission that recomputes canonical Contract IR verification from the exact retained parity receipt, current TypeSpec/generated/authored input closure, and complete expected declaration scope.
 - A distinct, self-digesting `consumer-verification-receipt/v1` artifact, closed Draft 2020-12 schema, and atomic safe writer for durable downstream admission evidence.
 - The existing scope-aware `actions/verify-contract-ir` consumer action now publishes the same deterministic receipt instead of returning only transient console output.

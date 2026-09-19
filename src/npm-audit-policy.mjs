@@ -5,6 +5,25 @@ export const EXCEPTION_SCHEMA = 'tjsv-npm-audit-exceptions/v1';
 
 const ENFORCED_SEVERITIES = new Set(['high', 'critical']);
 
+const MS_PER_DAY = 86_400_000;
+
+/** Default number of days before an exception expiry at which the gate starts warning. */
+export const DEFAULT_EXPIRY_WARNING_DAYS = 30;
+
+/** Maximum accepted early-warning window, in days. */
+export const MAX_EXPIRY_WARNING_DAYS = 365;
+
+/**
+ * Ordered remediation for an exception that has expired, or is about to.
+ * Upgrading past the advisory is always preferred over renewing a waiver.
+ */
+export const EXCEPTION_REMEDIATION = [
+  'upgrade the affected production dependency to a release outside the advisory range (preferred; check for a patched upstream version first)',
+  'only when no patched release exists, renew the exact advisory/package exception in security/npm-audit-exceptions.json with a new canonical RFC3339 UTC expiry, owner, rationale, and current reachability evidence',
+  'never widen an exception to a severity, package, or advisory wildcard, and never use `npm audit fix --force`',
+  'see docs/npm-production-audit.md for the full procedure',
+];
+
 export function sha256Utf8(value) {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
@@ -30,6 +49,17 @@ function normalizeIsoDate(value, label) {
     throw new TypeError(`${label} must be canonical RFC3339 UTC`);
   }
   return text;
+}
+
+export function normalizeExpiryWarningDays(value) {
+  if (value === undefined || value === null) return DEFAULT_EXPIRY_WARNING_DAYS;
+  const days = typeof value === 'string' && value.trim() !== '' ? Number(value.trim()) : value;
+  if (typeof days !== 'number' || !Number.isInteger(days) || days < 0 || days > MAX_EXPIRY_WARNING_DAYS) {
+    throw new TypeError(
+      `expiry warning window must be an integer number of days between 0 and ${MAX_EXPIRY_WARNING_DAYS}`,
+    );
+  }
+  return days;
 }
 
 export function validateAuditEnvironment({ npmVersion, registry }) {
@@ -200,8 +230,10 @@ export function evaluateAudit({
   packageLockDigest,
   packageJsonDigest,
   auditDocumentDigest,
+  expiryWarningDays,
 }) {
   const tool = validateAuditEnvironment({ npmVersion, registry });
+  const warningDays = normalizeExpiryWarningDays(expiryWarningDays);
   if (auditExitCode !== 0 && auditExitCode !== 1) {
     return {
       schema: RECEIPT_SCHEMA,
@@ -222,17 +254,26 @@ export function evaluateAudit({
     ledger.exceptions.map((entry) => [`${entry.advisoryId}\u0000${entry.package}`, entry]),
   );
   const exceptionsApplied = [];
+  const exceptionsExpiringSoon = [];
   const unwaived = [];
+  const nowMs = Date.parse(timestamp);
 
   for (const finding of findings) {
     if (!ENFORCED_SEVERITIES.has(finding.severity)) continue;
     const exception = exceptionsByKey.get(`${finding.advisoryId}\u0000${finding.package}`);
     if (!exception) {
-      unwaived.push({ ...finding, reason: 'no-exact-exception' });
+      unwaived.push({ ...finding, reason: 'no-exact-exception', remediation: EXCEPTION_REMEDIATION });
       continue;
     }
-    if (Date.parse(exception.expiresAt) <= Date.parse(timestamp)) {
-      unwaived.push({ ...finding, reason: 'exception-expired', exceptionExpiresAt: exception.expiresAt });
+    const expiresMs = Date.parse(exception.expiresAt);
+    if (expiresMs <= nowMs) {
+      unwaived.push({
+        ...finding,
+        reason: 'exception-expired',
+        exceptionExpiresAt: exception.expiresAt,
+        exceptionOwner: exception.owner,
+        remediation: EXCEPTION_REMEDIATION,
+      });
       continue;
     }
     exceptionsApplied.push({
@@ -243,7 +284,26 @@ export function evaluateAudit({
       expiresAt: exception.expiresAt,
       reachabilityEvidence: exception.reachabilityEvidence,
     });
+
+    const remainingMs = expiresMs - nowMs;
+    if (remainingMs <= warningDays * MS_PER_DAY) {
+      exceptionsExpiringSoon.push({
+        advisoryId: finding.advisoryId,
+        package: finding.package,
+        owner: exception.owner,
+        expiresAt: exception.expiresAt,
+        daysRemaining: Math.floor(remainingMs / MS_PER_DAY),
+        warningWindowDays: warningDays,
+        remediation: EXCEPTION_REMEDIATION,
+      });
+    }
   }
+
+  exceptionsExpiringSoon.sort((left, right) => {
+    return left.expiresAt.localeCompare(right.expiresAt)
+      || left.package.localeCompare(right.package)
+      || left.advisoryId.localeCompare(right.advisoryId);
+  });
 
   const zeroUnwaivedHighOrCritical = unwaived.length === 0;
   return {
@@ -257,6 +317,7 @@ export function evaluateAudit({
       dependencyClass: 'production',
       npmArguments: ['audit', '--omit=dev', '--json', '--audit-level=high'],
       actionReachabilityPolicy: 'all production-installed vulnerable paths are conservatively reachable unless an exact exception proves otherwise',
+      expiryWarningDays: warningDays,
     },
     tool,
     inputs: { packageLockDigest, packageJsonDigest, auditDocumentDigest },
@@ -264,7 +325,51 @@ export function evaluateAudit({
     findings,
     unwaivedHighOrCritical: unwaived,
     exceptionsApplied,
+    exceptionsExpiringSoon,
   };
+}
+
+/**
+ * Build the operator-facing alert for a receipt whose exceptions have expired, or
+ * are inside the early-warning window. Pure: no I/O, no network, no clock read.
+ */
+export function buildExceptionExpiryAlert(receipt) {
+  const source = requireObject(receipt, 'audit receipt');
+  const expiringSoon = Array.isArray(source.exceptionsExpiringSoon) ? source.exceptionsExpiringSoon : [];
+  const expired = (Array.isArray(source.unwaivedHighOrCritical) ? source.unwaivedHighOrCritical : [])
+    .filter((finding) => finding && finding.reason === 'exception-expired');
+
+  if (expiringSoon.length === 0 && expired.length === 0) {
+    return { alert: false, title: null, body: null, expired: [], expiringSoon: [] };
+  }
+
+  const lines = [];
+  if (expired.length > 0) {
+    lines.push('## Expired advisory exceptions (the gate is failing closed now)', '');
+    for (const finding of expired) {
+      lines.push(`- \`${finding.package}\` ${finding.severity} \`${finding.advisoryId}\` — exception expired \`${finding.exceptionExpiresAt}\``);
+    }
+    lines.push('');
+  }
+  if (expiringSoon.length > 0) {
+    lines.push('## Advisory exceptions expiring soon (the gate will fail closed on that date)', '');
+    for (const entry of expiringSoon) {
+      lines.push(`- \`${entry.package}\` \`${entry.advisoryId}\` — expires \`${entry.expiresAt}\` (${entry.daysRemaining} day(s) left, owner ${entry.owner})`);
+    }
+    lines.push('');
+  }
+  lines.push('## Remediation, in order', '');
+  for (const step of EXCEPTION_REMEDIATION) lines.push(`1. ${step}`);
+  lines.push(
+    '',
+    'This gate fails closed on a calendar date, so every repository pinning this action fails on that date even with no code change.',
+  );
+
+  const title = expired.length > 0
+    ? 'TJSV npm advisory exception expired: production audit gate is failing closed'
+    : 'TJSV npm advisory exception expiring soon: production audit gate will fail closed';
+
+  return { alert: true, title, body: `${lines.join('\n')}\n`, expired, expiringSoon };
 }
 
 export function failedAuditReceipt({ reason, npmVersion, registry, packageLockDigest, packageJsonDigest, auditExitCode = null }) {

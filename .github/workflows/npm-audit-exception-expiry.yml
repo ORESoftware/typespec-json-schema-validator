@@ -1,0 +1,109 @@
+name: npm-advisory-exception-expiry
+
+# The production advisory gate fails closed on a calendar date, so an exception
+# expiry that nobody is watching reds the admission check in every repository
+# pinning this action. This job watches the calendar instead of the fleet.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      warning_days:
+        description: Days before expiry at which to raise the alert.
+        required: false
+        default: '30'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-advisory-exception-expiry
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Check out exact head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Audit pinned production dependency closure
+        id: audit
+        continue-on-error: true
+        env:
+          TSJSV_NPM_AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+          TSJSV_NPM_AUDIT_EXPIRY_WARNING_DAYS: ${{ inputs.warning_days || '30' }}
+        run: node ./scripts/npm-audit-gate.mjs
+
+      - name: Retain production dependency audit receipt
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: tjsv-npm-production-audit-receipt
+          path: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Evaluate exception expiry
+        id: expiry
+        env:
+          TSJSV_NPM_AUDIT_RECEIPT: ${{ runner.temp }}/tjsv-npm-audit-receipt.json
+          TSJSV_NPM_AUDIT_ALERT_BODY: ${{ runner.temp }}/tjsv-exception-alert.md
+        run: node ./scripts/npm-audit-expiry-watch.mjs
+
+      # Reconcile on BOTH verdicts: alert opens/updates/reopens the tracker, a
+      # clean and passing run closes it. Lookup is by stable label plus hidden
+      # body marker (see src/npm-audit-expiry-tracker.mjs), never by title. The
+      # decision is made by the unit-tested planner; this step only fetches
+      # state and executes the planned REST operations. An empty listing is a
+      # normal state, not an error.
+      - name: Reconcile the expiry tracking issue
+        id: tracker
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TRACKER_LABEL: tjsv-npm-advisory-exception-expiry
+          TSJSV_EXPIRY_TRACKER_ALERT: ${{ steps.expiry.outputs.alert }}
+          TSJSV_EXPIRY_TRACKER_GATE_OUTCOME: ${{ steps.audit.outcome }}
+          TSJSV_EXPIRY_TRACKER_TITLE: ${{ steps.expiry.outputs.title }}
+          TSJSV_NPM_AUDIT_ALERT_BODY: ${{ steps.expiry.outputs.body_path }}
+          TSJSV_EXPIRY_TRACKER_ISSUES: ${{ runner.temp }}/tjsv-expiry-tracker-issues.json
+          TSJSV_EXPIRY_TRACKER_LABELS: ${{ runner.temp }}/tjsv-expiry-tracker-labels.json
+          TSJSV_EXPIRY_TRACKER_PLAN: ${{ runner.temp }}/tjsv-expiry-tracker-plan.json
+          TSJSV_EXPIRY_TRACKER_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TSJSV_EXPIRY_TRACKER_COMMIT: ${{ github.sha }}
+          OPERATIONS_PATH: ${{ runner.temp }}/tjsv-expiry-tracker-operations.jsonl
+        run: |
+          set -euo pipefail
+          gh api --paginate "repos/$REPO/issues?state=all&labels=$TRACKER_LABEL&per_page=100" \
+            | jq -s 'add // []' > "$TSJSV_EXPIRY_TRACKER_ISSUES"
+          gh api --paginate "repos/$REPO/labels?per_page=100" \
+            | jq -s '[add // [] | .[].name]' > "$TSJSV_EXPIRY_TRACKER_LABELS"
+          node ./scripts/npm-audit-expiry-tracker.mjs
+          jq -c '.operations[]' "$TSJSV_EXPIRY_TRACKER_PLAN" > "$OPERATIONS_PATH"
+          while IFS= read -r operation; do
+            method="$(jq -r '.method' <<<"$operation")"
+            path="$(jq -r '.path' <<<"$operation")"
+            jq -c '.body' <<<"$operation" | gh api -X "$method" "repos/$REPO/$path" --input - --silent
+            echo "executed $method $path"
+          done < "$OPERATIONS_PATH"
+
+      - name: Fail when the production audit gate did not pass
+        if: ${{ steps.audit.outcome != 'success' }}
+        run: |
+          echo "production dependency audit gate did not pass; see the retained receipt artifact" >&2
+          exit 1
