@@ -44,7 +44,7 @@ Each admitted declaration records:
 - source files, TypeSpec line/column, and JSON Pointers;
 - a common assertion schema and its SHA-256 digest;
 - the complete normalized generated lane and complete normalized authored lane, each with a separate digest and role; and
-- the exact receipt, source, toolchain, configuration, and coverage evidence that admitted it.
+- the semantic receipt identity, source, toolchain, configuration, and coverage evidence that admitted it. Host-only diagnostic paths remain in the parity report but are projected out of Contract IR identity.
 
 The common `assertionSchema` contains only semantics already proven equal. Lane-specific annotations remain in their respective normalized lane schemas; the exporter never chooses one lane's description, examples, default, or presentation metadata as the winner.
 
@@ -55,9 +55,11 @@ Declarations intentionally excluded by mapping policy and TypeSpec declarations 
 The artifact binds four independent hashes:
 
 1. the parity receipt `runId`;
-2. the SHA-256 digest of the complete canonical receipt;
+2. the SHA-256 digest of the canonical **semantic receipt projection** (diagnostic filesystem/process paths removed);
 3. all three input-collection digests; and
 4. `irId`, the SHA-256 digest of the canonical IR body with `irId` omitted.
+
+The original parity report remains full-fidelity diagnostic evidence. Contract IR does not rewrite that report; it derives a stable semantic projection solely for downstream identity so moving identical evidence between hosts cannot create a different contract identity.
 
 `verifyContractIr()` reloads the current inputs, rebuilds the expected artifact, checks the self-digest, and returns a deterministic verification result. `verifyContractIrEvidence()` performs the same operation over already loaded inventories and collections.
 
@@ -76,7 +78,7 @@ A downstream package, SQL candidate, ORM model, Protobuf descriptor, OpenAPI art
 }
 ```
 
-Any changed source, mapping, emitter option, validator version, or generated witness invalidates that chain and requires a new parity run and new IR.
+Any changed source, semantic mapping, semantic emitter option, validator/compiler version, or generated witness invalidates that chain and requires a new parity run and new IR. Moving the same evidence between checkout/temp directories or invoking the same compiler from a different absolute path does not.
 
 ## Failures and stale-artifact prevention
 
@@ -102,7 +104,7 @@ contractIr.admissible == true
 contractIr.irId == sha256(canonical body without irId)
 contractIr.admission.receipt.status == passed
 contractIr.admission.receipt.runId == retained receipt.runId
-contractIr.admission.receipt.digest == sha256(canonical retained receipt)
+contractIr.admission.receipt.digest == sha256(canonical semantic projection of retained receipt)
 current input digests == contractIr.provenance digests
 ```
 
