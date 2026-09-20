@@ -126,6 +126,14 @@ async function runDifferentialLane(options, generatedCollection, authoredCollect
   };
 }
 
+export function semanticMappingDigest(mapping) {
+  return sha256(canonicalStringify({
+    schema: mapping.schema,
+    declarations: mapping.declarations,
+    ignore: mapping.ignore,
+  }));
+}
+
 function buildRunId(material) {
   return sha256(canonicalStringify(material));
 }
@@ -194,6 +202,7 @@ async function buildPassedOrStoppedReport({
     emitterOptions: emitter?.emitterOptions ?? null,
     executionMode: emitter?.executionMode ?? null,
     mappingSchema: mapping.schema,
+    mappingDigest: semanticMappingDigest(mapping),
     differential: {
       enabled: differential !== null && differential !== undefined,
       maxProbesPerDeclarationPerLane: options.maxProbes ?? 64,
