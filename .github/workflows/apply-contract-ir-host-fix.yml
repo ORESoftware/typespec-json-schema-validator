@@ -65,6 +65,8 @@ jobs:
           writeFileSync(docsPath, docs);
           NODE
           git diff --check
+      - name: Install locked dependencies
+        run: npm ci
       - name: Run focused regressions
         run: node --test test/unit/run-id-host-path.test.mjs test/unit/contract-ir-host-path.test.mjs test/unit/contract-ir.test.mjs
       - name: Commit repair if needed
