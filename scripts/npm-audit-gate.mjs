@@ -2,8 +2,10 @@ import { spawnSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import {
+  EXCEPTION_REMEDIATION,
   evaluateAudit,
   failedAuditReceipt,
+  normalizeExpiryWarningDays,
   sha256Utf8,
   validateAuditEnvironment,
 } from '../src/npm-audit-policy.mjs';
@@ -112,6 +114,9 @@ if (parseFailure) {
       packageLockDigest,
       packageJsonDigest,
       auditDocumentDigest: sha256Utf8(JSON.stringify(auditDocument)),
+      expiryWarningDays: normalizeExpiryWarningDays(
+        process.env.TSJSV_NPM_AUDIT_EXPIRY_WARNING_DAYS ?? undefined,
+      ),
     });
   } catch (error) {
     receipt = failedAuditReceipt({
@@ -128,16 +133,48 @@ if (parseFailure) {
 await mkdir(dirname(receiptPath), { recursive: true });
 await writeFile(receiptPath, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
 
+const inGitHubActions = process.env.GITHUB_ACTIONS === 'true';
+
+function warn(message) {
+  process.stderr.write(`${inGitHubActions ? '::warning::' : 'warning: '}${message}\n`);
+}
+
+function writeRemediation(write) {
+  write('what to do, in order:\n');
+  for (const [index, step] of EXCEPTION_REMEDIATION.entries()) {
+    write(`  ${index + 1}. ${step}\n`);
+  }
+}
+
+// Report upcoming expiries even on a passing run: this gate fails closed on a
+// calendar date, so an unannounced expiry reds every repository pinning this action.
+for (const entry of receipt.exceptionsExpiringSoon ?? []) {
+  warn(
+    `TJSV npm advisory exception for ${entry.package} (${entry.advisoryId}) expires at ${entry.expiresAt}`
+    + ` in ${entry.daysRemaining} day(s); after that this gate fails closed in every consumer repository.`
+    + ` Owner: ${entry.owner}. Upgrade past the advisory if a patched release exists, otherwise renew the exception`
+    + ' in security/npm-audit-exceptions.json before the expiry date.',
+  );
+}
+
 if (receipt.status === 'passed') {
   process.stdout.write(`production dependency audit passed: ${receipt.findings.length} advisory path(s), 0 unwaived high/critical\n`);
+  if ((receipt.exceptionsExpiringSoon ?? []).length > 0) {
+    writeRemediation((text) => process.stdout.write(text));
+  }
   process.exit(0);
 }
 
 if (receipt.status === 'stopped_for_evaluation') {
   process.stderr.write(`production dependency audit stopped: ${receipt.unwaivedHighOrCritical.length} unwaived high/critical advisory path(s)\n`);
   for (const finding of receipt.unwaivedHighOrCritical) {
-    process.stderr.write(`- ${finding.package}: ${finding.severity} ${finding.advisoryId} (${finding.reason})\n`);
+    const expiry = finding.reason === 'exception-expired'
+      ? `, exception expired ${finding.exceptionExpiresAt}`
+      : '';
+    process.stderr.write(`- ${finding.package}: ${finding.severity} ${finding.advisoryId} (${finding.reason}${expiry})\n`);
   }
+  writeRemediation((text) => process.stderr.write(text));
+  process.stderr.write(`receipt: ${receiptPath}\n`);
   process.exit(1);
 }
 
