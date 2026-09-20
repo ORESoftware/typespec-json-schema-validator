@@ -8,6 +8,7 @@ import {
   CONTRACT_IR_SCHEMA,
   buildContractIrTombstone,
   createContractIr,
+  semanticReportProjection,
   verifyContractIrEvidence,
   writeContractIr,
 } from '../../src/contract-ir.mjs';
@@ -92,14 +93,57 @@ test('retains both peer lanes without selecting precedence', () => {
   assert.equal(ir.declarations[0].lanes.typespecGeneratedJsonSchema.normalizedSchema.title, 'Generated User');
 });
 
-test('binds the exact receipt and all three input digests', () => {
+test('binds the semantic receipt and all three input digests', () => {
   const { report } = fixtures();
   const ir = build();
   assert.equal(ir.admission.receipt.runId, report.runId);
-  assert.equal(ir.admission.receipt.digest, sha256(canonicalStringify(report)));
+  assert.equal(ir.admission.receipt.digest, sha256(canonicalStringify(semanticReportProjection(report))));
   assert.equal(ir.provenance.typespec.digest, report.inputs.typespec.digest);
   assert.equal(ir.provenance.generatedJsonSchema.digest, report.inputs.generatedJsonSchema.digest);
   assert.equal(ir.provenance.authoredJsonSchema.digest, report.inputs.authoredJsonSchema.digest);
+});
+
+test('Contract IR identity ignores host-only receipt paths but keeps semantic changes', () => {
+  const linux = fixtures();
+  linux.report.configuration = {
+    mode: 'check',
+    emitterOptions: { 'emitter-output-dir': '/home/runner/_temp/witness', 'seal-object-schemas': 'true' },
+    executionMode: 'subprocess',
+    differential: { instanceCorpus: '/home/runner/_temp/instances', instanceCorpusDigest: hex('4') },
+  };
+  linux.report.toolchain = {
+    validator: { name: '@oresoftware/typespec-json-schema-validator', version: '0.1.0' },
+    typespecCompiler: { command: '/home/runner/node_modules/.bin/tsp', available: true, version: '1.16.0' },
+    jsonSchemaEmitter: '@typespec/json-schema',
+  };
+  linux.report.inputs.typespec.input = '/home/runner/work/contracts/main.tsp';
+  linux.report.inputs.generatedJsonSchema.input = '/home/runner/_temp/witness/schema.json';
+  linux.report.inputs.authoredJsonSchema.input = '/home/runner/work/contracts/authored.schema.json';
+  linux.report.inputs.mapping = '/home/runner/work/contracts/tjsv.mapping.json';
+
+  const mac = structuredClone(linux);
+  mac.report.configuration.emitterOptions['emitter-output-dir'] = '/Users/runner/work/_temp/witness';
+  mac.report.configuration.executionMode = 'pinned-compiler-fallback';
+  mac.report.configuration.differential.instanceCorpus = '/Users/runner/work/_temp/instances';
+  mac.report.toolchain.typespecCompiler.command = '/Users/runner/work/node_modules/.bin/tsp';
+  mac.report.inputs.typespec.input = '/Users/runner/work/contracts/main.tsp';
+  mac.report.inputs.generatedJsonSchema.input = '/Users/runner/work/_temp/witness/schema.json';
+  mac.report.inputs.authoredJsonSchema.input = '/Users/runner/work/contracts/authored.schema.json';
+  mac.report.inputs.mapping = '/Users/runner/work/contracts/tjsv.mapping.json';
+
+  const linuxIr = createContractIr(linux);
+  const macIr = createContractIr(mac);
+  assert.equal(linuxIr.irId, macIr.irId, 'host diagnostics must not perturb Contract IR identity');
+  assert.deepEqual(linuxIr.toolchain, macIr.toolchain);
+  assert.deepEqual(linuxIr.configuration, macIr.configuration);
+
+  const changed = structuredClone(mac);
+  changed.report.configuration.emitterOptions['seal-object-schemas'] = 'false';
+  assert.notEqual(
+    createContractIr(changed).irId,
+    linuxIr.irId,
+    'semantic emitter options must remain Contract IR identity-bearing',
+  );
 });
 
 test('exports only a common assertion schema while retaining lane schemas', () => {

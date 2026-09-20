@@ -12,6 +12,7 @@ import { writeContractIrFile } from './contract-ir-file.mjs';
 import { assertExactSourceFiles } from './contract-ir-inputs.mjs';
 import { createScopedSchemaComparison } from './reference-comparison.mjs';
 import { crossValidate } from './differential.mjs';
+import { runIdentityConfiguration, runIdentityToolchain } from './run.mjs';
 
 export const CONTRACT_IR_SCHEMA = 'ores.typespec-json-schema-validator.contract-ir/v1';
 export const CONTRACT_IR_VERIFICATION_SCHEMA =
@@ -42,8 +43,23 @@ function digestJson(value) {
   return sha256(canonicalStringify(value));
 }
 
+export function semanticReportProjection(report) {
+  const projected = structuredClone(report);
+  projected.configuration = runIdentityConfiguration(projected.configuration);
+  projected.toolchain = runIdentityToolchain(projected.toolchain);
+  if (isObject(projected.inputs)) {
+    for (const lane of ['typespec', 'authoredJsonSchema', 'generatedJsonSchema']) {
+      if (isObject(projected.inputs[lane])) {
+        projected.inputs[lane] = { ...projected.inputs[lane], input: null };
+      }
+    }
+    if (Object.hasOwn(projected.inputs, 'mapping')) projected.inputs.mapping = null;
+  }
+  return projected;
+}
+
 function reportDigest(report) {
-  return digestJson(report);
+  return digestJson(semanticReportProjection(report));
 }
 
 function normalizeFile(path, root) {
@@ -501,8 +517,8 @@ export function createContractIr({ report, typespecInventory, generatedCollectio
         files: provenanceFiles(authoredCollection.documents),
       },
     },
-    toolchain: report.toolchain ?? null,
-    configuration: report.configuration ?? null,
+    toolchain: runIdentityToolchain(report.toolchain),
+    configuration: runIdentityConfiguration(report.configuration),
     coverage: report.coverage,
     differential: report.differential?.summary ?? null,
     declarations,
