@@ -126,6 +126,22 @@ async function runDifferentialLane(options, generatedCollection, authoredCollect
   };
 }
 
+export function semanticMappingDigest(mapping) {
+  const declarations = [...mapping.declarations]
+    .map((entry) => ({ ...entry }))
+    .sort((left, right) => {
+      const leftCanonical = canonicalStringify(left);
+      const rightCanonical = canonicalStringify(right);
+      // Relational string comparison is defined over UTF-16 code units; unlike
+      // localeCompare(), it cannot vary with host ICU/locale configuration.
+      return leftCanonical < rightCanonical ? -1 : leftCanonical > rightCanonical ? 1 : 0;
+    });
+  const ignore = Object.fromEntries(
+    ['typespec', 'generated', 'authored'].map((lane) => [lane, [...mapping.ignore[lane]].sort()]),
+  );
+  return sha256(canonicalStringify({ schema: mapping.schema, declarations, ignore }));
+}
+
 function buildRunId(material) {
   return sha256(canonicalStringify(material));
 }
@@ -194,6 +210,7 @@ async function buildPassedOrStoppedReport({
     emitterOptions: emitter?.emitterOptions ?? null,
     executionMode: emitter?.executionMode ?? null,
     mappingSchema: mapping.schema,
+    mappingDigest: semanticMappingDigest(mapping),
     differential: {
       enabled: differential !== null && differential !== undefined,
       maxProbesPerDeclarationPerLane: options.maxProbes ?? 64,

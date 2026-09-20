@@ -7,6 +7,7 @@ import {
   runCheck,
   runIdentityConfiguration,
   runIdentityToolchain,
+  semanticMappingDigest,
 } from '../../src/run.mjs';
 
 const fixtures = resolve(import.meta.dirname, '../fixtures');
@@ -127,4 +128,52 @@ test('check-mode runId is stable across independently-created output directories
     'diagnostic output locations should remain visible',
   );
   assert.equal(first.runId, second.runId, 'receipt identity must be output-location independent');
+});
+
+
+test('run identity binds semantic mapping content but not mapping source location', () => {
+  const base = {
+    schema: 'ores.typespec-json-schema-validator.mapping/v1',
+    declarations: [{ typespec: 'Example.User', generated: 'User', authored: 'User' }],
+    ignore: { typespec: [], generated: [], authored: [] },
+    source: '/home/runner/work/contracts/tjsv.mapping.json',
+  };
+  const relocated = { ...structuredClone(base), source: '/Users/runner/work/contracts/tjsv.mapping.json' };
+  assert.equal(semanticMappingDigest(base), semanticMappingDigest(relocated));
+
+  const reorderedA = structuredClone(base);
+  reorderedA.declarations.push({ typespec: 'Example.Team', generated: 'Team', authored: 'Team' });
+  reorderedA.ignore = {
+    typespec: ['Example.LegacyB', 'Example.LegacyA'],
+    generated: ['GeneratedB', 'GeneratedA'],
+    authored: ['AuthoredB', 'AuthoredA'],
+  };
+  const reorderedB = structuredClone(reorderedA);
+  reorderedB.declarations.reverse();
+  reorderedB.ignore.typespec.reverse();
+  reorderedB.ignore.generated.reverse();
+  reorderedB.ignore.authored.reverse();
+  assert.equal(
+    semanticMappingDigest(reorderedA),
+    semanticMappingDigest(reorderedB),
+    'mapping collection order is not semantic identity',
+  );
+
+  const remapped = structuredClone(base);
+  remapped.declarations[0].authored = 'PublicUser';
+  assert.notEqual(semanticMappingDigest(base), semanticMappingDigest(remapped));
+
+  const ignored = structuredClone(base);
+  ignored.ignore.authored.push('LegacyUser');
+  assert.notEqual(semanticMappingDigest(base), semanticMappingDigest(ignored));
+
+  const left = identityConfiguration('/tmp/a', '/tmp/corpus-a');
+  const right = identityConfiguration('/tmp/b', '/tmp/corpus-b');
+  left.mappingDigest = semanticMappingDigest(base);
+  right.mappingDigest = semanticMappingDigest(remapped);
+  assert.notDeepEqual(
+    runIdentityConfiguration(left),
+    runIdentityConfiguration(right),
+    'semantic mapping changes must perturb run identity material',
+  );
 });
