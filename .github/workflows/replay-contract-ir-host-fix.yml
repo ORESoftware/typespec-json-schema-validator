@@ -1,0 +1,44 @@
+name: Replay Contract IR host-independence
+on:
+  push:
+    branches:
+      - fix/contract-ir-host-independent-receipts-v2
+permissions:
+  contents: write
+jobs:
+  replay-and-verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/contract-ir-host-independent-receipts-v2
+      - name: Replay reviewed Contract IR files from #195
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin d614dbc03fbf4a5f944f71853d04a3a438e8d53c
+          git checkout d614dbc03fbf4a5f944f71853d04a3a438e8d53c -- \
+            docs/contract-ir.md \
+            src/contract-ir.mjs \
+            test/unit/contract-ir.test.mjs
+          git diff --check
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify focused identity regressions
+        run: node --test test/unit/run-id-host-path.test.mjs test/unit/contract-ir.test.mjs
+      - name: Run full unit suite and static checks
+        run: |
+          npm test
+          npm run check
+      - name: Commit replayed source
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          git config user.name 'ORESoftware'
+          git config user.email 'alex@oresoftware.com'
+          git add docs/contract-ir.md src/contract-ir.mjs test/unit/contract-ir.test.mjs
+          git commit -m 'fix(receipts): make Contract IR identity host-independent'
+          git push origin HEAD:fix/contract-ir-host-independent-receipts-v2
