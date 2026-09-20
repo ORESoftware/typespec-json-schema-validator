@@ -130,6 +130,43 @@ function buildRunId(material) {
   return sha256(canonicalStringify(material));
 }
 
+/**
+ * Keep diagnostic filesystem/process metadata in the report without allowing it to
+ * perturb semantic receipt identity. The generated-schema digest already binds the
+ * actual emitter result, while these fields describe where/how this invocation ran.
+ */
+export function runIdentityConfiguration(configuration) {
+  const emitterOptions = configuration.emitterOptions
+    ? Object.fromEntries(
+      Object.entries(configuration.emitterOptions)
+        .filter(([key]) => key !== 'emitter-output-dir'),
+    )
+    : null;
+  return {
+    ...configuration,
+    emitterOptions,
+    executionMode: null,
+    differential: {
+      ...configuration.differential,
+      instanceCorpus: null,
+    },
+  };
+}
+
+/**
+ * Compiler executable paths are host/install locations, not toolchain identity. Keep
+ * them in the report for diagnostics, but bind runId only to the observed compiler
+ * version. Generated-schema bytes remain independently bound through inputDigests.
+ */
+export function runIdentityToolchain(toolchain) {
+  return {
+    ...toolchain,
+    typespecCompiler: {
+      version: toolchain.typespecCompiler?.version ?? null,
+    },
+  };
+}
+
 async function buildPassedOrStoppedReport({
   mode,
   options,
@@ -190,23 +227,16 @@ async function buildPassedOrStoppedReport({
     typespecCompiler: tspVersion,
     jsonSchemaEmitter: '@typespec/json-schema',
   };
-  const runIdentityConfiguration = {
-    ...configuration,
-    differential: {
-      ...configuration.differential,
-      instanceCorpus: null,
-    },
-  };
   const runId = buildRunId({
     schema: REPORT_SCHEMA,
     status,
-    configuration: runIdentityConfiguration,
+    configuration: runIdentityConfiguration(configuration),
     inputDigests: {
       typespec: typespecInventory?.digest ?? null,
       authored: authoredCollection.digest,
       generated: generatedCollection.digest,
     },
-    toolchain,
+    toolchain: runIdentityToolchain(toolchain),
     findings: emittedFindings.map((finding) => finding.fingerprint),
   });
 
