@@ -92,11 +92,16 @@ test('retains both peer lanes without selecting precedence', () => {
   assert.equal(ir.declarations[0].lanes.typespecGeneratedJsonSchema.normalizedSchema.title, 'Generated User');
 });
 
-test('binds the exact receipt and all three input digests', () => {
+test('binds semantic receipt evidence and all three input digests', () => {
   const { report } = fixtures();
   const ir = build();
   assert.equal(ir.admission.receipt.runId, report.runId);
-  assert.equal(ir.admission.receipt.digest, sha256(canonicalStringify(report)));
+  assert.match(ir.admission.receipt.digest, /^[a-f0-9]{64}$/u);
+  assert.notEqual(
+    ir.admission.receipt.digest,
+    sha256(canonicalStringify(report)),
+    'diagnostic-only receipt bytes must not become Contract IR identity material',
+  );
   assert.equal(ir.provenance.typespec.digest, report.inputs.typespec.digest);
   assert.equal(ir.provenance.generatedJsonSchema.digest, report.inputs.generatedJsonSchema.digest);
   assert.equal(ir.provenance.authoredJsonSchema.digest, report.inputs.authoredJsonSchema.digest);
