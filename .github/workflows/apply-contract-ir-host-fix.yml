@@ -1,0 +1,80 @@
+name: Apply Contract IR host-independence repair
+on:
+  push:
+    branches:
+      - fix/contract-ir-host-independence-20260920
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/contract-ir-host-independence-20260920
+      - name: Apply exact source and regression edits
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+
+          function replaceOnce(source, before, after, label) {
+            const first = source.indexOf(before);
+            if (first < 0) throw new Error(`missing exact replacement target: ${label}`);
+            if (source.indexOf(before, first + before.length) >= 0) throw new Error(`ambiguous replacement target: ${label}`);
+            return source.slice(0, first) + after + source.slice(first + before.length);
+          }
+
+          const path = 'src/contract-ir.mjs';
+          let source = readFileSync(path, 'utf8');
+          if (!source.includes("from './run.mjs';")) {
+            source = replaceOnce(
+              source,
+              "import { crossValidate } from './differential.mjs';\n",
+              "import { crossValidate } from './differential.mjs';\nimport { runIdentityConfiguration, runIdentityToolchain } from './run.mjs';\n",
+              'run identity import',
+            );
+          }
+          source = replaceOnce(
+            source,
+            `function reportDigest(report) {\n  return digestJson(report);\n}\n`,
+            `function reportDigest(report) {\n  // Bind Contract IR to the semantic receipt identity rather than invocation-local\n  // diagnostics. The original report still retains host paths and execution details.\n  return digestJson({\n    schema: report.schema,\n    runId: report.runId,\n    status: report.status,\n    zeroUnexplainedFindings: report.zeroUnexplainedFindings,\n    inputDigests: {\n      typespec: report.inputs?.typespec?.digest ?? null,\n      generatedJsonSchema: report.inputs?.generatedJsonSchema?.digest ?? null,\n      authoredJsonSchema: report.inputs?.authoredJsonSchema?.digest ?? null,\n    },\n    declarationMap: report.declarationMap ?? [],\n    toolchain: report.toolchain ? runIdentityToolchain(report.toolchain) : null,\n    configuration: report.configuration ? runIdentityConfiguration(report.configuration) : null,\n    coverage: report.coverage ?? null,\n    differential: report.differential?.summary ?? null,\n    findings: (report.findings ?? []).map((finding) => finding?.fingerprint ?? null),\n  });\n}\n`,
+            'semantic receipt digest',
+          );
+          source = replaceOnce(
+            source,
+            `    toolchain: report.toolchain ?? null,\n    configuration: report.configuration ?? null,\n`,
+            `    toolchain: report.toolchain ? runIdentityToolchain(report.toolchain) : null,\n    configuration: report.configuration ? runIdentityConfiguration(report.configuration) : null,\n`,
+            'portable IR diagnostics',
+          );
+          writeFileSync(path, source);
+
+          const test = `import assert from 'node:assert/strict';\nimport { mkdtemp } from 'node:fs/promises';\nimport { tmpdir } from 'node:os';\nimport { join, resolve } from 'node:path';\nimport test from 'node:test';\nimport { buildContractIr } from '../../src/contract-ir.mjs';\nimport { runCheck } from '../../src/run.mjs';\n\nconst fixtures = resolve(import.meta.dirname, '../fixtures');\n\ntest('Contract IR identity excludes host-only receipt diagnostics', async () => {\n  const fixture = resolve(fixtures, 'pass');\n  const typespec = resolve(fixture, 'main.tsp');\n  const authoredSchema = resolve(fixture, 'authored.schema.json');\n  const tspBin = resolve(import.meta.dirname, '../helpers/fake-tsp.mjs');\n  const outputDir = await mkdtemp(join(tmpdir(), 'tjsv-contract-ir-host-'));\n  const report = await runCheck({\n    typespec, authoredSchema, outputDir,\n    bundleId: 'typespec.generated.schema.json',\n    maxFindings: 250, tspBin, int64Strategy: 'string',\n    sealObjectSchemas: true, polymorphicModelsStrategy: 'oneOf',\n  });\n  assert.equal(report.status, 'passed');\n  const generatedSchema = report.inputs.generatedJsonSchema.input;\n  const linux = await buildContractIr({ report, typespec, generatedSchema, authoredSchema });\n\n  const macReport = structuredClone(report);\n  macReport.configuration.emitterOptions['emitter-output-dir'] = '/Users/runner/work/_temp/witness';\n  macReport.configuration.executionMode = 'pinned-compiler-fallback';\n  if (macReport.configuration.differential) {\n    macReport.configuration.differential.instanceCorpus = '/Users/runner/work/_temp/instances';\n  }\n  if (macReport.toolchain?.typespecCompiler) {\n    macReport.toolchain.typespecCompiler.command = '/Users/runner/work/repo/node_modules/@typespec/compiler/cmd/tsp.js';\n  }\n  const mac = await buildContractIr({ report: macReport, typespec, generatedSchema, authoredSchema });\n\n  assert.equal(macReport.runId, report.runId, 'diagnostic mutation must not forge a new semantic receipt');\n  assert.equal(linux.irId, mac.irId, 'Contract IR must not inherit host paths or execution mechanism');\n  assert.deepEqual(linux.toolchain, mac.toolchain);\n  assert.deepEqual(linux.configuration, mac.configuration);\n  assert.equal(linux.admission.receipt.digest, mac.admission.receipt.digest);\n\n  const semantic = structuredClone(report);\n  semantic.configuration.emitterOptions['seal-object-schemas'] = 'false';\n  const changed = await buildContractIr({ report: semantic, typespec, generatedSchema, authoredSchema });\n  assert.notEqual(linux.irId, changed.irId, 'semantic emitter options remain IR identity-bearing');\n});\n`;
+          writeFileSync('test/unit/contract-ir-host-path.test.mjs', test);
+
+          const docsPath = 'docs/contract-ir.md';
+          let docs = readFileSync(docsPath, 'utf8');
+          docs = docs.replace(
+            '2. the SHA-256 digest of the complete canonical receipt;',
+            '2. the SHA-256 digest of the host-independent semantic receipt projection (the full receipt remains diagnostic evidence);',
+          );
+          docs = docs.replace(
+            'contractIr.admission.receipt.digest == sha256(canonical retained receipt)',
+            'contractIr.admission.receipt.digest == sha256(canonical host-independent receipt identity projection)',
+          );
+          writeFileSync(docsPath, docs);
+          NODE
+          git diff --check
+      - name: Run focused regressions
+        run: node --test test/unit/run-id-host-path.test.mjs test/unit/contract-ir-host-path.test.mjs test/unit/contract-ir.test.mjs
+      - name: Commit repair if needed
+        run: |
+          if git diff --quiet; then
+            echo "source already repaired"
+            exit 0
+          fi
+          git config user.name 'ORESoftware'
+          git config user.email 'alex@oresoftware.com'
+          git add src/contract-ir.mjs test/unit/contract-ir-host-path.test.mjs docs/contract-ir.md
+          git commit -m 'fix(receipts): make Contract IR host-independent'
+          git push origin HEAD:fix/contract-ir-host-independence-20260920
