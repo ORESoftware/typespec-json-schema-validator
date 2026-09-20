@@ -141,6 +141,24 @@ test('run identity binds semantic mapping content but not mapping source locatio
   const relocated = { ...structuredClone(base), source: '/Users/runner/work/contracts/tjsv.mapping.json' };
   assert.equal(semanticMappingDigest(base), semanticMappingDigest(relocated));
 
+  const reorderedA = structuredClone(base);
+  reorderedA.declarations.push({ typespec: 'Example.Team', generated: 'Team', authored: 'Team' });
+  reorderedA.ignore = {
+    typespec: ['Example.LegacyB', 'Example.LegacyA'],
+    generated: ['GeneratedB', 'GeneratedA'],
+    authored: ['AuthoredB', 'AuthoredA'],
+  };
+  const reorderedB = structuredClone(reorderedA);
+  reorderedB.declarations.reverse();
+  reorderedB.ignore.typespec.reverse();
+  reorderedB.ignore.generated.reverse();
+  reorderedB.ignore.authored.reverse();
+  assert.equal(
+    semanticMappingDigest(reorderedA),
+    semanticMappingDigest(reorderedB),
+    'mapping collection order is not semantic identity',
+  );
+
   const remapped = structuredClone(base);
   remapped.declarations[0].authored = 'PublicUser';
   assert.notEqual(semanticMappingDigest(base), semanticMappingDigest(remapped));

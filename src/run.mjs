@@ -127,11 +127,13 @@ async function runDifferentialLane(options, generatedCollection, authoredCollect
 }
 
 export function semanticMappingDigest(mapping) {
-  return sha256(canonicalStringify({
-    schema: mapping.schema,
-    declarations: mapping.declarations,
-    ignore: mapping.ignore,
-  }));
+  const declarations = [...mapping.declarations]
+    .map((entry) => ({ ...entry }))
+    .sort((left, right) => canonicalStringify(left).localeCompare(canonicalStringify(right)));
+  const ignore = Object.fromEntries(
+    ['typespec', 'generated', 'authored'].map((lane) => [lane, [...mapping.ignore[lane]].sort()]),
+  );
+  return sha256(canonicalStringify({ schema: mapping.schema, declarations, ignore }));
 }
 
 function buildRunId(material) {
