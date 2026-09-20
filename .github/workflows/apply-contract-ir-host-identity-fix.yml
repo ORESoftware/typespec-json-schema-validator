@@ -1,0 +1,40 @@
+name: Apply Contract IR host-identity fix
+on:
+  push:
+    branches:
+      - fix/contract-ir-host-independent-receipts
+permissions:
+  contents: write
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'ci(receipts): apply and verify Contract IR host-identity fix'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out patch branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/contract-ir-host-independent-receipts
+          fetch-depth: 1
+          persist-credentials: true
+      - name: Apply exact source/test/doc patch
+        run: node scripts/apply-contract-ir-host-identity-fix.mjs
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run unit suite
+        run: npm test
+      - name: Run static checks
+        run: npm run check
+      - name: Commit verified fix and remove bootstrap machinery
+        run: |
+          set -euo pipefail
+          rm scripts/apply-contract-ir-host-identity-fix.mjs
+          rm .github/workflows/apply-contract-ir-host-identity-fix.yml
+          git diff --check
+          git config user.name 'ORESoftware'
+          git config user.email 'alex@oresoftware.com'
+          git add src/contract-ir.mjs test/unit/contract-ir.test.mjs docs/contract-ir.md \
+            scripts/apply-contract-ir-host-identity-fix.mjs \
+            .github/workflows/apply-contract-ir-host-identity-fix.yml
+          git commit -m 'fix(receipts): make Contract IR host-independent'
+          git push origin HEAD:fix/contract-ir-host-independent-receipts
