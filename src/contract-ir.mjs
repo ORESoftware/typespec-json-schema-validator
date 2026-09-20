@@ -42,8 +42,46 @@ function digestJson(value) {
   return sha256(canonicalStringify(value));
 }
 
+function semanticConfiguration(configuration) {
+  if (!isObject(configuration)) return configuration ?? null;
+  const projected = structuredClone(configuration);
+  if (isObject(projected.emitterOptions)) {
+    delete projected.emitterOptions['emitter-output-dir'];
+  }
+  projected.executionMode = null;
+  if (isObject(projected.differential)) {
+    projected.differential.instanceCorpus = null;
+  }
+  return projected;
+}
+
+function semanticToolchain(toolchain) {
+  if (!isObject(toolchain)) return toolchain ?? null;
+  return {
+    ...structuredClone(toolchain),
+    typespecCompiler: {
+      version: toolchain.typespecCompiler?.version ?? null,
+    },
+  };
+}
+
+export function semanticReportProjection(report) {
+  const projected = structuredClone(report);
+  projected.configuration = semanticConfiguration(projected.configuration);
+  projected.toolchain = semanticToolchain(projected.toolchain);
+  if (isObject(projected.inputs)) {
+    for (const lane of ['typespec', 'authoredJsonSchema', 'generatedJsonSchema']) {
+      if (isObject(projected.inputs[lane])) {
+        projected.inputs[lane] = { ...projected.inputs[lane], input: null };
+      }
+    }
+    if (Object.hasOwn(projected.inputs, 'mapping')) projected.inputs.mapping = null;
+  }
+  return projected;
+}
+
 function reportDigest(report) {
-  return digestJson(report);
+  return digestJson(semanticReportProjection(report));
 }
 
 function normalizeFile(path, root) {
@@ -501,8 +539,8 @@ export function createContractIr({ report, typespecInventory, generatedCollectio
         files: provenanceFiles(authoredCollection.documents),
       },
     },
-    toolchain: report.toolchain ?? null,
-    configuration: report.configuration ?? null,
+    toolchain: semanticToolchain(report.toolchain),
+    configuration: semanticConfiguration(report.configuration),
     coverage: report.coverage,
     differential: report.differential?.summary ?? null,
     declarations,
