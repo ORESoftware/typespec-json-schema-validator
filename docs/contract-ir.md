@@ -55,7 +55,7 @@ Declarations intentionally excluded by mapping policy and TypeSpec declarations 
 The artifact binds four independent hashes:
 
 1. the parity receipt `runId`;
-2. the SHA-256 digest of the complete canonical receipt;
+2. the SHA-256 digest of the host-independent semantic receipt projection (the full receipt remains diagnostic evidence);
 3. all three input-collection digests; and
 4. `irId`, the SHA-256 digest of the canonical IR body with `irId` omitted.
 
@@ -102,7 +102,7 @@ contractIr.admissible == true
 contractIr.irId == sha256(canonical body without irId)
 contractIr.admission.receipt.status == passed
 contractIr.admission.receipt.runId == retained receipt.runId
-contractIr.admission.receipt.digest == sha256(canonical retained receipt)
+contractIr.admission.receipt.digest == sha256(canonical host-independent receipt identity projection)
 current input digests == contractIr.provenance digests
 ```
 

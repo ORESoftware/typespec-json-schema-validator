@@ -12,6 +12,7 @@ import { writeContractIrFile } from './contract-ir-file.mjs';
 import { assertExactSourceFiles } from './contract-ir-inputs.mjs';
 import { createScopedSchemaComparison } from './reference-comparison.mjs';
 import { crossValidate } from './differential.mjs';
+import { runIdentityConfiguration, runIdentityToolchain } from './run.mjs';
 
 export const CONTRACT_IR_SCHEMA = 'ores.typespec-json-schema-validator.contract-ir/v1';
 export const CONTRACT_IR_VERIFICATION_SCHEMA =
@@ -43,7 +44,25 @@ function digestJson(value) {
 }
 
 function reportDigest(report) {
-  return digestJson(report);
+  // Bind Contract IR to the semantic receipt identity rather than invocation-local
+  // diagnostics. The original report still retains host paths and execution details.
+  return digestJson({
+    schema: report.schema,
+    runId: report.runId,
+    status: report.status,
+    zeroUnexplainedFindings: report.zeroUnexplainedFindings,
+    inputDigests: {
+      typespec: report.inputs?.typespec?.digest ?? null,
+      generatedJsonSchema: report.inputs?.generatedJsonSchema?.digest ?? null,
+      authoredJsonSchema: report.inputs?.authoredJsonSchema?.digest ?? null,
+    },
+    declarationMap: report.declarationMap ?? [],
+    toolchain: report.toolchain ? runIdentityToolchain(report.toolchain) : null,
+    configuration: report.configuration ? runIdentityConfiguration(report.configuration) : null,
+    coverage: report.coverage ?? null,
+    differential: report.differential?.summary ?? null,
+    findings: (report.findings ?? []).map((finding) => finding?.fingerprint ?? null),
+  });
 }
 
 function normalizeFile(path, root) {
@@ -501,8 +520,8 @@ export function createContractIr({ report, typespecInventory, generatedCollectio
         files: provenanceFiles(authoredCollection.documents),
       },
     },
-    toolchain: report.toolchain ?? null,
-    configuration: report.configuration ?? null,
+    toolchain: report.toolchain ? runIdentityToolchain(report.toolchain) : null,
+    configuration: report.configuration ? runIdentityConfiguration(report.configuration) : null,
     coverage: report.coverage,
     differential: report.differential?.summary ?? null,
     declarations,
