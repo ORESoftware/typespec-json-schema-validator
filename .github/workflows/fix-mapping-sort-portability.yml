@@ -8,7 +8,7 @@ permissions:
 jobs:
   fix:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -31,8 +31,12 @@ jobs:
           git diff --check
       - name: Install locked dependencies
         run: npm ci
-      - name: Verify receipt identity tests
-        run: node --test test/unit/run-id-host-path.test.mjs
+      - name: Verify focused receipt identity regressions
+        run: node --test test/unit/run-id-host-path.test.mjs test/unit/contract-ir.test.mjs
+      - name: Run full unit suite and static checks
+        run: |
+          npm test
+          npm run check
       - name: Commit portable comparator
         run: |
           git config user.name 'ORESoftware'
