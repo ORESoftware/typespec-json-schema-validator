@@ -1,0 +1,42 @@
+name: Fix mapping sort portability
+on:
+  push:
+    branches:
+      - fix/run-id-bind-semantic-mapping
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/run-id-bind-semantic-mapping
+      - name: Replace locale-sensitive comparator
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const path = 'src/run.mjs';
+          let source = readFileSync(path, 'utf8');
+          const before = `  const declarations = [...mapping.declarations]\n    .map((entry) => ({ ...entry }))\n    .sort((left, right) => canonicalStringify(left).localeCompare(canonicalStringify(right)));\n`;
+          const after = `  const declarations = [...mapping.declarations]\n    .map((entry) => ({ ...entry }))\n    .sort((left, right) => {\n      const leftCanonical = canonicalStringify(left);\n      const rightCanonical = canonicalStringify(right);\n      // Relational string comparison is defined over UTF-16 code units; unlike\n      // localeCompare(), it cannot vary with host ICU/locale configuration.\n      return leftCanonical < rightCanonical ? -1 : leftCanonical > rightCanonical ? 1 : 0;\n    });\n`;
+          const first = source.indexOf(before);
+          if (first < 0 || source.indexOf(before, first + before.length) >= 0) {
+            throw new Error('expected exactly one mapping declaration comparator');
+          }
+          source = source.slice(0, first) + after + source.slice(first + before.length);
+          writeFileSync(path, source);
+          NODE
+          git diff --check
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Verify receipt identity tests
+        run: node --test test/unit/run-id-host-path.test.mjs
+      - name: Commit portable comparator
+        run: |
+          git config user.name 'ORESoftware'
+          git config user.email 'alex@oresoftware.com'
+          git add src/run.mjs
+          git commit -m 'fix(receipts): avoid locale-sensitive mapping sort'
+          git push origin HEAD:fix/run-id-bind-semantic-mapping
