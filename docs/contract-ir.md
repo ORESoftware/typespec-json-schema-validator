@@ -59,6 +59,8 @@ The artifact binds four independent hashes:
 3. all three input-collection digests; and
 4. `irId`, the SHA-256 digest of the canonical IR body with `irId` omitted.
 
+The original parity report remains full-fidelity diagnostic evidence. Contract IR does not rewrite that report; it derives a stable semantic projection solely for downstream identity so moving identical evidence between hosts cannot create a different contract identity.
+
 `verifyContractIr()` reloads the current inputs, rebuilds the expected artifact, checks the self-digest, and returns a deterministic verification result. `verifyContractIrEvidence()` performs the same operation over already loaded inventories and collections.
 
 A downstream package, SQL candidate, ORM model, Protobuf descriptor, OpenAPI artifact, client, or server adapter should record at minimum:
@@ -102,7 +104,7 @@ contractIr.admissible == true
 contractIr.irId == sha256(canonical body without irId)
 contractIr.admission.receipt.status == passed
 contractIr.admission.receipt.runId == retained receipt.runId
-contractIr.admission.receipt.digest == sha256(canonical retained receipt)
+contractIr.admission.receipt.digest == sha256(canonical semantic projection of retained receipt)
 current input digests == contractIr.provenance digests
 ```
 
