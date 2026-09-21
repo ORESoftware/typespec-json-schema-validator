@@ -38,6 +38,14 @@ jobs:
           npm install --no-save --package-lock=false \
             "@typespec/compiler@${TYPESPEC_VERSION}" \
             "@typespec/json-schema@${TYPESPEC_VERSION}"
-          node -e 'for (const p of ["@typespec/compiler","@typespec/json-schema"]) { const v=require(`${p}/package.json`).version; if(v!==process.env.TYPESPEC_VERSION) throw new Error(`${p}=${v}`); console.log(`${p}@${v}`) }'
+          npm ls --depth=0 --json > "${RUNNER_TEMP}/typespec-tree.json"
+          node -e '
+            const tree=require(process.env.RUNNER_TEMP+"/typespec-tree.json");
+            for (const p of ["@typespec/compiler","@typespec/json-schema"]) {
+              const v=tree.dependencies?.[p]?.version;
+              if(v!==process.env.TYPESPEC_VERSION) throw new Error(`${p}=${v}`);
+              console.log(`${p}@${v}`);
+            }
+          '
       - name: Run compiler-backed integration only
         run: npm run test:integration
