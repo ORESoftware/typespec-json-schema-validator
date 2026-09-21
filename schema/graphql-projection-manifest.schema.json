@@ -21,7 +21,7 @@
         "operation_key": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$" },
         "semantic_function": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
         "semantic_authority": { "enum": ["handlers.rs", "funcs.rs"] },
-        "semantic_source": { "type": "string", "pattern": "^src/(?:routes/.+/handlers|rpc/.+/funcs)\\.rs$" },
+        "semantic_source": { "type": "string", "pattern": "^src/(?:routes/rest/.+/handlers|rpc/.+/funcs)\\.rs$" },
         "kind": { "enum": ["query", "mutation", "subscription"] },
         "field": { "type": "string", "pattern": "^(?!__)[_A-Za-z][_0-9A-Za-z]*$" },
         "stream": { "enum": ["unary", "server_stream"] },
