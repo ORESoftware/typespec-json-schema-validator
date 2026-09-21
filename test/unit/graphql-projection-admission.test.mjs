@@ -12,7 +12,7 @@ function operation(overrides = {}) {
     operation_key: "demo.users.get_user",
     semantic_function: "get_user",
     semantic_authority: "handlers.rs",
-    semantic_source: "src/routes/users/get/handlers.rs",
+    semantic_source: "src/routes/rest/users/get/handlers.rs",
     kind: "query",
     field: "get_user",
     stream: "unary",
@@ -39,7 +39,7 @@ test("admits and canonically orders authored GraphQL projections", () => {
       kind: "subscription",
       field: "watch_events",
       stream: "server_stream",
-      semantic_source: "src/routes/events/watch/handlers.rs",
+      semantic_source: "src/routes/rest/events/watch/handlers.rs",
       graphql_source: "src/graphql/events/resolvers.rs",
     }),
     operation({
@@ -83,18 +83,28 @@ test("fails closed on endpoint, stream, duplicate field, or unknown metadata", (
 
 test("semantic source must agree with its authority", () => {
   const verified = verifyGraphqlProjectionManifest(manifest([
-    operation({ semantic_authority: "funcs.rs", semantic_source: "src/routes/users/get/handlers.rs" }),
+    operation({ semantic_authority: "funcs.rs", semantic_source: "src/routes/rest/users/get/handlers.rs" }),
   ]));
   assert.equal(verified.ok, false);
   assert.match(verified.findings.join("\n"), /does not match semantic_authority/);
 });
 
-test("GraphQL funcs.rs is rejected in favor of resolvers.rs", () => {
+test("legacy direct REST handlers are rejected", () => {
   const verified = verifyGraphqlProjectionManifest(manifest([
-    operation({ graphql_source: "src/graphql/users/funcs.rs" }),
+    operation({ semantic_source: "src/routes/users/get/handlers.rs" }),
   ]));
   assert.equal(verified.ok, false);
-  assert.match(verified.findings.join("\n"), /resolvers\.rs/);
+  assert.match(verified.findings.join("\n"), /does not match semantic_authority/);
+});
+
+test("GraphQL funcs.rs and singular resolver.rs are rejected in favor of resolvers.rs", () => {
+  for (const graphql_source of ["src/graphql/users/funcs.rs", "src/graphql/users/resolver.rs"]) {
+    const verified = verifyGraphqlProjectionManifest(manifest([
+      operation({ graphql_source }),
+    ]));
+    assert.equal(verified.ok, false);
+    assert.match(verified.findings.join("\n"), /resolvers\.rs/);
+  }
 });
 
 test("subscriptions are explicitly server-streaming", () => {
