@@ -1,0 +1,192 @@
+name: release Zed package
+
+on:
+  pull_request:
+    paths:
+      - '.zpkg.toml'
+      - '.zpkg.lock'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'bin/**'
+      - 'src/**'
+      - 'schema/**'
+      - 'scripts/**'
+      - '.github/workflows/release-zed.yml'
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tjsv-zed-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZED_CLI_REVISION: c7533b0e79e083516cef46467defa8ded70886fb
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact reviewed source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          show-progress: false
+
+      - name: Verify exact source
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install pinned dependency graph
+        run: npm ci
+
+      - name: Run source and package acceptance
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
+          npm run flags:audit
+          npm test
+          npm run test:integration
+          npm run release:preflight
+
+      - name: Install pinned Zed CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo install \
+            --git https://github.com/zed-pkg/zed-cli \
+            --rev "${ZED_CLI_REVISION}" \
+            --locked zed-cli
+          test "$(zed --version | awk '{print $2}')" = "0.3.0"
+
+      - name: Validate frozen Zed package closure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .zpkg.toml
+          test ! -L .zpkg.toml
+          test -f .zpkg.lock
+          test ! -L .zpkg.lock
+          zed validate --manifest .zpkg.toml --lock .zpkg.lock --require-lock
+          zed r2g --clean
+
+      - name: Verify release identity
+        shell: bash
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"/\1/p' .zpkg.toml | head -n1)"
+          test -n "${version}"
+          node_version="$(node -p "require('./package.json').version")"
+          test "${node_version}" = "${version}"
+          if [[ "${REF_TYPE}" == "tag" ]]; then
+            test "${REF_NAME}" = "v${version}"
+            test "$(git rev-list -n1 "${REF_NAME}")" = "$(git rev-parse HEAD)"
+          fi
+
+  publish-main-version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: preflight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: zed-pkg
+    permissions:
+      contents: write
+    steps:
+      - name: Check out exact admitted main commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: true
+          show-progress: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.16.0
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Rebuild clean package candidate
+        run: npm ci
+
+      - name: Install pinned Zed CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo install \
+            --git https://github.com/zed-pkg/zed-cli \
+            --rev "${ZED_CLI_REVISION}" \
+            --locked zed-cli
+          test "$(zed --version | awk '{print $2}')" = "0.3.0"
+
+      - name: Establish immutable version tag
+        id: tag
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          version="$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"/\1/p' .zpkg.toml | head -n1)"
+          test -n "${version}"
+          tag="v${version}"
+          remote_line="$(git ls-remote --tags origin "refs/tags/${tag}" | head -n1 || true)"
+          if [[ -n "${remote_line}" ]]; then
+            remote_sha="${remote_line%%$'\t'*}"
+            if [[ "${remote_sha}" != "${SOURCE_SHA}" ]]; then
+              echo "release ${tag} already belongs to ${remote_sha}; current main is ${SOURCE_SHA}; no publish" >&2
+              echo 'publish=false' >> "${GITHUB_OUTPUT}"
+              exit 0
+            fi
+            echo "release tag ${tag} already points at admitted source ${SOURCE_SHA}; retrying publication"
+          else
+            git tag "${tag}" "${SOURCE_SHA}"
+            git push origin "refs/tags/${tag}"
+            test "$(git ls-remote --tags origin "refs/tags/${tag}" | awk '{print $1}')" = "${SOURCE_SHA}"
+          fi
+          echo 'publish=true' >> "${GITHUB_OUTPUT}"
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+
+      - name: Revalidate tagged package before write
+        if: steps.tag.outputs.publish == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          zed validate --manifest .zpkg.toml --lock .zpkg.lock --require-lock
+          zed r2g --clean
+          test "$(git rev-list -n1 "${{ steps.tag.outputs.tag }}")" = "${GITHUB_SHA}"
+
+      - name: Publish immutable Zed package
+        if: steps.tag.outputs.publish == 'true'
+        shell: bash
+        env:
+          ZED_PKG_TOKEN: ${{ secrets.ZED_PKG_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ZED_PKG_TOKEN:-}" ]]; then
+            echo '::error::protected zed-pkg environment must provide ZED_PKG_TOKEN'
+            exit 1
+          fi
+          zed publish
