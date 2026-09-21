@@ -16,7 +16,7 @@ function operation(overrides = {}) {
     kind: "query",
     field: "get_user",
     stream: "unary",
-    graphql_source: "src/graphql/users/funcs.rs",
+    graphql_source: "src/graphql/users/resolvers.rs",
     ...overrides,
   };
 }
@@ -26,7 +26,7 @@ function manifest(operations = [operation()]) {
     schema_version: 1,
     generated_by: "ores-stack",
     endpoint: GRAPHQL_V1_ENDPOINT,
-    authority: "funcs.rs",
+    authority: "resolvers.rs",
     operations,
   };
 }
@@ -40,7 +40,7 @@ test("admits and canonically orders authored GraphQL projections", () => {
       field: "watch_events",
       stream: "server_stream",
       semantic_source: "src/routes/events/watch/handlers.rs",
-      graphql_source: "src/graphql/events/funcs.rs",
+      graphql_source: "src/graphql/events/resolvers.rs",
     }),
     operation({
       operation_key: "demo.users.create_user",
@@ -49,7 +49,7 @@ test("admits and canonically orders authored GraphQL projections", () => {
       field: "create_user",
       semantic_authority: "funcs.rs",
       semantic_source: "src/rpc/users/funcs.rs",
-      graphql_source: "src/graphql/users/funcs.rs",
+      graphql_source: "src/graphql/users/resolvers.rs",
     }),
     operation(),
   ]);
@@ -87,6 +87,14 @@ test("semantic source must agree with its authority", () => {
   ]));
   assert.equal(verified.ok, false);
   assert.match(verified.findings.join("\n"), /does not match semantic_authority/);
+});
+
+test("GraphQL funcs.rs is rejected in favor of resolvers.rs", () => {
+  const verified = verifyGraphqlProjectionManifest(manifest([
+    operation({ graphql_source: "src/graphql/users/funcs.rs" }),
+  ]));
+  assert.equal(verified.ok, false);
+  assert.match(verified.findings.join("\n"), /resolvers\.rs/);
 });
 
 test("subscriptions are explicitly server-streaming", () => {
