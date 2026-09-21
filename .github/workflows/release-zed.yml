@@ -177,8 +177,9 @@ jobs:
         run: |
           set -euo pipefail
           zed validate --manifest .zpkg.toml --lock .zpkg.lock --require-lock
-          zed r2g --clean
+          zed install --frozen
           test "$(git rev-list -n1 "${{ steps.tag.outputs.tag }}")" = "${GITHUB_SHA}"
+          test -z "$(git status --porcelain --untracked-files=all)"
 
       - name: Publish immutable Zed package and forge mirrors
         if: steps.tag.outputs.publish == 'true'
