@@ -10,12 +10,13 @@ import {
 function operation(overrides = {}) {
   return {
     operation_key: "demo.users.get_user",
-    operation: "get_user",
+    semantic_function: "get_user",
+    semantic_authority: "handlers.rs",
+    semantic_source: "src/routes/users/get/handlers.rs",
     kind: "query",
     field: "get_user",
     stream: "unary",
-    graphql_source: "src/routes/users/get/graphql.rs",
-    handlers_source: "src/routes/users/get/handlers.rs",
+    graphql_source: "src/graphql/users/funcs.rs",
     ...overrides,
   };
 }
@@ -25,7 +26,7 @@ function manifest(operations = [operation()]) {
     schema_version: 1,
     generated_by: "ores-stack",
     endpoint: GRAPHQL_V1_ENDPOINT,
-    authority: "graphql.rs",
+    authority: "funcs.rs",
     operations,
   };
 }
@@ -34,20 +35,21 @@ test("admits and canonically orders authored GraphQL projections", () => {
   const value = manifest([
     operation({
       operation_key: "demo.events.watch_stream",
-      operation: "watch_stream",
+      semantic_function: "watch_stream",
       kind: "subscription",
       field: "watch_events",
       stream: "server_stream",
-      graphql_source: "src/routes/events/watch/graphql.rs",
-      handlers_source: "src/routes/events/watch/handlers.rs",
+      semantic_source: "src/routes/events/watch/handlers.rs",
+      graphql_source: "src/graphql/events/funcs.rs",
     }),
     operation({
       operation_key: "demo.users.create_user",
-      operation: "create_user",
+      semantic_function: "create_user",
       kind: "mutation",
       field: "create_user",
-      graphql_source: "src/routes/users/create/graphql.rs",
-      handlers_source: "src/routes/users/create/handlers.rs",
+      semantic_authority: "funcs.rs",
+      semantic_source: "src/rpc/users/funcs.rs",
+      graphql_source: "src/graphql/users/funcs.rs",
     }),
     operation(),
   ]);
@@ -66,7 +68,7 @@ test("admits and canonically orders authored GraphQL projections", () => {
 test("fails closed on endpoint, stream, duplicate field, or unknown metadata", () => {
   const bad = manifest([
     operation({ stream: "server_stream" }),
-    operation({ operation_key: "demo.users.other", operation: "other" }),
+    operation({ operation_key: "demo.users.other", semantic_function: "other" }),
   ]);
   bad.endpoint = "/graphql";
   bad.generated_at = "not-deterministic";
@@ -77,6 +79,14 @@ test("fails closed on endpoint, stream, duplicate field, or unknown metadata", (
   assert.match(verified.findings.join("\n"), /query must use unary/);
   assert.match(verified.findings.join("\n"), /declared more than once/);
   assert.match(verified.findings.join("\n"), /unsupported key "generated_at"/);
+});
+
+test("semantic source must agree with its authority", () => {
+  const verified = verifyGraphqlProjectionManifest(manifest([
+    operation({ semantic_authority: "funcs.rs", semantic_source: "src/routes/users/get/handlers.rs" }),
+  ]));
+  assert.equal(verified.ok, false);
+  assert.match(verified.findings.join("\n"), /does not match semantic_authority/);
 });
 
 test("subscriptions are explicitly server-streaming", () => {
