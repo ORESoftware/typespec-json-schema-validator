@@ -9,25 +9,23 @@
     "schema_version": { "const": 1 },
     "generated_by": { "const": "ores-stack" },
     "endpoint": { "const": "/v1/graphql" },
-    "authority": { "const": "graphql.rs" },
-    "operations": {
-      "type": "array",
-      "items": { "$ref": "#/$defs/operation" }
-    }
+    "authority": { "const": "funcs.rs" },
+    "operations": { "type": "array", "items": { "$ref": "#/$defs/operation" } }
   },
   "$defs": {
     "operation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["operation_key", "operation", "kind", "field", "stream", "graphql_source", "handlers_source"],
+      "required": ["operation_key", "semantic_function", "semantic_authority", "semantic_source", "kind", "field", "stream", "graphql_source"],
       "properties": {
         "operation_key": { "type": "string", "pattern": "^[a-z0-9]+(?:[._-][a-z0-9]+)+$" },
-        "operation": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "semantic_function": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+        "semantic_authority": { "enum": ["handlers.rs", "funcs.rs"] },
+        "semantic_source": { "type": "string", "pattern": "^src/(?:routes/.+/handlers|rpc/.+/funcs)\\.rs$" },
         "kind": { "enum": ["query", "mutation", "subscription"] },
         "field": { "type": "string", "pattern": "^(?!__)[_A-Za-z][_0-9A-Za-z]*$" },
         "stream": { "enum": ["unary", "server_stream"] },
-        "graphql_source": { "type": "string", "pattern": "(^|/)graphql\\.rs$" },
-        "handlers_source": { "type": "string", "pattern": "(^|/)handlers\\.rs$" }
+        "graphql_source": { "type": "string", "pattern": "^src/graphql/(?:.+/)?funcs\\.rs$" }
       }
     }
   }
