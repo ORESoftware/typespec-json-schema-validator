@@ -21,13 +21,13 @@ const KIND_ORDER = Object.freeze({ query: 0, mutation: 1, subscription: 2 });
 
 export const GRAPHQL_PROJECTION_SCHEMA_VERSION = 1;
 export const GRAPHQL_V1_ENDPOINT = "/v1/graphql";
-export const GRAPHQL_PROJECTION_AUTHORITY = "funcs.rs";
+export const GRAPHQL_PROJECTION_AUTHORITY = "resolvers.rs";
 export const GRAPHQL_PROJECTION_GENERATOR = "ores-stack";
 
 const operationKeyPattern = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/u;
 const rustIdentPattern = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const graphqlNamePattern = /^[_A-Za-z][_0-9A-Za-z]*$/u;
-const graphqlSourcePattern = /^src\/graphql\/(?:.+\/)?funcs\.rs$/u;
+const graphqlSourcePattern = /^src\/graphql\/(?:.+\/)?resolvers\.rs$/u;
 const semanticHandlersPattern = /^src\/routes\/.+\/handlers\.rs$/u;
 const semanticFuncsPattern = /^src\/rpc\/.+\/funcs\.rs$/u;
 
@@ -63,7 +63,7 @@ function validateOperation(operation, index, findings) {
   if (!new Set(["unary", "server_stream"]).has(operation.stream)) findings.push(`${path}.stream must be unary or server_stream`);
   else if (operation.kind === "subscription" && operation.stream !== "server_stream") findings.push(`${path} subscription must use server_stream`);
   else if ((operation.kind === "query" || operation.kind === "mutation") && operation.stream !== "unary") findings.push(`${path} ${operation.kind} must use unary`);
-  if (typeof operation.graphql_source !== "string" || !graphqlSourcePattern.test(operation.graphql_source)) findings.push(`${path}.graphql_source must be src/graphql/**/funcs.rs`);
+  if (typeof operation.graphql_source !== "string" || !graphqlSourcePattern.test(operation.graphql_source)) findings.push(`${path}.graphql_source must be src/graphql/**/resolvers.rs`);
 }
 
 function compareOperations(left, right) {
