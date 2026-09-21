@@ -113,6 +113,8 @@ jobs:
     environment: zed-pkg
     permissions:
       contents: write
+      packages: write
+      id-token: write
     steps:
       - name: Check out exact admitted main commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -178,11 +180,12 @@ jobs:
           zed r2g --clean
           test "$(git rev-list -n1 "${{ steps.tag.outputs.tag }}")" = "${GITHUB_SHA}"
 
-      - name: Publish immutable Zed package
+      - name: Publish immutable Zed package and forge mirrors
         if: steps.tag.outputs.publish == 'true'
         shell: bash
         env:
           ZED_PKG_TOKEN: ${{ secrets.ZED_PKG_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           if [[ -z "${ZED_PKG_TOKEN:-}" ]]; then
