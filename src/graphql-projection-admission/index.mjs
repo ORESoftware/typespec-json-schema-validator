@@ -28,7 +28,7 @@ const operationKeyPattern = /^[a-z0-9]+(?:[._-][a-z0-9]+)+$/u;
 const rustIdentPattern = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const graphqlNamePattern = /^[_A-Za-z][_0-9A-Za-z]*$/u;
 const graphqlSourcePattern = /^src\/graphql\/(?:.+\/)?resolvers\.rs$/u;
-const semanticHandlersPattern = /^src\/routes\/.+\/handlers\.rs$/u;
+const semanticHandlersPattern = /^src\/routes\/rest\/.+\/handlers\.rs$/u;
 const semanticFuncsPattern = /^src\/rpc\/.+\/funcs\.rs$/u;
 
 function ownKeys(value) {
