@@ -37,8 +37,7 @@ jobs:
           set -euo pipefail
           npm install --no-save --package-lock=false \
             "@typespec/compiler@${TYPESPEC_VERSION}" \
-            "@typespec/http@${TYPESPEC_VERSION}" \
-            "@typespec/openapi3@${TYPESPEC_VERSION}"
-          node -e 'for (const p of ["@typespec/compiler","@typespec/http","@typespec/openapi3"]) { const v=require(`${p}/package.json`).version; if(v!==process.env.TYPESPEC_VERSION) throw new Error(`${p}=${v}`); console.log(`${p}@${v}`) }'
+            "@typespec/json-schema@${TYPESPEC_VERSION}"
+          node -e 'for (const p of ["@typespec/compiler","@typespec/json-schema"]) { const v=require(`${p}/package.json`).version; if(v!==process.env.TYPESPEC_VERSION) throw new Error(`${p}=${v}`); console.log(`${p}@${v}`) }'
       - name: Run compiler-backed integration only
         run: npm run test:integration
