@@ -17,7 +17,7 @@ export interface GraphqlProjectionManifest {
   schema_version: 1;
   generated_by: "ores-stack";
   endpoint: "/v1/graphql";
-  authority: "funcs.rs";
+  authority: "resolvers.rs";
   operations: GraphqlProjectionOperation[];
 }
 
@@ -29,7 +29,7 @@ export interface GraphqlProjectionVerification {
 
 export const GRAPHQL_PROJECTION_SCHEMA_VERSION: 1;
 export const GRAPHQL_V1_ENDPOINT: "/v1/graphql";
-export const GRAPHQL_PROJECTION_AUTHORITY: "funcs.rs";
+export const GRAPHQL_PROJECTION_AUTHORITY: "resolvers.rs";
 export const GRAPHQL_PROJECTION_GENERATOR: "ores-stack";
 
 export function verifyGraphqlProjectionManifest(value: unknown): GraphqlProjectionVerification;
