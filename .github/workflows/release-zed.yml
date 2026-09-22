@@ -25,7 +25,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  ZED_CLI_REVISION: c7533b0e79e083516cef46467defa8ded70886fb
+  # Exact Zed CLI revision whose push head completed all 12 repository workflows,
+  # including the external zed-pkg-test candidate smoke. Its embedded
+  # zed-interfaces authority admits the package-owned [interop.flags-2-env]
+  # contract used below.
+  ZED_CLI_REVISION: 69fce161e456d758459cab5d3a6441f599769bfa
 
 jobs:
   preflight:
@@ -78,7 +82,7 @@ jobs:
             --locked zed-cli
           test "$(zed --version | awk '{print $2}')" = "0.3.0"
 
-      - name: Validate frozen Zed package closure
+      - name: Validate frozen Zed descriptors
         shell: bash
         run: |
           set -euo pipefail
@@ -87,6 +91,11 @@ jobs:
           test -f .zpkg.lock
           test ! -L .zpkg.lock
           zed validate --manifest .zpkg.toml --lock .zpkg.lock --require-lock
+
+      - name: Roundtrip immutable Zed package
+        shell: bash
+        run: |
+          set -euo pipefail
           zed r2g --clean
 
       - name: Verify release identity
