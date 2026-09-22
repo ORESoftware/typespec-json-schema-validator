@@ -179,15 +179,28 @@ jobs:
           version="$(sed -n '/^\[package\]$/,/^\[/s/^version = "\([^"]*\)"/\1/p' .zpkg.toml | head -n1)"
           test -n "${version}"
           tag="v${version}"
+          release_sha="${SOURCE_SHA}"
           remote_line="$(git ls-remote --tags origin "refs/tags/${tag}" | head -n1 || true)"
           if [[ -n "${remote_line}" ]]; then
             remote_sha="${remote_line%%$'\t'*}"
-            if [[ "${remote_sha}" != "${SOURCE_SHA}" ]]; then
-              echo "release ${tag} already belongs to ${remote_sha}; current main is ${SOURCE_SHA}; no publish" >&2
-              echo 'publish=false' >> "${GITHUB_OUTPUT}"
-              exit 0
+            if [[ "${remote_sha}" == "${SOURCE_SHA}" ]]; then
+              echo "release tag ${tag} already points at admitted source ${SOURCE_SHA}; retrying publication"
+            else
+              # A failed publisher may already have created the immutable tag.
+              # Recover only when that tagged source is an ancestor of the new
+              # main commit and the *only* source change is this release
+              # workflow repair. Any package/source drift still requires a
+              # version bump instead of silently publishing stale bytes.
+              git merge-base --is-ancestor "${remote_sha}" "${SOURCE_SHA}"
+              mapfile -t changed_paths < <(git diff --name-only "${remote_sha}" "${SOURCE_SHA}")
+              if [[ "${#changed_paths[@]}" -ne 1 || "${changed_paths[0]}" != ".github/workflows/release-zed.yml" ]]; then
+                echo "release ${tag} belongs to ${remote_sha}; current main ${SOURCE_SHA} changed package/source state without a version bump" >&2
+                printf 'changed path: %s\n' "${changed_paths[@]}" >&2
+                exit 1
+              fi
+              echo "recovering immutable release ${tag} from tagged source ${remote_sha} after workflow-only repair"
+              release_sha="${remote_sha}"
             fi
-            echo "release tag ${tag} already points at admitted source ${SOURCE_SHA}; retrying publication"
           else
             git tag "${tag}" "${SOURCE_SHA}"
             git push origin "refs/tags/${tag}"
@@ -195,15 +208,33 @@ jobs:
           fi
           echo 'publish=true' >> "${GITHUB_OUTPUT}"
           echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "release_sha=${release_sha}" >> "${GITHUB_OUTPUT}"
 
-      - name: Revalidate tagged package before write
+      - name: Revalidate tagged package outside checkout
         if: steps.tag.outputs.publish == 'true'
         shell: bash
+        env:
+          RELEASE_SHA: ${{ steps.tag.outputs.release_sha }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
-          zed validate --manifest .zpkg.toml --lock .zpkg.lock --require-lock
-          zed install --frozen
-          test "$(git rev-list -n1 "${{ steps.tag.outputs.tag }}")" = "${GITHUB_SHA}"
+          test -n "${RELEASE_SHA}"
+          test -n "${RELEASE_TAG}"
+          test "$(git rev-list -n1 "${RELEASE_TAG}")" = "${RELEASE_SHA}"
+
+          verify_dir="${RUNNER_TEMP}/tjsv-zed-verify-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf "${verify_dir}"
+          mkdir -p "${verify_dir}"
+          git archive "${RELEASE_SHA}" | tar -x -C "${verify_dir}"
+          (
+            cd "${verify_dir}"
+            zed validate --manifest .zpkg.toml --lock .zpkg.lock --require-lock
+            zed install --frozen
+          )
+
+          # `zed install --frozen` intentionally writes generated project
+          # projections such as .zed/paths.json. Keep that proof isolated so
+          # the exact tagged checkout remains byte-for-byte pristine.
           test -z "$(git status --porcelain --untracked-files=all)"
 
       - name: Publish immutable Zed package and forge mirrors
@@ -212,10 +243,25 @@ jobs:
         env:
           ZED_PKG_TOKEN: ${{ secrets.ZED_PKG_TOKEN }}
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.tag.outputs.release_sha }}
+          RELEASE_TAG: ${{ steps.tag.outputs.tag }}
         run: |
           set -euo pipefail
           if [[ -z "${ZED_PKG_TOKEN:-}" ]]; then
             echo '::error::protected zed-pkg environment must provide ZED_PKG_TOKEN'
             exit 1
           fi
-          zed publish
+          release_dir="${RUNNER_TEMP}/tjsv-zed-release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          rm -rf "${release_dir}"
+          git worktree add --detach "${release_dir}" "${RELEASE_SHA}"
+          cleanup() {
+            git worktree remove --force "${release_dir}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+          test "$(git -C "${release_dir}" rev-parse HEAD)" = "${RELEASE_SHA}"
+          test "$(git -C "${release_dir}" rev-list -n1 "${RELEASE_TAG}")" = "${RELEASE_SHA}"
+          test -z "$(git -C "${release_dir}" status --porcelain --untracked-files=all)"
+          (
+            cd "${release_dir}"
+            zed publish
+          )
