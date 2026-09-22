@@ -5,10 +5,10 @@ inputs:
     description: Current independently authored TypeSpec entry file.
     required: true
   generated_schema:
-    description: Current TypeSpec-generated JSON Schema B comparison witness.
+    description: Current TypeSpec-generated JSON Schema B comparison witness file or directory.
     required: true
   authored_schema:
-    description: Current independently authored JSON Schema A.
+    description: Current independently authored JSON Schema A file or directory.
     required: true
   parity_report:
     description: Retained passed TJSV parity report for the exact authority closure.
