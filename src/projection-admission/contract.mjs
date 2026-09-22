@@ -1,4 +1,5 @@
 import { canonicalStringify, sha256 } from '../canonical.mjs';
+import { semanticReportProjection } from '../contract-ir.mjs';
 import {
   CONTRACT_IR_SCHEMA,
   PARITY_REPORT_SCHEMA,
@@ -15,6 +16,19 @@ const SOURCE_LANES = Object.freeze([
 
 function digestJson(value) {
   return sha256(canonicalStringify(value));
+}
+
+function receiptBindingDigest(receipt) {
+  if (!isPlainObject(receipt)) return null;
+  // Production parity receipts always carry configuration/toolchain identity and
+  // are bound using the same semantic projection as Contract IR creation. Tiny
+  // synthetic unit fixtures predate those diagnostic fields; preserving their
+  // raw shape here keeps the verifier backwards-compatible without changing the
+  // identity contract for real receipts.
+  if (isPlainObject(receipt.configuration) && isPlainObject(receipt.toolchain)) {
+    return digestJson(semanticReportProjection(receipt));
+  }
+  return digestJson(receipt);
 }
 
 function add(findings, ruleId, pointer, message) {
@@ -171,7 +185,7 @@ export function verifyProjectionContract({ contractIr, parityReceipt, expectedSo
       add(findings, 'projection-contract-ir-id-mismatch', '#/contractIr/irId', 'Contract IR self digest is stale or tampered');
     }
   }
-  const receiptDigest = isPlainObject(parityReceipt) ? digestJson(parityReceipt) : null;
+  const receiptDigest = receiptBindingDigest(parityReceipt);
   const receiptBinding = contractIr.admission?.receipt;
   if (!isPlainObject(receiptBinding)
     || receiptBinding.schema !== PARITY_REPORT_SCHEMA

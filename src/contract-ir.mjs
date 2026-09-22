@@ -45,8 +45,12 @@ function digestJson(value) {
 
 export function semanticReportProjection(report) {
   const projected = structuredClone(report);
-  projected.configuration = runIdentityConfiguration(projected.configuration);
-  projected.toolchain = runIdentityToolchain(projected.toolchain);
+  if (isObject(projected.configuration)) {
+    projected.configuration = runIdentityConfiguration(projected.configuration);
+  }
+  if (isObject(projected.toolchain)) {
+    projected.toolchain = runIdentityToolchain(projected.toolchain);
+  }
   if (isObject(projected.inputs)) {
     for (const lane of ['typespec', 'authoredJsonSchema', 'generatedJsonSchema']) {
       if (isObject(projected.inputs[lane])) {
