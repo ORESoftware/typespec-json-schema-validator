@@ -59,6 +59,14 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Bind node-gyp to installed Node headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_root="$(dirname "$(dirname "$(command -v node)")")"
+          test -f "$node_root/include/node/node.h"
+          echo "npm_config_nodedir=$node_root" >> "$GITHUB_ENV"
+
       - name: Install pinned dependency graph
         run: npm ci
 
@@ -139,6 +147,14 @@ jobs:
           node-version: 22.16.0
           cache: npm
           cache-dependency-path: package-lock.json
+
+      - name: Bind node-gyp to installed Node headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_root="$(dirname "$(dirname "$(command -v node)")")"
+          test -f "$node_root/include/node/node.h"
+          echo "npm_config_nodedir=$node_root" >> "$GITHUB_ENV"
 
       - name: Rebuild clean package candidate
         run: npm ci
