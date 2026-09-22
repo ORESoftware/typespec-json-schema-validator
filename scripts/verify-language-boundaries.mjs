@@ -20,29 +20,32 @@ function assertInside(root, path, name) {
   }
 }
 
-async function regularFile(workspace, value, name) {
+async function regularPath(workspace, value, name, { directory = false } = {}) {
   if (typeof value !== 'string' || value.trim() === '') throw new Error(`missing ${name}`);
   const lexical = resolve(workspace, value);
   assertInside(workspace, lexical, name);
   const info = await lstat(lexical);
-  if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
-    throw new Error(`${name} must be a singly linked regular non-symlink file`);
+  const admittedKind = info.isFile() || (directory && info.isDirectory());
+  if (!admittedKind || info.isSymbolicLink() || (info.isFile() && info.nlink !== 1)) {
+    throw new Error(
+      directory
+        ? `${name} must be a regular non-symlink file or directory`
+        : `${name} must be a singly linked regular non-symlink file`,
+    );
   }
   const path = await realpath(lexical);
   assertInside(workspace, path, name);
   return path;
 }
 
+async function regularFile(workspace, value, name) {
+  return regularPath(workspace, value, name);
+}
+
 async function regularDirectory(workspace, value, name) {
-  if (typeof value !== 'string' || value.trim() === '') throw new Error(`missing ${name}`);
-  const lexical = resolve(workspace, value);
-  assertInside(workspace, lexical, name);
-  const info = await lstat(lexical);
-  if (!info.isDirectory() || info.isSymbolicLink()) {
-    throw new Error(`${name} must be a regular non-symlink directory`);
-  }
-  const path = await realpath(lexical);
-  assertInside(workspace, path, name);
+  const path = await regularPath(workspace, value, name, { directory: true });
+  const info = await lstat(path);
+  if (!info.isDirectory()) throw new Error(`${name} must be a regular non-symlink directory`);
   return path;
 }
 
@@ -116,8 +119,18 @@ async function main() {
   const [typespec, generatedSchema, authoredSchema, report, contractIr, manifest, evidenceRoot, verification] =
     await Promise.all([
       regularFile(workspace, process.env.TSJSV_BOUNDARY_TYPESPEC, 'TSJSV_BOUNDARY_TYPESPEC'),
-      regularFile(workspace, process.env.TSJSV_BOUNDARY_GENERATED_SCHEMA, 'TSJSV_BOUNDARY_GENERATED_SCHEMA'),
-      regularFile(workspace, process.env.TSJSV_BOUNDARY_AUTHORED_SCHEMA, 'TSJSV_BOUNDARY_AUTHORED_SCHEMA'),
+      regularPath(
+        workspace,
+        process.env.TSJSV_BOUNDARY_GENERATED_SCHEMA,
+        'TSJSV_BOUNDARY_GENERATED_SCHEMA',
+        { directory: true },
+      ),
+      regularPath(
+        workspace,
+        process.env.TSJSV_BOUNDARY_AUTHORED_SCHEMA,
+        'TSJSV_BOUNDARY_AUTHORED_SCHEMA',
+        { directory: true },
+      ),
       jsonFile(workspace, process.env.TSJSV_BOUNDARY_PARITY_REPORT, 'TSJSV_BOUNDARY_PARITY_REPORT'),
       jsonFile(workspace, process.env.TSJSV_BOUNDARY_CONTRACT_IR, 'TSJSV_BOUNDARY_CONTRACT_IR'),
       jsonFile(workspace, process.env.TSJSV_BOUNDARY_MANIFEST, 'TSJSV_BOUNDARY_MANIFEST'),
