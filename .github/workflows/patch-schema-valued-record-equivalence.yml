@@ -1,0 +1,183 @@
+name: patch schema-valued record equivalence
+
+on:
+  push:
+    branches: [fix/schema-valued-record-equivalence-20260924]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/schema-valued-record-equivalence-20260924
+          persist-credentials: true
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22.16.0'
+      - name: Apply guarded comparison-only normalization
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path('src/canonical.mjs')
+          text = path.read_text()
+          pattern = re.compile(
+              r"function collapseEquivalentSimpleClosedObjectKeyword\(value, options\) \{.*?\n\}\n\nfunction sortJsonValues",
+              re.S,
+          )
+          replacement = r'''function collapseEquivalentSimpleClosedObjectKeyword(value, options) {
+            if (!options.collapseSimpleClosedObjectKeyword || !isPlainObject(value) || value.type !== 'object') {
+              return value;
+            }
+
+            const hasAdditional = Object.hasOwn(value, 'additionalProperties');
+            const hasUnevaluated = Object.hasOwn(value, 'unevaluatedProperties');
+            // Both spellings together may carry intentionally redundant evidence. Neither
+            // spelling has nothing to normalize.
+            if (hasAdditional === hasUnevaluated) {
+              return value;
+            }
+
+            const closureKey = hasAdditional ? 'additionalProperties' : 'unevaluatedProperties';
+            const closureSchema = value[closureKey];
+            if (
+              closureSchema !== true &&
+              closureSchema !== false &&
+              !isPlainObject(closureSchema)
+            ) {
+              return value;
+            }
+            if ([...EVALUATED_PROPERTY_COMPOSITION_KEYS].some((key) => Object.hasOwn(value, key))) {
+              return value;
+            }
+
+            // Without composition/reference annotations, both keywords apply the same
+            // schema to exactly the properties not covered by this object's local
+            // properties/patternProperties. TypeSpec's Draft 2020-12 emitter writes
+            // Record<T> as `properties: {}, unevaluatedProperties: T`, while an
+            // independently authored peer may use `additionalProperties: T`. Normalize
+            // only this comparison copy to the latter spelling. Empty `properties` is a
+            // no-op assertion and contributes no evaluated-property annotations.
+            const entries = Object.entries(value)
+              .filter(([key, child]) =>
+                key !== 'unevaluatedProperties' &&
+                !(key === 'properties' && isPlainObject(child) && Object.keys(child).length === 0));
+            if (!hasAdditional) {
+              entries.push(['additionalProperties', closureSchema]);
+            }
+            entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+            return Object.fromEntries(entries);
+          }
+
+          function sortJsonValues'''
+          updated, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f'expected one normalization function, replaced {count}')
+          path.write_text(updated)
+
+          test_path = Path('test/unit/schema-valued-record-equivalence.test.mjs')
+          test_path.write_text(r'''import assert from 'node:assert/strict';
+          import test from 'node:test';
+
+          import {
+            normalizeSchemaNode,
+            normalizeSchemaNodeForComparison,
+          } from '../../src/canonical.mjs';
+
+          test('comparison treats pure Record<T> additional and unevaluated property schemas as equivalent', () => {
+            const generated = {
+              type: 'object',
+              maxProperties: 128,
+              properties: {},
+              unevaluatedProperties: { $ref: '#/$defs/EnvironmentValue' },
+            };
+            const authored = {
+              type: 'object',
+              maxProperties: 128,
+              additionalProperties: { $ref: '#/$defs/EnvironmentValue' },
+            };
+
+            assert.deepEqual(
+              normalizeSchemaNodeForComparison(generated),
+              normalizeSchemaNodeForComparison(authored),
+            );
+            assert.notDeepEqual(normalizeSchemaNode(generated), normalizeSchemaNode(authored));
+          });
+
+          test('comparison preserves schema-valued map constraints while normalizing the keyword spelling', () => {
+            const generated = {
+              type: 'object',
+              properties: {},
+              unevaluatedProperties: { type: 'string', minLength: 1, maxLength: 4096 },
+            };
+            const authored = {
+              type: 'object',
+              additionalProperties: { type: 'string', minLength: 1, maxLength: 4096 },
+            };
+
+            assert.deepEqual(
+              normalizeSchemaNodeForComparison(generated),
+              normalizeSchemaNodeForComparison(authored),
+            );
+          });
+
+          test('composition boundary keeps additionalProperties and unevaluatedProperties distinct', () => {
+            const branch = { properties: { known: { type: 'string' } } };
+            const generated = {
+              type: 'object',
+              allOf: [branch],
+              unevaluatedProperties: { type: 'string' },
+            };
+            const authored = {
+              type: 'object',
+              allOf: [branch],
+              additionalProperties: { type: 'string' },
+            };
+
+            assert.notDeepEqual(
+              normalizeSchemaNodeForComparison(generated),
+              normalizeSchemaNodeForComparison(authored),
+            );
+          });
+
+          test('reference boundary keeps additionalProperties and unevaluatedProperties distinct', () => {
+            const generated = {
+              type: 'object',
+              $ref: '#/$defs/Base',
+              unevaluatedProperties: { type: 'string' },
+            };
+            const authored = {
+              type: 'object',
+              $ref: '#/$defs/Base',
+              additionalProperties: { type: 'string' },
+            };
+
+            assert.notDeepEqual(
+              normalizeSchemaNodeForComparison(generated),
+              normalizeSchemaNodeForComparison(authored),
+            );
+          });
+          ''')
+          PY
+          node --test test/unit/schema-valued-record-equivalence.test.mjs
+          git diff --check
+      - name: Commit source fix and remove staging workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/patch-schema-valued-record-equivalence.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/canonical.mjs test/unit/schema-valued-record-equivalence.test.mjs .github/workflows/patch-schema-valued-record-equivalence.yml
+          git commit -m 'fix(parity): normalize schema-valued Record maps safely'
+          git push origin HEAD:fix/schema-valued-record-equivalence-20260924
