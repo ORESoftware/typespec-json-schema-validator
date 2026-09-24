@@ -357,11 +357,20 @@ function collapseEquivalentSimpleClosedObjectKeyword(value, options) {
 
   const closureKey = hasAdditional ? 'additionalProperties' : 'unevaluatedProperties';
   const closureSchema = value[closureKey];
-  if (
-    closureSchema !== true &&
-    closureSchema !== false &&
-    !isPlainObject(closureSchema)
-  ) {
+  const hasOnlyMapProperties =
+    !Object.hasOwn(value, 'properties') ||
+    (isPlainObject(value.properties) && Object.keys(value.properties).length === 0);
+  const hasOnlyMapPatterns =
+    !Object.hasOwn(value, 'patternProperties') ||
+    (isPlainObject(value.patternProperties) && Object.keys(value.patternProperties).length === 0);
+  const isPureSchemaValuedMap =
+    isPlainObject(closureSchema) && hasOnlyMapProperties && hasOnlyMapPatterns;
+
+  // Keep the original closed-object (`false`) equivalence, and admit schema-
+  // valued closure only for a pure Record<T>-style map. In particular, do not
+  // erase `true`, or schema-valued closure attached to fixed/pattern properties:
+  // those broader spellings stay distinct unless separately proven equivalent.
+  if (closureSchema !== false && !isPureSchemaValuedMap) {
     return value;
   }
   if ([...EVALUATED_PROPERTY_COMPOSITION_KEYS].some((key) => Object.hasOwn(value, key))) {
