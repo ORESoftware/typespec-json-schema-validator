@@ -1,6 +1,6 @@
 {
   "name": "@oresoftware/typespec-json-schema-validator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fail-closed parity linter for independently authored TypeSpec and JSON Schema authorities.",
   "license": "MIT",
   "type": "module",
