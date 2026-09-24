@@ -1,7 +1,7 @@
 [package]
 org = "oresoftware"
 name = "typespec-json-schema-validator"
-version = "0.1.0"
+version = "0.1.1"
 description = "Fail-closed TypeSpec and JSON Schema parity CLI"
 license = "MIT"
 keywords = ["typespec", "json-schema", "schema-parity", "cli"]
