@@ -1,0 +1,49 @@
+name: patch Zed release auth ordering
+
+on:
+  push:
+    branches: [fix/zed-release-auth-before-tag-20260924]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: fix/zed-release-auth-before-tag-20260924
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Require registry credentials before immutable tag mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('.github/workflows/release-zed.yml')
+          text = path.read_text()
+          marker = '''      - name: Establish immutable version tag\n'''
+          preflight = '''      - name: Require protected publication credentials before tagging\n        shell: bash\n        env:\n          ZED_PKG_TOKEN: ${{ secrets.ZED_PKG_TOKEN }}\n        run: |\n          set -euo pipefail\n          if [[ -z "${ZED_PKG_TOKEN:-}" ]]; then\n            echo '::error::protected zed-pkg environment must provide ZED_PKG_TOKEN before immutable release tagging'\n            exit 1\n          fi\n\n'''
+          if marker not in text:
+              raise SystemExit('immutable tag step marker not found')
+          if 'Require protected publication credentials before tagging' in text:
+              raise SystemExit('credential preflight already present')
+          path.write_text(text.replace(marker, preflight + marker, 1))
+          PY
+          git diff --check
+          grep -n -A10 -B3 'Require protected publication credentials before tagging' .github/workflows/release-zed.yml
+      - name: Commit release hardening and remove staging workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/patch-zed-release-auth-before-tag.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/release-zed.yml .github/workflows/patch-zed-release-auth-before-tag.yml
+          git commit -m 'ci(release): require Zed credentials before immutable tag'
+          git push origin HEAD:fix/zed-release-auth-before-tag-20260924
