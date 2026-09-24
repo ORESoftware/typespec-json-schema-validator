@@ -356,23 +356,32 @@ function collapseEquivalentSimpleClosedObjectKeyword(value, options) {
   }
 
   const closureKey = hasAdditional ? 'additionalProperties' : 'unevaluatedProperties';
-  if (value[closureKey] !== false) {
+  const closureSchema = value[closureKey];
+  if (
+    closureSchema !== true &&
+    closureSchema !== false &&
+    !isPlainObject(closureSchema)
+  ) {
     return value;
   }
   if ([...EVALUATED_PROPERTY_COMPOSITION_KEYS].some((key) => Object.hasOwn(value, key))) {
     return value;
   }
 
-  // Without composition/reference annotations, both keywords reject exactly the
-  // properties not covered by this object's properties/patternProperties. Use
-  // additionalProperties:false as a comparison-only common spelling. The
-  // executable lane and both authored source documents remain untouched.
-  if (closureKey === 'additionalProperties') {
-    return value;
-  }
+  // Without composition/reference annotations, both keywords apply the same
+  // schema to exactly the properties not covered by this object's local
+  // properties/patternProperties. TypeSpec's Draft 2020-12 emitter writes
+  // Record<T> as `properties: {}, unevaluatedProperties: T`, while an
+  // independently authored peer may use `additionalProperties: T`. Normalize
+  // only this comparison copy to the latter spelling. Empty `properties` is a
+  // no-op assertion and contributes no evaluated-property annotations.
   const entries = Object.entries(value)
-    .filter(([key]) => key !== 'unevaluatedProperties');
-  entries.push(['additionalProperties', false]);
+    .filter(([key, child]) =>
+      key !== 'unevaluatedProperties' &&
+      !(key === 'properties' && isPlainObject(child) && Object.keys(child).length === 0));
+  if (!hasAdditional) {
+    entries.push(['additionalProperties', closureSchema]);
+  }
   entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
   return Object.fromEntries(entries);
 }
