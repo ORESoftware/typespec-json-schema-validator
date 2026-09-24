@@ -28,7 +28,8 @@ jobs:
           path = Path('.github/workflows/release-zed.yml')
           text = path.read_text()
           marker = '''      - name: Establish immutable version tag\n'''
-          preflight = '''      - name: Require protected publication credentials before tagging\n        shell: bash\n        env:\n          ZED_PKG_TOKEN: ${{ secrets.ZED_PKG_TOKEN }}\n        run: |\n          set -euo pipefail\n          if [[ -z "${ZED_PKG_TOKEN:-}" ]]; then\n            echo '::error::protected zed-pkg environment must provide ZED_PKG_TOKEN before immutable release tagging'\n            exit 1\n          fi\n\n'''
+          token_expr = '$' + '{{ secrets.ZED_PKG_TOKEN }}'
+          preflight = '''      - name: Require protected publication credentials before tagging\n        shell: bash\n        env:\n          ZED_PKG_TOKEN: __TOKEN_EXPR__\n        run: |\n          set -euo pipefail\n          if [[ -z "${ZED_PKG_TOKEN:-}" ]]; then\n            echo '::error::protected zed-pkg environment must provide ZED_PKG_TOKEN before immutable release tagging'\n            exit 1\n          fi\n\n'''.replace('__TOKEN_EXPR__', token_expr)
           if marker not in text:
               raise SystemExit('immutable tag step marker not found')
           if 'Require protected publication credentials before tagging' in text:
