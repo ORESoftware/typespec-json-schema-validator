@@ -55,26 +55,45 @@ test('language-boundary action entrypoint proves current-input closure and fails
   const manifestPath = join(temp, 'manifest.json');
   const evidenceRoot = join(temp, 'evidence');
   const rustEvidence = join(evidenceRoot, 'rust/native.json');
+  const typescriptEvidence = join(evidenceRoot, 'typescript/node.json');
   const verification = join(temp, 'language-boundary-verification.json');
+
   await mkdir(join(evidenceRoot, 'rust'), { recursive: true });
+  await mkdir(join(evidenceRoot, 'typescript'), { recursive: true });
   await writeFile(manifestPath, JSON.stringify({
     schema: 'ores.typespec-json-schema-validator.language-boundaries/v1',
-    minimumDistinctLanguages: 1,
+    minimumDistinctLanguages: 2,
     authorities: {
       typeSpec: 'peer',
       jsonSchema: 'peer',
       generatedWitness: 'evidence_only',
     },
-    targets: [{
-      language: 'rust',
-      runtime: 'native',
-      required: true,
-      ingress: true,
-      egress: true,
-      evidence: 'rust/native.json',
-    }],
+    targets: [
+      {
+        language: 'rust',
+        runtime: 'native',
+        required: true,
+        ingress: true,
+        egress: true,
+        evidence: 'rust/native.json',
+      },
+      {
+        language: 'typescript',
+        runtime: 'node',
+        required: true,
+        ingress: true,
+        egress: true,
+        evidence: 'typescript/node.json',
+      },
+    ],
   }));
   await writeFile(rustEvidence, JSON.stringify(evidence(report, contractIr)));
+  await writeFile(typescriptEvidence, JSON.stringify(evidence(report, contractIr, {
+    language: 'typescript',
+    runtime: 'node',
+    artifactDigest: `sha256:${'2'.repeat(64)}`,
+    toolchain: { name: 'node', version: '22' },
+  })));
 
   const env = {
     ...process.env,
@@ -97,18 +116,22 @@ test('language-boundary action entrypoint proves current-input closure and fails
 
   const accepted = run();
   assert.equal(accepted.status, 0, accepted.stderr || accepted.stdout);
+
   const stdout = JSON.parse(accepted.stdout);
   const receipt = JSON.parse(await readFile(verification, 'utf8'));
   assert.equal(receipt.status, 'passed');
   assert.equal(receipt.zeroUnexplainedFindings, true);
-  assert.equal(receipt.counts.admittedEvidence, 1);
+  assert.equal(receipt.counts.admittedEvidence, 2);
+  assert.equal(receipt.counts.distinctRequiredLanguages, 2);
   assert.deepEqual(stdout, receipt);
 
   await writeFile(rustEvidence, JSON.stringify(evidence(report, contractIr, {
     validation: { ingress: 'failed', egress: 'passed' },
   })));
+
   const rejected = run();
   assert.equal(rejected.status, 2, rejected.stdout || rejected.stderr);
+
   const stopped = JSON.parse(await readFile(verification, 'utf8'));
   assert.equal(stopped.status, 'stopped_for_evaluation');
   assert.equal(stopped.zeroUnexplainedFindings, false);
