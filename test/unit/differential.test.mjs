@@ -145,6 +145,23 @@ test('a satisfied corpus produces no findings', async () => {
   });
   assert.equal(result.findings.length, 0, canonicalStringify(result.findings));
   assert.equal(result.summary.corpusInstances, 5);
+  assert.equal(result.summary.matchedReviewedCorpusInstances, 5);
+  assert.equal(result.summary.reviewedAcceptedInstances, 2);
+  assert.equal(result.summary.reviewedRejectedInstances, 2);
+  assert.equal(result.summary.reviewedUnassertedInstances, 1);
+  assert.equal(result.summary.declarationsWithReviewedPositiveAndNegative, 1);
+  assert.equal(result.summary.declarationsWithoutReviewedFixtures, 1);
+
+  const widget = result.declarations.find((item) => item.authored === 'Widget');
+  assert.ok(widget);
+  assert.deepEqual(widget.reviewedCorpus, { accepted: 2, rejected: 2, unasserted: 1, total: 5 });
+  assert.equal(widget.reviewedFixtureCoverage, 'positive-and-negative');
+
+  const status = result.declarations.find((item) => item.authored === 'Status');
+  assert.ok(status);
+  assert.deepEqual(status.reviewedCorpus, { accepted: 0, rejected: 0, unasserted: 0, total: 0 });
+  assert.equal(status.reviewedFixtureCoverage, 'none');
+  assert.ok(status.syntheticProbes > 0);
 });
 
 test('a violated corpus expectation is reported even when both authorities agree', async () => {
