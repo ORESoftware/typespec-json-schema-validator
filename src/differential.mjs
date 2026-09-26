@@ -255,6 +255,11 @@ export function crossValidate({
     let declarationProbes = 0;
     let declarationDivergences = 0;
     let declarationRefusals = 0;
+    let declarationSyntheticProbes = 0;
+    let declarationDeclaredExamples = 0;
+    let declarationReviewedAccepted = 0;
+    let declarationReviewedRejected = 0;
+    let declarationReviewedUnasserted = 0;
 
     for (const probe of probes) {
       const encoding = canonicalStringify(probe.instance);
@@ -285,6 +290,19 @@ export function crossValidate({
 
       declarationProbes += 1;
       probesEvaluated += 1;
+      if (probe.origin === 'corpus') {
+        if (probe.expectation === 'accepted') {
+          declarationReviewedAccepted += 1;
+        } else if (probe.expectation === 'rejected') {
+          declarationReviewedRejected += 1;
+        } else {
+          declarationReviewedUnasserted += 1;
+        }
+      } else if (probe.origin.startsWith('declared-example') || probe.origin === 'declared-default') {
+        declarationDeclaredExamples += 1;
+      } else {
+        declarationSyntheticProbes += 1;
+      }
 
       if (authoredVerdict.refused || generatedVerdict.refused) {
         declarationRefusals += 1;
@@ -377,11 +395,31 @@ export function crossValidate({
       }
     }
 
+    const reviewedCorpus = {
+      accepted: declarationReviewedAccepted,
+      rejected: declarationReviewedRejected,
+      unasserted: declarationReviewedUnasserted,
+      total: declarationReviewedAccepted + declarationReviewedRejected + declarationReviewedUnasserted,
+    };
+    const reviewedFixtureCoverage = declarationReviewedAccepted > 0 && declarationReviewedRejected > 0
+      ? 'positive-and-negative'
+      : declarationReviewedAccepted > 0
+        ? 'positive-only'
+        : declarationReviewedRejected > 0
+          ? 'negative-only'
+          : declarationReviewedUnasserted > 0
+            ? 'unasserted-only'
+            : 'none';
+
     perDeclaration.push({
       typespec: pair.typespec,
       generated: pair.generated,
       authored: pair.authored,
       probes: declarationProbes,
+      syntheticProbes: declarationSyntheticProbes,
+      declaredExamples: declarationDeclaredExamples,
+      reviewedCorpus,
+      reviewedFixtureCoverage,
       divergences: declarationDivergences,
       refusals: declarationRefusals,
       behaviorallyIndistinguishable: declarationDivergences === 0 && declarationRefusals === 0,
@@ -414,6 +452,16 @@ export function crossValidate({
       divergences,
       refusals,
       corpusInstances: corpus.length,
+      matchedReviewedCorpusInstances: perDeclaration.reduce((total, entry) => total + entry.reviewedCorpus.total, 0),
+      reviewedAcceptedInstances: perDeclaration.reduce((total, entry) => total + entry.reviewedCorpus.accepted, 0),
+      reviewedRejectedInstances: perDeclaration.reduce((total, entry) => total + entry.reviewedCorpus.rejected, 0),
+      reviewedUnassertedInstances: perDeclaration.reduce((total, entry) => total + entry.reviewedCorpus.unasserted, 0),
+      declarationsWithReviewedPositiveAndNegative: perDeclaration.filter(
+        (entry) => entry.reviewedFixtureCoverage === 'positive-and-negative',
+      ).length,
+      declarationsWithoutReviewedFixtures: perDeclaration.filter(
+        (entry) => entry.reviewedFixtureCoverage === 'none',
+      ).length,
       maxProbesPerDeclarationPerLane: maxProbes,
       formatAssertion,
       behaviorallyIndistinguishableDeclarations: perDeclaration.filter((entry) => entry.behaviorallyIndistinguishable).length,
