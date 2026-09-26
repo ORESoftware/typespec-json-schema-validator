@@ -33,6 +33,12 @@ export interface DifferentialSummary {
   divergences: number;
   refusals: number;
   corpusInstances: number;
+  matchedReviewedCorpusInstances: number;
+  reviewedAcceptedInstances: number;
+  reviewedRejectedInstances: number;
+  reviewedUnassertedInstances: number;
+  declarationsWithReviewedPositiveAndNegative: number;
+  declarationsWithoutReviewedFixtures: number;
   maxProbesPerDeclarationPerLane: number;
   formatAssertion: boolean;
   behaviorallyIndistinguishableDeclarations: number;
@@ -43,6 +49,15 @@ export interface DifferentialDeclarationResult {
   generated: string;
   authored: string;
   probes: number;
+  syntheticProbes: number;
+  declaredExamples: number;
+  reviewedCorpus: {
+    accepted: number;
+    rejected: number;
+    unasserted: number;
+    total: number;
+  };
+  reviewedFixtureCoverage: 'positive-and-negative' | 'positive-only' | 'negative-only' | 'unasserted-only' | 'none';
   divergences: number;
   refusals: number;
   behaviorallyIndistinguishable: boolean;
