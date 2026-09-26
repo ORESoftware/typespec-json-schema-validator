@@ -1,0 +1,52 @@
+name: Verify language/runtime artifact boundaries
+description: Freshly bind generated language/runtime evidence to current TypeSpec and JSON Schema peer authorities, retained parity evidence, and Contract IR before promotion.
+inputs:
+  typespec:
+    description: Current independently authored TypeSpec entry file.
+    required: true
+  generated_schema:
+    description: Current TypeSpec-generated JSON Schema B comparison witness file or directory.
+    required: true
+  authored_schema:
+    description: Current independently authored JSON Schema A file or directory.
+    required: true
+  parity_report:
+    description: Retained passed TJSV parity report for the exact authority closure.
+    required: true
+  contract_ir:
+    description: Retained Contract IR bound to the parity report.
+    required: true
+  manifest:
+    description: language-boundaries/v1 manifest declaring required language/runtime targets and evidence paths.
+    required: true
+  evidence_root:
+    description: Workspace-relative directory containing only the manifest-declared language/runtime evidence files.
+    required: true
+  verification:
+    description: Workspace-relative path for the deterministic language-boundary verification receipt.
+    required: false
+    default: .typespec-json-schema-validator/language-boundary-verification.json
+outputs:
+  verification:
+    description: Language-boundary verification receipt path.
+    value: ${{ inputs.verification }}
+runs:
+  using: composite
+  steps:
+    - name: Install the immutable verifier's lockfile-pinned toolchain
+      shell: bash
+      working-directory: ${{ github.action_path }}/../..
+      run: npm ci --omit=dev
+    - name: Verify generated language/runtime artifacts against current authorities
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      env:
+        TSJSV_BOUNDARY_TYPESPEC: ${{ inputs.typespec }}
+        TSJSV_BOUNDARY_GENERATED_SCHEMA: ${{ inputs.generated_schema }}
+        TSJSV_BOUNDARY_AUTHORED_SCHEMA: ${{ inputs.authored_schema }}
+        TSJSV_BOUNDARY_PARITY_REPORT: ${{ inputs.parity_report }}
+        TSJSV_BOUNDARY_CONTRACT_IR: ${{ inputs.contract_ir }}
+        TSJSV_BOUNDARY_MANIFEST: ${{ inputs.manifest }}
+        TSJSV_BOUNDARY_EVIDENCE_ROOT: ${{ inputs.evidence_root }}
+        TSJSV_BOUNDARY_VERIFICATION: ${{ inputs.verification }}
+      run: node "${GITHUB_ACTION_PATH}/../../scripts/verify-language-boundaries.mjs"
