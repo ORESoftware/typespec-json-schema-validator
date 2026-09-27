@@ -3,7 +3,6 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { loadCliEntrypoints } from '../src/cli-bootstrap.mjs';
 
 const launcher_dir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +28,9 @@ async function resolve_package_root() {
 }
 
 const package_root = await resolve_package_root();
+const { loadCliEntrypoints } = await import(
+  pathToFileURL(path.join(package_root, 'src', 'cli-bootstrap.mjs')).href
+);
 let entrypoints = null;
 
 try {
