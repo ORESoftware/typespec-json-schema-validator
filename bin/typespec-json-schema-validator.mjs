@@ -28,11 +28,27 @@ async function resolve_package_root() {
 }
 
 const package_root = await resolve_package_root();
-const [{ main }, { runConfigCommand }] = await Promise.all([
-  import(pathToFileURL(path.join(package_root, 'src', 'cli.mjs')).href),
-  import(pathToFileURL(path.join(package_root, 'src', 'config-cli.mjs')).href),
-]);
+const { loadCliEntrypoints } = await import(
+  pathToFileURL(path.join(package_root, 'src', 'cli-bootstrap.mjs')).href
+);
+let entrypoints = null;
 
-process.exitCode = process.argv[2] === 'config'
-  ? await runConfigCommand(process.argv)
-  : await main(process.argv);
+try {
+  entrypoints = await loadCliEntrypoints({
+    cliUrl: pathToFileURL(path.join(package_root, 'src', 'cli.mjs')).href,
+    configUrl: pathToFileURL(path.join(package_root, 'src', 'config-cli.mjs')).href,
+  });
+} catch (error) {
+  if (error?.code !== 'TJSV_FLAGS2ENV_NATIVE_UNAVAILABLE') {
+    throw error;
+  }
+
+  process.stderr.write(`${error.message}\n`);
+  process.exitCode = 3;
+}
+
+if (entrypoints !== null) {
+  process.exitCode = process.argv[2] === 'config'
+    ? await entrypoints.runConfigCommand(process.argv)
+    : await entrypoints.main(process.argv);
+}
