@@ -5,6 +5,15 @@ export {
   RUNTIME_EVIDENCE_SCHEMA_V2,
 } from './constants.mjs';
 export {
+  BINARY_PAYLOAD_CODEC_REGISTRY,
+  BINARY_PAYLOAD_CODEC_REGISTRY_RECEIPT_SCHEMA,
+  BINARY_PAYLOAD_CODEC_REGISTRY_SCHEMA,
+  BinaryPayloadCodecRegistryError,
+  canonicalBinaryPayloadCodecRegistry,
+  normalizeBinaryPayloadCodecRegistry,
+  verifyBinaryPayloadCodecRegistry,
+} from './codec-registry.mjs';
+export {
   compareRuntimeEvidence,
   createRuntimeEvidenceContractBinding,
 } from './decision.mjs';
