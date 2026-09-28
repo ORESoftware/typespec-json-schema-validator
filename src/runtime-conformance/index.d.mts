@@ -194,3 +194,5 @@ export function loadRuntimeEvidence(
   path: string,
   options?: { maxBytes?: number },
 ): Promise<unknown>;
+
+export * from './codec-registry.mjs';
