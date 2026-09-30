@@ -53,12 +53,12 @@ function mergedEnvironment(parsed, manifestEnvironment = {}) {
   };
 }
 
-function loadConsumerManifest(command) {
+function loadConsumerManifest(command, env) {
   try {
     return loadConsumerManifestConfiguration({
       command,
-      manifestPath: process.env.TSJSV_CONSUMER_MANIFEST || undefined,
-      contractId: process.env.TSJSV_CONTRACT || undefined,
+      manifestPath: env.TSJSV_CONSUMER_MANIFEST || undefined,
+      contractId: env.TSJSV_CONTRACT || undefined,
     });
   } catch (error) {
     if (!(error instanceof ConsumerManifestError)) throw error;
@@ -102,7 +102,7 @@ export function loadCliConfiguration(argv = process.argv) {
       configMode: baseEnv.TSJSV_CONFIG_MODE || undefined,
     });
   }
-  const consumerManifest = loadConsumerManifest(parsedCommand);
+  const consumerManifest = loadConsumerManifest(parsedCommand, baseEnv);
   const env = mergedEnvironment(parsed, consumerManifest?.env);
   const command = parsedCommand;
   const common = {
