@@ -75,12 +75,17 @@ function normalizeFunction(value, label) {
   if (!Array.isArray(value.params) || !Array.isArray(value.results)) {
     fail(`${label}.params and .results must be arrays`);
   }
+  if (value.results.length > 1) fail(`${label}.results must contain at most one WIT result`);
   const params = value.params.map((item, index) => normalizeParam(item, `${label}.params[${index}]`));
-  const results = value.results.map((item, index) => normalizeParam(
-    item,
-    `${label}.results[${index}]`,
-    { allowAnonymous: true },
-  ));
+  const results = value.results.map((item, index) => {
+    const result = normalizeParam(
+      item,
+      `${label}.results[${index}]`,
+      { allowAnonymous: true },
+    );
+    if (result.name !== null) fail(`${label}.results[${index}].name must be null`);
+    return result;
+  });
   uniqueNames(params, `${label}.params`);
   return {
     name: identifier(value.name, `${label}.name`),
