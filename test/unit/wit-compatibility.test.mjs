@@ -20,6 +20,7 @@ function projection() {
       types: [{ name: 'status', kind: 'enum', shape: 'enum{ok,error}' }],
       functions: [{
         name: 'send',
+        async: false,
         params: [{ name: 'payload', type: 'list<u8>' }],
         results: [{ name: null, type: 'result<u64,string>' }],
       }],
@@ -35,7 +36,7 @@ function projection() {
 test('consumer mode allows additive interface functions', () => {
   const baseline = projection();
   const current = structuredClone(baseline);
-  current.interfaces[0].functions.push({ name: 'ping', params: [], results: [] });
+  current.interfaces[0].functions.push({ name: 'ping', async: false, params: [], results: [] });
   assert.equal(compareWitCompatibility(baseline, current, { mode: 'consumer' }).status, 'passed');
   assert.equal(compareWitCompatibility(baseline, current, { mode: 'strict' }).status, 'stopped_for_evaluation');
 });
@@ -65,7 +66,7 @@ test('receipt is deterministic and self-digesting', () => {
 test('default mode is strict and rejects additive interface functions', () => {
   const baseline = projection();
   const current = structuredClone(baseline);
-  current.interfaces[0].functions.push({ name: 'ping', params: [], results: [] });
+  current.interfaces[0].functions.push({ name: 'ping', async: false, params: [], results: [] });
   const result = compareWitCompatibility(baseline, current);
   assert.equal(result.mode, 'strict');
   assert.equal(result.status, 'stopped_for_evaluation');
@@ -177,4 +178,18 @@ test('strict mode rejects additive world exports while consumer mode allows them
   const strict = compareWitCompatibility(baseline, current, { mode: 'strict' });
   assert.equal(strict.status, 'stopped_for_evaluation');
   assert.ok(strict.findings.some((item) => item.ruleId === 'wit-world-export-added'));
+});
+
+
+test('sync to async function changes are breaking and map is supported', () => {
+  const baseline = projection();
+  const current = structuredClone(baseline);
+  current.interfaces[0].functions[0].async = true;
+  const changed = compareWitCompatibility(baseline, current, { mode: 'consumer' });
+  assert.equal(changed.status, 'stopped_for_evaluation');
+  assert.ok(changed.findings.some((item) => item.ruleId === 'wit-function-signature-changed'));
+
+  const withMap = projection();
+  withMap.interfaces[0].types.push({ name: 'headers', kind: 'map', shape: 'map<string,string>' });
+  assert.equal(normalizeWitProjection(withMap).interfaces[0].types[0].kind, 'map');
 });
