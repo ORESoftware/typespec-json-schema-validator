@@ -8,19 +8,19 @@ const ROOT_KEYS = new Set(['version', 'default_contract', 'authority', 'defaults
 const AUTHORITY_KEYS = new Set(['typespec', 'json_schema']);
 const CONFIG_KEYS = new Set([
   'typespec', 'schema', 'generated_schema', 'report', 'sarif', 'mapping', 'instances',
-  'contract_ir', 'output_dir', 'tsp_bin', 'max_findings', 'probes', 'max_probes',
+  'contract_ir', 'output_dir', 'max_findings', 'probes', 'max_probes',
   'format_assertion', 'bundle_id', 'int64_strategy', 'seal_object_schemas',
   'polymorphic_models_strategy',
 ]);
 const CONTRACT_KEYS = new Set(['id', ...CONFIG_KEYS]);
 const PATH_KEYS = new Set([
   'typespec', 'schema', 'generated_schema', 'report', 'sarif', 'mapping', 'instances',
-  'contract_ir', 'output_dir', 'tsp_bin',
+  'contract_ir', 'output_dir',
 ]);
 const ENV = Object.freeze({
   typespec: 'TSJSV_TYPESPEC', schema: 'TSJSV_AUTHORED_SCHEMA', generated_schema: 'TSJSV_GENERATED_SCHEMA',
   report: 'TSJSV_REPORT', sarif: 'TSJSV_SARIF', mapping: 'TSJSV_MAPPING', instances: 'TSJSV_INSTANCES',
-  contract_ir: 'TSJSV_CONTRACT_IR', output_dir: 'TSJSV_OUTPUT_DIR', tsp_bin: 'TSJSV_TSP_BIN',
+  contract_ir: 'TSJSV_CONTRACT_IR', output_dir: 'TSJSV_OUTPUT_DIR',
   max_findings: 'TSJSV_MAX_FINDINGS', probes: 'TSJSV_PROBES', max_probes: 'TSJSV_MAX_PROBES',
   format_assertion: 'TSJSV_FORMAT_ASSERTION', bundle_id: 'TSJSV_BUNDLE_ID',
   int64_strategy: 'TSJSV_INT64_STRATEGY', seal_object_schemas: 'TSJSV_SEAL_OBJECT_SCHEMAS',
