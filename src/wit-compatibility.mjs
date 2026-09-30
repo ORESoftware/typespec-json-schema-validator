@@ -8,9 +8,9 @@ export const WIT_PROJECTION_SCHEMA =
 export const WIT_COMPATIBILITY_RECEIPT_SCHEMA =
   'ores.typespec-json-schema-validator.wit-compatibility-receipt/v1';
 
-const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_-]*$/u;
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$/u;
 const TYPE_KINDS = new Set([
-  'alias', 'record', 'variant', 'enum', 'flags', 'resource', 'handle', 'tuple', 'option', 'result', 'list', 'future', 'stream',
+  'alias', 'record', 'variant', 'enum', 'flags', 'resource', 'handle', 'tuple', 'option', 'result', 'list', 'future', 'stream', 'map',
 ]);
 const MODES = new Set(['consumer', 'strict']);
 
@@ -61,8 +61,9 @@ function normalizeNamedType(value, label) {
   };
 }
 
-function normalizeParam(value, label) {
+function normalizeParam(value, label, { allowAnonymous = false } = {}) {
   exactKeys(value, ['name', 'type'], label);
+  if (!allowAnonymous && value.name === null) fail(`${label}.name must be a WIT identifier`);
   return {
     name: value.name === null ? null : identifier(value.name, `${label}.name`),
     type: text(value.type, `${label}.type`, 2048),
@@ -70,14 +71,26 @@ function normalizeParam(value, label) {
 }
 
 function normalizeFunction(value, label) {
-  exactKeys(value, ['name', 'params', 'results'], label);
+  exactKeys(value, ['name', 'async', 'params', 'results'], label);
   if (!Array.isArray(value.params) || !Array.isArray(value.results)) {
     fail(`${label}.params and .results must be arrays`);
   }
+  if (value.results.length > 1) fail(`${label}.results must contain at most one WIT result`);
   const params = value.params.map((item, index) => normalizeParam(item, `${label}.params[${index}]`));
-  const results = value.results.map((item, index) => normalizeParam(item, `${label}.results[${index}]`));
+  const results = value.results.map((item, index) => {
+    const result = normalizeParam(
+      item,
+      `${label}.results[${index}]`,
+      { allowAnonymous: true },
+    );
+    if (result.name !== null) fail(`${label}.results[${index}].name must be null`);
+    return result;
+  });
+  uniqueNames(params, `${label}.params`);
+  if (typeof value.async !== 'boolean') fail(`${label}.async must be a boolean`);
   return {
     name: identifier(value.name, `${label}.name`),
+    async: value.async,
     params,
     results,
   };
@@ -92,6 +105,7 @@ function normalizeInterface(value, label) {
   const functions = value.functions.map((item, index) => normalizeFunction(item, `${label}.functions[${index}]`));
   uniqueNames(types, `${label}.types`);
   uniqueNames(functions, `${label}.functions`);
+  uniqueNames([...types, ...functions], `${label}.items`);
   return {
     name: identifier(value.name, `${label}.name`),
     types: types.sort(byName),
@@ -127,12 +141,42 @@ function normalizeWorld(value, label) {
 }
 
 function byName(left, right) {
-  return left.name.localeCompare(right.name);
+  if (left.name < right.name) return -1;
+  if (left.name > right.name) return 1;
+  return 0;
 }
 
 function uniqueNames(items, label) {
-  const names = items.map((item) => item.name);
-  if (new Set(names).size !== names.length) fail(`${label} contains duplicate names`);
+  const names = items.map((item) => item.name.toLowerCase());
+  if (new Set(names).size !== names.length) {
+    fail(`${label} contains names that collide under WIT case-insensitive uniqueness`);
+  }
+}
+
+const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*(?::[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)+(?:\/[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)*$/u;
+const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u;
+
+function canonicalPackageIdentity(value) {
+  const at = value.lastIndexOf('@');
+  if (at === -1) {
+    if (!PACKAGE_NAME.test(value)) fail('projection.package name must be a normalized WIT package name');
+    return value;
+  }
+  const name = value.slice(0, at);
+  if (!PACKAGE_NAME.test(name)) fail('projection.package name must be a normalized WIT package name');
+  const version = value.slice(at + 1);
+  const match = SEMVER.exec(version);
+  if (!match) fail('projection.package version must be valid full semver');
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  const prerelease = match[4];
+  let canonicalVersion;
+  if (prerelease !== undefined) canonicalVersion = `${major}.${minor}.${patch}-${prerelease}`;
+  else if (major > 0) canonicalVersion = String(major);
+  else if (minor > 0) canonicalVersion = `0.${minor}`;
+  else canonicalVersion = `0.0.${patch}`;
+  return `${name}@${canonicalVersion}`;
 }
 
 export function normalizeWitProjection(value) {
@@ -145,9 +189,11 @@ export function normalizeWitProjection(value) {
   const interfaces = value.interfaces.map((item, index) => normalizeInterface(item, `projection.interfaces[${index}]`));
   uniqueNames(worlds, 'projection.worlds');
   uniqueNames(interfaces, 'projection.interfaces');
+  const packageName = text(value.package, 'projection.package', 512);
+  canonicalPackageIdentity(packageName);
   return Object.freeze({
     schema: WIT_PROJECTION_SCHEMA,
-    package: text(value.package, 'projection.package', 512),
+    package: packageName,
     worlds: worlds.sort(byName),
     interfaces: interfaces.sort(byName),
   });
@@ -159,16 +205,26 @@ function finding(ruleId, subject, message, baseline, current) {
 }
 
 function push(findings, maxFindings, ...args) {
-  if (findings.length <= maxFindings) findings.push(finding(...args));
+  findings.totalCount = (findings.totalCount ?? 0) + 1;
+  if (findings.length < maxFindings) findings.push(finding(...args));
 }
 
-function compareNamedBaseline(before, after, prefix, findings, maxFindings, compare) {
+function compareNamedBaseline(
+  before,
+  after,
+  prefix,
+  findings,
+  maxFindings,
+  compare,
+  subjectPrefix = '',
+) {
   const current = new Map(after.map((item) => [item.name, item]));
   for (const item of before) {
     const next = current.get(item.name);
     if (!next) {
-      push(findings, maxFindings, `wit-${prefix}-removed`, item.name,
-        `${prefix} ${item.name} was removed`, item, null);
+      const subject = `${subjectPrefix}${item.name}`;
+      push(findings, maxFindings, `wit-${prefix}-removed`, subject,
+        `${prefix} ${subject} was removed`, item, null);
       continue;
     }
     compare(item, next);
@@ -183,12 +239,20 @@ function compareInterfaces(baseline, current, findings, maxFindings, mode) {
     findings,
     maxFindings,
     (before, after) => {
-      compareNamedBaseline(before.types, after.types, 'type', findings, maxFindings, (oldType, newType) => {
-        if (oldType.kind !== newType.kind || oldType.shape !== newType.shape) {
-          push(findings, maxFindings, 'wit-type-changed', `${before.name}.${oldType.name}`,
-            `WIT type ${before.name}.${oldType.name} changed`, oldType, newType);
-        }
-      });
+      compareNamedBaseline(
+        before.types,
+        after.types,
+        'type',
+        findings,
+        maxFindings,
+        (oldType, newType) => {
+          if (oldType.kind !== newType.kind || oldType.shape !== newType.shape) {
+            push(findings, maxFindings, 'wit-type-changed', `${before.name}.${oldType.name}`,
+              `WIT type ${before.name}.${oldType.name} changed`, oldType, newType);
+          }
+        },
+        `${before.name}.`,
+      );
 
       const currentFns = new Map(after.functions.map((item) => [item.name, item]));
       for (const fn of before.functions) {
@@ -199,7 +263,8 @@ function compareInterfaces(baseline, current, findings, maxFindings, mode) {
             `WIT function ${subject} was removed`, fn, null);
           continue;
         }
-        if (canonicalStringify(fn.params) !== canonicalStringify(next.params)
+        if (fn.async !== next.async
+          || canonicalStringify(fn.params) !== canonicalStringify(next.params)
           || canonicalStringify(fn.results) !== canonicalStringify(next.results)) {
           push(findings, maxFindings, 'wit-function-signature-changed', subject,
             `WIT function ${subject} changed parameters or results`, fn, next);
@@ -219,7 +284,7 @@ function compareInterfaces(baseline, current, findings, maxFindings, mode) {
   );
 }
 
-function compareWorlds(baseline, current, findings, maxFindings) {
+function compareWorlds(baseline, current, findings, maxFindings, mode) {
   compareNamedBaseline(baseline.worlds, current.worlds, 'world', findings, maxFindings, (before, after) => {
     const currentExports = new Map(after.exports.map((item) => [item.name, item]));
     for (const item of before.exports) {
@@ -231,6 +296,16 @@ function compareWorlds(baseline, current, findings, maxFindings) {
       } else if (canonicalStringify(item) !== canonicalStringify(next)) {
         push(findings, maxFindings, 'wit-world-export-changed', subject,
           `WIT world export ${subject} changed`, item, next);
+      }
+    }
+    if (mode === 'strict') {
+      const baselineExports = new Set(before.exports.map((item) => item.name));
+      for (const item of after.exports) {
+        if (!baselineExports.has(item.name)) {
+          const subject = `${after.name}.export.${item.name}`;
+          push(findings, maxFindings, 'wit-world-export-added', subject,
+            `WIT world export ${subject} adds a new provider obligation in strict mode`, null, item);
+        }
       }
     }
 
@@ -255,7 +330,7 @@ function compareWorlds(baseline, current, findings, maxFindings) {
 
 export function compareWitCompatibility(baselineValue, currentValue, options = {}) {
   const maxFindings = options.maxFindings ?? 250;
-  const mode = options.mode ?? 'consumer';
+  const mode = options.mode ?? 'strict';
   if (!Number.isSafeInteger(maxFindings) || maxFindings < 1 || maxFindings > 10_000) {
     fail('maxFindings must be a safe integer between 1 and 10000');
   }
@@ -264,25 +339,27 @@ export function compareWitCompatibility(baselineValue, currentValue, options = {
   const baseline = normalizeWitProjection(baselineValue);
   const current = normalizeWitProjection(currentValue);
   const findings = [];
-  if (baseline.package !== current.package) {
-    push(findings, maxFindings, 'wit-package-changed', 'package',
-      `WIT package changed from ${baseline.package} to ${current.package}`,
+  if (canonicalPackageIdentity(baseline.package) !== canonicalPackageIdentity(current.package)) {
+    push(findings, maxFindings, 'wit-package-identity-changed', 'package',
+      `WIT package identity changed from ${baseline.package} to ${current.package}`,
       baseline.package, current.package);
   }
   compareInterfaces(baseline, current, findings, maxFindings, mode);
-  compareWorlds(baseline, current, findings, maxFindings);
+  compareWorlds(baseline, current, findings, maxFindings, mode);
 
-  const truncated = findings.length > maxFindings;
-  const visible = findings.slice(0, maxFindings);
+  const totalFindingCount = findings.totalCount ?? 0;
+  delete findings.totalCount;
+  const truncated = totalFindingCount > findings.length;
   return Object.freeze({
     baseline,
     current,
     mode,
     baselineDigest: sha256(canonicalStringify(baseline)),
     currentDigest: sha256(canonicalStringify(current)),
-    status: findings.length === 0 ? 'passed' : 'stopped_for_evaluation',
-    admissible: findings.length === 0,
-    findings: Object.freeze(visible),
+    status: totalFindingCount === 0 ? 'passed' : 'stopped_for_evaluation',
+    admissible: totalFindingCount === 0,
+    totalFindingCount,
+    findings: Object.freeze(findings),
     truncated,
   });
 }
@@ -292,10 +369,12 @@ function receiptBody(result, failureCode = null) {
     schema: WIT_COMPATIBILITY_RECEIPT_SCHEMA,
     status: result.status,
     admissible: result.status === 'passed',
-    mode: result.mode ?? 'consumer',
+    mode: result.mode ?? 'strict',
     baselineDigest: result.baselineDigest ?? null,
     currentDigest: result.currentDigest ?? null,
-    breakingChangeCount: Array.isArray(result.findings) ? result.findings.length : 0,
+    breakingChangeCount: Number.isSafeInteger(result.totalFindingCount)
+      ? result.totalFindingCount
+      : Array.isArray(result.findings) ? result.findings.length : 0,
     truncated: result.truncated === true,
     breakingChanges: Array.isArray(result.findings) ? result.findings : [],
     failureCode: result.status === 'passed'
@@ -312,14 +391,14 @@ export function createWitCompatibilityReceipt({ baseline, current, maxFindings, 
   return Object.freeze({ ...body, verificationId: sha256(canonicalStringify(body)) });
 }
 
-export function failedWitCompatibilityReceipt({ baseline, current, mode = 'consumer' } = {}) {
+export function failedWitCompatibilityReceipt({ baseline, current, mode = 'strict' } = {}) {
   let baselineDigest = null;
   let currentDigest = null;
   try { baselineDigest = sha256(canonicalStringify(normalizeWitProjection(baseline))); } catch {}
   try { currentDigest = sha256(canonicalStringify(normalizeWitProjection(current))); } catch {}
   const body = receiptBody({
     status: 'failed',
-    mode: MODES.has(mode) ? mode : 'consumer',
+    mode: MODES.has(mode) ? mode : 'strict',
     baselineDigest,
     currentDigest,
     findings: [],
@@ -332,13 +411,42 @@ function validDigest(value) {
   return typeof value === 'string' && /^[0-9a-f]{64}$/u.test(value);
 }
 
+function validFinding(value) {
+  if (!isPlainObject(value)) return false;
+  const keys = Object.keys(value).sort();
+  const expected = ['baseline', 'current', 'fingerprint', 'message', 'ruleId', 'subject'].sort();
+  if (canonicalStringify(keys) !== canonicalStringify(expected)) return false;
+  if (typeof value.ruleId !== 'string' || !/^wit-[a-z0-9-]+$/u.test(value.ruleId)) return false;
+  if (typeof value.subject !== 'string' || value.subject.length === 0) return false;
+  if (typeof value.message !== 'string' || value.message.length === 0) return false;
+  if (!validDigest(value.fingerprint)) return false;
+  const { fingerprint, ...body } = value;
+  return fingerprint === sha256(canonicalStringify(body));
+}
+
 function validReceipt(receipt) {
   if (!isPlainObject(receipt) || receipt.schema !== WIT_COMPATIBILITY_RECEIPT_SCHEMA) return false;
   if (!['passed', 'stopped_for_evaluation', 'failed'].includes(receipt.status)) return false;
   if (!MODES.has(receipt.mode) || receipt.admissible !== (receipt.status === 'passed')) return false;
   if (!Number.isSafeInteger(receipt.breakingChangeCount) || receipt.breakingChangeCount < 0) return false;
-  if (!Array.isArray(receipt.breakingChanges) || receipt.breakingChangeCount !== receipt.breakingChanges.length) return false;
+  if (!Array.isArray(receipt.breakingChanges) || !receipt.breakingChanges.every(validFinding)) return false;
+  if (receipt.truncated) {
+    if (receipt.breakingChangeCount <= receipt.breakingChanges.length) return false;
+  } else if (receipt.breakingChangeCount !== receipt.breakingChanges.length) return false;
   if (![receipt.baselineDigest, receipt.currentDigest].every((v) => v === null || validDigest(v))) return false;
+
+  if (receipt.status === 'passed') {
+    if (receipt.failureCode !== null || receipt.breakingChangeCount !== 0 || receipt.truncated) return false;
+    if (!validDigest(receipt.baselineDigest) || !validDigest(receipt.currentDigest)) return false;
+  } else if (receipt.status === 'stopped_for_evaluation') {
+    if (receipt.failureCode !== 'wit-breaking-change-detected' || receipt.breakingChangeCount === 0) return false;
+    if (receipt.breakingChanges.length === 0) return false;
+    if (!validDigest(receipt.baselineDigest) || !validDigest(receipt.currentDigest)) return false;
+  } else {
+    if (receipt.failureCode !== 'wit-compatibility-verification-failed') return false;
+    if (receipt.breakingChangeCount !== 0 || receipt.breakingChanges.length !== 0 || receipt.truncated) return false;
+  }
+
   if (!validDigest(receipt.verificationId)) return false;
   const { verificationId, ...body } = receipt;
   return verificationId === sha256(canonicalStringify(body));

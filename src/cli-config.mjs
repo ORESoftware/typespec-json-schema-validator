@@ -194,7 +194,7 @@ export function loadCliConfiguration(argv = process.argv) {
           || '.typespec-json-schema-validator/consumer-verification.json',
       };
     case 'verify-wit': {
-      const witMode = env.TSJSV_WIT_MODE || 'consumer';
+      const witMode = env.TSJSV_WIT_MODE || 'strict';
       if (!['consumer', 'strict'].includes(witMode)) {
         throw new CliUsageError('--mode must be consumer or strict', { command });
       }

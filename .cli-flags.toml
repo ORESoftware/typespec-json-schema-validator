@@ -422,8 +422,8 @@ help = "Deterministic self-digesting WIT compatibility receipt path."
 env = "TSJSV_WIT_MODE"
 aliases = ["mode"]
 type = "string"
-default = "consumer"
-help = "Compatibility mode: consumer permits additive interface functions; strict treats them as breaking."
+default = "strict"
+help = "Compatibility mode: strict is fail-closed; consumer explicitly permits additive interface functions for consumer-only SDK surfaces."
 
 [commands.legal-rollout]
 help = "Admit legal-document inventory against exact peer authorities and Contract IR evidence."

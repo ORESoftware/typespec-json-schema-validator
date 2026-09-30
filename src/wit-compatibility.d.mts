@@ -3,11 +3,12 @@ export type WitCompatibilityStatus = 'passed' | 'stopped_for_evaluation' | 'fail
 
 export interface WitNamedTypeProjection {
   name: string;
-  kind: 'alias' | 'record' | 'variant' | 'enum' | 'flags' | 'resource' | 'handle' | 'tuple' | 'option' | 'result' | 'list' | 'future' | 'stream';
+  kind: 'alias' | 'record' | 'variant' | 'enum' | 'flags' | 'resource' | 'handle' | 'tuple' | 'option' | 'result' | 'list' | 'future' | 'stream' | 'map';
   shape: string;
 }
-export interface WitParamProjection { name: string | null; type: string; }
-export interface WitFunctionProjection { name: string; params: WitParamProjection[]; results: WitParamProjection[]; }
+export interface WitParamProjection { name: string; type: string; }
+export interface WitResultProjection { name: null; type: string; }
+export interface WitFunctionProjection { name: string; async: boolean; params: WitParamProjection[]; results: WitResultProjection[]; }
 export interface WitInterfaceProjection { name: string; types: WitNamedTypeProjection[]; functions: WitFunctionProjection[]; }
 export interface WitWorldBindingProjection { name: string; kind: 'interface' | 'function'; target: string; }
 export interface WitWorldProjection { name: string; imports: WitWorldBindingProjection[]; exports: WitWorldBindingProjection[]; }
@@ -33,6 +34,7 @@ export interface WitCompatibilityResult {
   currentDigest: string;
   status: 'passed' | 'stopped_for_evaluation';
   admissible: boolean;
+  totalFindingCount: number;
   findings: readonly WitCompatibilityFinding[];
   truncated: boolean;
 }

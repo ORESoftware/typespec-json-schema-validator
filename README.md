@@ -120,7 +120,7 @@ Verify a normalized WIT projection against the retained released baseline:
 npx tjsv verify-wit \\
   --baseline=./contracts/wit/baseline.json \\
   --current=./artifacts/wit/current.json \\
-  --mode=consumer \\
+  --mode=strict \\
   --verification=./artifacts/wit-compatibility.json
 ```
 
