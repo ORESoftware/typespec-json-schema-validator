@@ -1,4 +1,13 @@
 {
   "schema": "tjsv-npm-audit-exceptions/v1",
-  "exceptions": []
+  "exceptions": [
+    {
+      "advisoryId": "npm:1193788",
+      "package": "@typespec/compiler",
+      "owner": "ORESoftware/security",
+      "rationale": "No released npm package in the current TypeSpec line contains the upstream path-sanitization fix yet. This exception is temporary while tracking microsoft/typespec#11777 and must be removed when the patched release is available.",
+      "reachabilityEvidence": "TJSV invokes only the @typespec/json-schema emitter with a fixed plain bundleId. src/emitter.mjs now calls assertTypeSpecEmitterInputSafe before output-directory creation or compiler execution; test/unit/typespec-emitter-path-boundary.test.mjs rejects slash/backslash-bearing escaped identifiers and proves the compiler cannot run for that input.",
+      "expiresAt": "2026-10-14T04:00:00.000Z"
+    }
+  ]
 }
