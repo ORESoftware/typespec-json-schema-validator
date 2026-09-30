@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/wit-compatibility-receipt.v1.schema.json",
   "title": "ORESoftware WIT compatibility receipt v1",
+  "description": "Deterministic baseline-compatibility evidence. breakingChangeCount is the total detected count; breakingChanges is the bounded visible subset when truncated=true.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "status", "admissible", "mode", "baselineDigest", "currentDigest", "breakingChangeCount", "truncated", "breakingChanges", "failureCode", "verificationId"],
@@ -12,9 +13,21 @@
     "mode": { "enum": ["consumer", "strict"] },
     "baselineDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
     "currentDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
-    "breakingChangeCount": { "type": "integer", "minimum": 0 },
-    "truncated": { "type": "boolean" },
-    "breakingChanges": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/finding" } },
+    "breakingChangeCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of detected breaking changes before visible-finding truncation."
+    },
+    "truncated": {
+      "type": "boolean",
+      "description": "True when breakingChanges contains only a bounded prefix of the total findings."
+    },
+    "breakingChanges": {
+      "type": "array",
+      "maxItems": 10000,
+      "description": "Visible bounded findings; when truncated=false its length equals breakingChangeCount.",
+      "items": { "$ref": "#/$defs/finding" }
+    },
     "failureCode": { "oneOf": [
       { "enum": ["wit-breaking-change-detected", "wit-compatibility-verification-failed"] },
       { "type": "null" }
