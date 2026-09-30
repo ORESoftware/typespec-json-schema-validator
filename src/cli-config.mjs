@@ -195,8 +195,8 @@ export function loadCliConfiguration(argv = process.argv) {
       };
     case 'verify-wit': {
       const witMode = env.TSJSV_WIT_MODE || 'consumer';
-      if (!['consumer', 'strict'].includes(witMode)) {
-        throw new CliUsageError('--mode must be consumer or strict', { command });
+      if (!['consumer', 'provider', 'strict'].includes(witMode)) {
+        throw new CliUsageError('--mode must be consumer, provider, or strict', { command });
       }
       return {
         ...common,
