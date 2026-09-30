@@ -31,7 +31,9 @@ digest-bound compatibility receipt
 
 The normalized representation is intentionally syntax-independent. Named WIT types carry a canonical `shape` string produced by the WIT tooling. A change to an existing type shape is treated as breaking; this includes adding/removing enum or variant cases.
 
-World exports are protected from removal or signature/target changes. New world imports are breaking because they add host requirements. Existing interface functions may not be removed or have their signatures changed. In `strict` mode, adding interface functions is also breaking for implementers.
+Compatibility is directional. In `consumer` mode, callers/hosts are protected: removing exports/functions or adding host imports is breaking, while additive exports/functions are allowed. In `provider` mode, implementers/guests are protected: adding required exports/functions or removing imports they may consume is breaking. `strict` mode applies both directions and also rejects newly added interfaces, named types, and worlds. Signature/target changes are breaking in every mode.
+
+Package release versions are not themselves treated as structural breakage: `ores:example@1.0.0` and `ores:example@1.1.0` have the same package identity. Changing the namespace/name identity is breaking. Version policy and semver correctness remain separate release-policy concerns.
 
 ## CLI
 
@@ -43,7 +45,7 @@ tjsv verify-wit \
   --verification=artifacts/wit-compatibility.json
 ```
 
-Use `--mode=strict` for component/provider contracts where adding a function to an interface must stop promotion.
+Use `--mode=consumer` for callers/hosts, `--mode=provider` for implementers/guests, and `--mode=strict` for conservative fleet promotion where either direction must remain compatible.
 
 The receipt is deterministic and self-digesting. A compatibility pass is necessary but not sufficient for promotion: the exact-head TypeSpec/JSON Schema parity receipt, Contract IR/projection admission, raw `.wit` formatting/validation, generated binding compilation, and cross-runtime fixtures must also pass.
 
