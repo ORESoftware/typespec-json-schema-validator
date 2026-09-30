@@ -66,6 +66,7 @@
       "additionalProperties": false,
       "required": [
         "name",
+        "async",
         "params",
         "results"
       ],
@@ -86,6 +87,9 @@
           "items": {
             "$ref": "#/$defs/result"
           }
+        },
+        "async": {
+          "type": "boolean"
         }
       }
     },
@@ -115,7 +119,8 @@
             "result",
             "list",
             "future",
-            "stream"
+            "stream",
+            "map"
           ]
         },
         "shape": {
