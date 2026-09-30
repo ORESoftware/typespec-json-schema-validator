@@ -36,6 +36,13 @@ With that file, the normal consumer invocation becomes:
 tjsv check
 ```
 
-A manifest with one contract selects it automatically. A manifest with multiple contracts must define `default_contract`; `TSJSV_CONTRACT` can select another declared contract without changing the file. `TSJSV_CONSUMER_MANIFEST` can point at an explicit manifest when auto-discovery is not desired.
+A manifest with one contract selects it automatically. A manifest with multiple contracts can define `default_contract` or be selected explicitly:
+
+```bash
+tjsv check --contract=admin
+tjsv check --consumer-manifest=./config/.ores-tjsv.toml --contract=api
+```
+
+The corresponding environment variables are `TSJSV_CONTRACT` and `TSJSV_CONSUMER_MANIFEST`. These selectors are part of the package-owned `.cli-flags.toml` contract and go through `flags-2-env`; there is no separate argv parser.
 
 Manifest configuration has lower precedence than real environment variables and explicit CLI arguments. Generated parity receipts and Contract IR remain evidence; the manifest itself is policy/configuration, not evidence.
