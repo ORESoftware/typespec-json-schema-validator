@@ -1,8 +1,10 @@
-import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ConsumerManifestSyntaxError, parseConsumerManifestToml } from './consumer-manifest-toml.mjs';
 
 export const CONSUMER_MANIFEST_NAME = '.ores-tjsv.toml';
+export const CONSUMER_MANIFEST_MAX_BYTES = 256 * 1024;
+
 const COMMANDS = new Set(['check', 'compare', 'validate', 'inventory', 'generate']);
 const ROOT_KEYS = new Set(['version', 'default_contract', 'authority', 'defaults', 'contracts']);
 const AUTHORITY_KEYS = new Set(['typespec', 'json_schema']);
@@ -17,6 +19,7 @@ const PATH_KEYS = new Set([
   'typespec', 'schema', 'generated_schema', 'report', 'sarif', 'mapping', 'instances',
   'contract_ir', 'output_dir',
 ]);
+const CONTRACT_ID = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/u;
 const ENV = Object.freeze({
   typespec: 'TSJSV_TYPESPEC', schema: 'TSJSV_AUTHORED_SCHEMA', generated_schema: 'TSJSV_GENERATED_SCHEMA',
   report: 'TSJSV_REPORT', sarif: 'TSJSV_SARIF', mapping: 'TSJSV_MAPPING', instances: 'TSJSV_INSTANCES',
@@ -94,7 +97,7 @@ export function validateConsumerManifest(value, manifest = CONSUMER_MANIFEST_NAM
     const label = `contracts[${index}]`;
     assertKnownKeys(contract, CONTRACT_KEYS, label, manifest);
     nonEmptyString(contract.id, `${label}.id`, manifest);
-    if (!/^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/u.test(contract.id)) {
+    if (!CONTRACT_ID.test(contract.id)) {
       fail(`${label}.id is not a valid contract identifier`, manifest);
     }
     if (ids.has(contract.id)) fail(`duplicate contract id ${contract.id}`, manifest);
@@ -110,43 +113,129 @@ export function validateConsumerManifest(value, manifest = CONSUMER_MANIFEST_NAM
   return value;
 }
 
-function regularFile(path) {
+function tryLstat(path) {
   try {
-    const info = lstatSync(path);
-    return info.isFile() && !info.isSymbolicLink() && info.nlink === 1;
-  } catch {
-    return false;
+    return lstatSync(path);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') return null;
+    throw error;
   }
+}
+
+function assertManifestFile(path, info = undefined) {
+  let inspected = info;
+  try {
+    inspected ??= lstatSync(path);
+  } catch {
+    fail('consumer manifest could not be read', path);
+  }
+  if (!inspected.isFile() || inspected.isSymbolicLink() || inspected.nlink !== 1) {
+    fail('consumer manifest must be a regular, non-symlink, single-link file', path);
+  }
+  if (inspected.size > CONSUMER_MANIFEST_MAX_BYTES) {
+    fail(`consumer manifest exceeds ${CONSUMER_MANIFEST_MAX_BYTES} bytes`, path);
+  }
+  return inspected;
+}
+
+function readConsumerManifest(path) {
+  assertManifestFile(path);
+  let text;
+  try {
+    text = readFileSync(path, 'utf8');
+  } catch {
+    fail('consumer manifest could not be read', path);
+  }
+  if (Buffer.byteLength(text, 'utf8') > CONSUMER_MANIFEST_MAX_BYTES) {
+    fail(`consumer manifest exceeds ${CONSUMER_MANIFEST_MAX_BYTES} bytes`, path);
+  }
+  return text;
 }
 
 export function discoverConsumerManifest(start = process.cwd()) {
   let current = resolve(start);
   while (true) {
     const candidate = join(current, CONSUMER_MANIFEST_NAME);
-    if (existsSync(candidate)) {
-      if (!regularFile(candidate)) fail('consumer manifest must be a regular, non-symlink file', candidate);
+    let manifestInfo;
+    try {
+      manifestInfo = tryLstat(candidate);
+    } catch {
+      fail('consumer manifest discovery could not inspect the candidate path', candidate);
+    }
+    if (manifestInfo !== null) {
+      assertManifestFile(candidate, manifestInfo);
       return candidate;
     }
-    if (existsSync(join(current, '.git'))) return null;
+    try {
+      if (tryLstat(join(current, '.git')) !== null) return null;
+    } catch {
+      fail('consumer manifest discovery could not inspect the repository boundary', current);
+    }
     const parent = dirname(current);
     if (parent === current) return null;
     current = parent;
   }
 }
 
-function localPath(root, value, label, manifest) {
+function inside(root, candidate) {
+  const rendered = relative(root, candidate);
+  return rendered === ''
+    || (rendered !== '..'
+      && !rendered.startsWith('../')
+      && !rendered.startsWith('..\\')
+      && !isAbsolute(rendered));
+}
+
+function nearestExistingPath(candidate, root, label, manifest) {
+  let current = candidate;
+  while (true) {
+    let info;
+    try {
+      info = tryLstat(current);
+    } catch {
+      fail(`${label} could not be inspected`, manifest);
+    }
+    if (info !== null) return { path: current, info };
+    if (current === root) fail(`${label} could not be resolved inside the consumer manifest root`, manifest);
+    const parent = dirname(current);
+    if (parent === current) fail(`${label} could not be resolved inside the consumer manifest root`, manifest);
+    current = parent;
+  }
+}
+
+function localPath(root, realRoot, value, label, manifest) {
   if (isAbsolute(value)) fail(`${label} must be relative to the consumer manifest`, manifest);
   const candidate = resolve(root, value);
-  const rendered = relative(root, candidate);
-  if (rendered === '..' || rendered.startsWith('../') || rendered.startsWith('..\\') || isAbsolute(rendered)) {
+  if (!inside(root, candidate)) {
     fail(`${label} must remain inside the consumer manifest root`, manifest);
+  }
+
+  const existing = nearestExistingPath(candidate, root, label, manifest);
+  let realExisting;
+  try {
+    realExisting = realpathSync.native(existing.path);
+  } catch {
+    fail(`${label} contains an unresolved symlink`, manifest);
+  }
+  if (!inside(realRoot, realExisting)) {
+    fail(`${label} must remain inside the consumer manifest root after resolving symlinks`, manifest);
+  }
+  if (existing.path !== candidate) {
+    try {
+      if (!statSync(realExisting).isDirectory()) {
+        fail(`${label} has a non-directory path ancestor`, manifest);
+      }
+    } catch (error) {
+      if (error instanceof ConsumerManifestError) throw error;
+      fail(`${label} ancestor could not be inspected`, manifest);
+    }
   }
   return candidate;
 }
 
-function toEnvironment(config, root, manifest) {
+function toEnvironment(config, root, realRoot, manifest) {
   return Object.fromEntries(Object.entries(config ?? {}).filter(([key]) => ENV[key]).map(([key, value]) => [
-    ENV[key], PATH_KEYS.has(key) ? localPath(root, value, key, manifest) : value,
+    ENV[key], PATH_KEYS.has(key) ? localPath(root, realRoot, value, key, manifest) : value,
   ]));
 }
 
@@ -154,25 +243,38 @@ export function loadConsumerManifestConfiguration({ cwd = process.cwd(), command
   if (!COMMANDS.has(command)) return null;
   const selectedPath = manifestPath ? resolve(cwd, manifestPath) : discoverConsumerManifest(cwd);
   if (selectedPath === null) return null;
-  if (!regularFile(selectedPath)) fail('consumer manifest could not be read as a regular, non-symlink file', selectedPath);
+  const text = readConsumerManifest(selectedPath);
   let parsed;
   try {
-    parsed = parseConsumerManifestToml(readFileSync(selectedPath, 'utf8'), selectedPath);
+    parsed = parseConsumerManifestToml(text, selectedPath);
   } catch (error) {
     if (error instanceof ConsumerManifestSyntaxError) fail(error.message, selectedPath, error.line);
     throw error;
   }
   const manifest = validateConsumerManifest(parsed, selectedPath);
+  if (contractId !== undefined) {
+    nonEmptyString(contractId, 'contract selector', selectedPath);
+    if (!CONTRACT_ID.test(contractId)) fail('contract selector is not a valid contract identifier', selectedPath);
+  }
   const selectedId = contractId ?? manifest.default_contract
     ?? (manifest.contracts.length === 1 ? manifest.contracts[0].id : undefined);
   if (!selectedId) fail('multiple contracts require default_contract or TSJSV_CONTRACT', selectedPath);
   const contract = manifest.contracts.find((item) => item.id === selectedId);
   if (!contract) fail(`contract ${selectedId} is not declared`, selectedPath);
   const root = dirname(selectedPath);
+  let realRoot;
+  try {
+    realRoot = realpathSync.native(root);
+  } catch {
+    fail('consumer manifest root could not be resolved', selectedPath);
+  }
   return {
     path: selectedPath,
     root,
     contractId: selectedId,
-    env: { ...toEnvironment(manifest.defaults, root, selectedPath), ...toEnvironment(contract, root, selectedPath) },
+    env: {
+      ...toEnvironment(manifest.defaults, root, realRoot, selectedPath),
+      ...toEnvironment(contract, root, realRoot, selectedPath),
+    },
   };
 }
