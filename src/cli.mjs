@@ -82,7 +82,9 @@ function expectedDeclarationScope(value) {
   return parsed;
 }
 
-async function readJsonArtifact(path, label) {
+const WIT_PROJECTION_MAX_BYTES = 16 * 1024 * 1024;
+
+async function readJsonArtifact(path, label, { maxBytes = null } = {}) {
   let info;
   try {
     info = await lstat(path);
@@ -94,6 +96,9 @@ async function readJsonArtifact(path, label) {
   }
   if (info.nlink !== 1) {
     throw new Error(`${label} must not have multiple hard links`);
+  }
+  if (maxBytes !== null && info.size > maxBytes) {
+    throw new Error(`${label} exceeds the ${maxBytes}-byte input limit`);
   }
   let text;
   try {
@@ -211,8 +216,16 @@ async function runWitVerification(configuration) {
   let receipt;
   try {
     [baseline, current] = await Promise.all([
-      readJsonArtifact(configuration.witBaseline, 'WIT compatibility baseline'),
-      readJsonArtifact(configuration.witCurrent, 'current WIT projection'),
+      readJsonArtifact(
+        configuration.witBaseline,
+        'WIT compatibility baseline',
+        { maxBytes: WIT_PROJECTION_MAX_BYTES },
+      ),
+      readJsonArtifact(
+        configuration.witCurrent,
+        'current WIT projection',
+        { maxBytes: WIT_PROJECTION_MAX_BYTES },
+      ),
     ]);
     receipt = createWitCompatibilityReceipt({
       baseline,
