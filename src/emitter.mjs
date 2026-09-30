@@ -3,6 +3,7 @@ import { access, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { basename, dirname, extname, isAbsolute, join, resolve, win32 } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { assertTypeSpecEmitterInputSafe } from './typespec-inventory.mjs';
 
 const MAX_CAPTURE_BYTES = 256 * 1024;
 
@@ -320,6 +321,7 @@ export async function emitTypeSpecJsonSchema(options) {
   if (basename(bundleId) !== bundleId || !bundleId.toLowerCase().endsWith('.json')) {
     throw new Error('bundleId must be a plain .json filename without path separators');
   }
+  await assertTypeSpecEmitterInputSafe(entry);
   const entryStat = await stat(entry);
   const cwd = options.cwd
     ? resolve(options.cwd)
