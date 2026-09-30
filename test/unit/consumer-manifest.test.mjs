@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+  CONSUMER_MANIFEST_MAX_BYTES,
   ConsumerManifestError,
   loadConsumerManifestConfiguration,
   validateConsumerManifest,
@@ -68,6 +69,10 @@ schema = "contracts/admin.schema.json"
     () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
     (error) => error instanceof ConsumerManifestError && error.message.includes('multiple contracts'),
   );
+  assert.throws(
+    () => loadConsumerManifestConfiguration({ cwd: root, command: 'check', contractId: '../admin' }),
+    /contract selector is not a valid contract identifier/u,
+  );
   const selected = loadConsumerManifestConfiguration({ cwd: root, command: 'check', contractId: 'admin' });
   assert.equal(selected.contractId, 'admin');
 });
@@ -105,5 +110,92 @@ schema = "contracts/second.schema.json"
   assert.throws(
     () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
     /must remain inside/u,
+  );
+});
+
+test('restricted TOML parser admits BOM input but cannot hide special object keys', () => {
+  const parsed = parseConsumerManifestToml(`\uFEFF${BASE}`);
+  assert.equal(parsed.version, 1);
+
+  for (const key of ['__proto__', '__section']) {
+    const injected = BASE.replace('version = 1', `version = 1\n${key} = "hidden"`);
+    assert.throws(
+      () => validateConsumerManifest(parseConsumerManifestToml(injected)),
+      new RegExp(`unsupported key ${key}`, 'u'),
+    );
+  }
+
+  assert.throws(
+    () => parseConsumerManifestToml("version = 1\nname = 'broken'literal'\n"),
+    /invalid TOML literal string/u,
+  );
+});
+
+test('consumer manifest input is bounded before parsing', async (t) => {
+  const root = await workspace(BASE);
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(
+    join(root, '.ores-tjsv.toml'),
+    `#${'x'.repeat(CONSUMER_MANIFEST_MAX_BYTES)}`,
+  );
+  assert.throws(
+    () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
+    /consumer manifest exceeds/u,
+  );
+});
+
+test('consumer manifest bytes must be valid UTF-8', async (t) => {
+  const root = await workspace(BASE);
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(join(root, '.ores-tjsv.toml'), Buffer.from([0x76, 0x65, 0x72, 0xff, 0x73]));
+  assert.throws(
+    () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
+    /must contain valid UTF-8/u,
+  );
+});
+
+test('manifest-owned paths cannot escape through an existing symlink ancestor', async (t) => {
+  const root = await workspace(BASE.replace(
+    'output_dir = ".typespec-json-schema-validator/generated"',
+    'output_dir = "escape/generated"',
+  ));
+  const outside = await mkdtemp(join(tmpdir(), 'tjsv-manifest-outside-'));
+  t.after(() => Promise.all([
+    rm(root, { recursive: true, force: true }),
+    rm(outside, { recursive: true, force: true }),
+  ]));
+
+  try {
+    await symlink(outside, join(root, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+  } catch (error) {
+    if (error?.code === 'EPERM' || error?.code === 'EACCES') {
+      t.skip('runner does not permit directory symlinks');
+      return;
+    }
+    throw error;
+  }
+
+  assert.throws(
+    () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
+    /after resolving symlinks/u,
+  );
+});
+
+test('a dangling manifest symlink fails closed instead of falling through discovery', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'tjsv-manifest-link-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, '.git'));
+  try {
+    await symlink('missing-manifest.toml', join(root, '.ores-tjsv.toml'), 'file');
+  } catch (error) {
+    if (error?.code === 'EPERM' || error?.code === 'EACCES') {
+      t.skip('runner does not permit file symlinks');
+      return;
+    }
+    throw error;
+  }
+  assert.throws(
+    () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
+    /regular, non-symlink/u,
   );
 });

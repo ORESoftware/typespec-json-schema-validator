@@ -11,6 +11,10 @@ function fail(message, manifest, line) {
   throw new ConsumerManifestSyntaxError(message, manifest, line);
 }
 
+function record() {
+  return Object.create(null);
+}
+
 function stripComment(line) {
   let quote = null;
   let escaped = false;
@@ -34,14 +38,24 @@ function stripComment(line) {
 
 function parseValue(raw, manifest, line) {
   const value = raw.trim();
-  if (value.startsWith('"') && value.endsWith('"')) {
+  if (value.startsWith('"')) {
+    if (value.length < 2 || !value.endsWith('"')) {
+      fail('invalid TOML basic string', manifest, line);
+    }
     try {
       return JSON.parse(value);
     } catch {
       fail('invalid TOML basic string', manifest, line);
     }
   }
-  if (value.startsWith("'") && value.endsWith("'")) return value.slice(1, -1);
+  if (value.startsWith("'")) {
+    if (value.length < 2 || !value.endsWith("'")) {
+      fail('invalid TOML literal string', manifest, line);
+    }
+    const inner = value.slice(1, -1);
+    if (inner.includes("'")) fail('invalid TOML literal string', manifest, line);
+    return inner;
+  }
   if (value === 'true') return true;
   if (value === 'false') return false;
   if (/^[+-]?(?:0|[1-9](?:_?\d)*)$/u.test(value)) {
@@ -54,23 +68,30 @@ function parseValue(raw, manifest, line) {
 
 function put(target, key, value, manifest, line) {
   if (Object.hasOwn(target, key)) fail(`duplicate key ${key}`, manifest, line);
-  target[key] = value;
+  Object.defineProperty(target, key, {
+    value,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
 }
 
 export function parseConsumerManifestToml(text, manifest = '.ores-tjsv.toml') {
-  const result = { contracts: [] };
+  const result = record();
+  result.contracts = [];
   let target = result;
-  let section = 'root';
-  const lines = String(text).replace(/\r\n?/gu, '\n').split('\n');
+  const lines = String(text)
+    .replace(/^\uFEFF/u, '')
+    .replace(/\r\n?/gu, '\n')
+    .split('\n');
 
   for (let i = 0; i < lines.length; i += 1) {
     const lineNo = i + 1;
     const line = stripComment(lines[i]).trim();
     if (line === '') continue;
     if (line === '[[contracts]]') {
-      target = {};
+      target = record();
       result.contracts.push(target);
-      section = 'contracts';
       continue;
     }
     const table = line.match(/^\[([a-z_][a-z0-9_]*)\]$/u);
@@ -79,15 +100,13 @@ export function parseConsumerManifestToml(text, manifest = '.ores-tjsv.toml') {
         fail(`unsupported table [${table[1]}]`, manifest, lineNo);
       }
       if (Object.hasOwn(result, table[1])) fail(`duplicate table [${table[1]}]`, manifest, lineNo);
-      target = {};
+      target = record();
       result[table[1]] = target;
-      section = table[1];
       continue;
     }
     const assignment = line.match(/^([a-z_][a-z0-9_]*)\s*=\s*(.+)$/u);
     if (!assignment) fail('unsupported TOML syntax', manifest, lineNo);
     put(target, assignment[1], parseValue(assignment[2], manifest, lineNo), manifest, lineNo);
-    Object.defineProperty(target, '__section', { value: section, enumerable: false, configurable: true });
   }
   return result;
 }
