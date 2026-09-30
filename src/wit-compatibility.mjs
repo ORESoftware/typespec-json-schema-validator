@@ -10,7 +10,7 @@ export const WIT_COMPATIBILITY_RECEIPT_SCHEMA =
 
 const IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$/u;
 const TYPE_KINDS = new Set([
-  'alias', 'record', 'variant', 'enum', 'flags', 'resource', 'handle', 'tuple', 'option', 'result', 'list', 'future', 'stream',
+  'alias', 'record', 'variant', 'enum', 'flags', 'resource', 'handle', 'tuple', 'option', 'result', 'list', 'future', 'stream', 'map',
 ]);
 const MODES = new Set(['consumer', 'strict']);
 
@@ -71,7 +71,7 @@ function normalizeParam(value, label, { allowAnonymous = false } = {}) {
 }
 
 function normalizeFunction(value, label) {
-  exactKeys(value, ['name', 'params', 'results'], label);
+  exactKeys(value, ['name', 'async', 'params', 'results'], label);
   if (!Array.isArray(value.params) || !Array.isArray(value.results)) {
     fail(`${label}.params and .results must be arrays`);
   }
@@ -87,8 +87,10 @@ function normalizeFunction(value, label) {
     return result;
   });
   uniqueNames(params, `${label}.params`);
+  if (typeof value.async !== 'boolean') fail(`${label}.async must be a boolean`);
   return {
     name: identifier(value.name, `${label}.name`),
+    async: value.async,
     params,
     results,
   };
@@ -261,7 +263,8 @@ function compareInterfaces(baseline, current, findings, maxFindings, mode) {
             `WIT function ${subject} was removed`, fn, null);
           continue;
         }
-        if (canonicalStringify(fn.params) !== canonicalStringify(next.params)
+        if (fn.async !== next.async
+          || canonicalStringify(fn.params) !== canonicalStringify(next.params)
           || canonicalStringify(fn.results) !== canonicalStringify(next.results)) {
           push(findings, maxFindings, 'wit-function-signature-changed', subject,
             `WIT function ${subject} changed parameters or results`, fn, next);
