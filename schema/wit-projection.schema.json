@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oresoftware.com/typespec-json-schema-validator/wit-projection.v1.schema.json",
+  "title": "ORESoftware normalized WIT projection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "package", "worlds", "interfaces"],
+  "properties": {
+    "schema": { "const": "ores.typespec-json-schema-validator.wit-projection/v1" },
+    "package": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "worlds": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/world" }
+    },
+    "interfaces": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/interface" }
+    }
+  },
+  "$defs": {
+    "identifier": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "maxLength": 256 },
+    "param": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "oneOf": [{ "$ref": "#/$defs/identifier" }, { "type": "null" }] },
+        "type": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "function": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "params", "results"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "params": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/param" } },
+        "results": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/param" } }
+      }
+    },
+    "namedType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "shape"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "kind": {
+          "enum": ["alias", "record", "variant", "enum", "flags", "resource", "handle", "tuple", "option", "result", "list", "future", "stream"]
+        },
+        "shape": { "type": "string", "minLength": 1, "maxLength": 8192 }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "types", "functions"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "types": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/namedType" } },
+        "functions": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/function" } }
+      }
+    },
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "target"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "kind": { "enum": ["interface", "function"] },
+        "target": { "type": "string", "minLength": 1, "maxLength": 2048 }
+      }
+    },
+    "world": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "imports", "exports"],
+      "properties": {
+        "name": { "$ref": "#/$defs/identifier" },
+        "imports": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/binding" } },
+        "exports": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/binding" } }
+      }
+    }
+  }
+}
