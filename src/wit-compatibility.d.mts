@@ -1,4 +1,4 @@
-export type WitCompatibilityMode = 'consumer' | 'strict';
+export type WitCompatibilityMode = 'consumer' | 'provider' | 'strict';
 export type WitCompatibilityStatus = 'passed' | 'stopped_for_evaluation' | 'failed';
 
 export interface WitNamedTypeProjection {
