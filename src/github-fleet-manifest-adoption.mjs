@@ -1,4 +1,5 @@
 const ROOT_ACTION = 'oresoftware/typespec-json-schema-validator';
+const SOURCE_RECEIPT_SCHEMA = 'ores.typespec-json-schema-validator.github-fleet-audit/v1';
 const RECEIPT_SCHEMA = 'ores.typespec-json-schema-validator.github-fleet-manifest-adoption/v1';
 const MAX_WORKFLOW_BYTES = 1024 * 1024;
 const DEFAULT_RATE_FLOOR = 50;
@@ -182,10 +183,23 @@ function normalizeFleetRepository(entry) {
 
 function adoptionMode({ manifestPresent, workflows }) {
   const modes = sortedUnique(workflows.flatMap((workflow) => workflow.modes));
-  if (modes.some((mode) => mode.startsWith('invalid-')) || modes.length > 1) return 'mixed-or-invalid';
+  if (modes.some((mode) => mode.startsWith('invalid-'))) return 'mixed-or-invalid';
   if (modes.length === 0) return manifestPresent ? 'manifest-present-no-root-action' : 'no-root-action';
-  if (modes[0] === 'legacy-inline') return manifestPresent ? 'legacy-inline-with-manifest' : 'legacy-inline';
-  if (modes[0].startsWith('manifest-')) return manifestPresent ? modes[0] : 'manifest-missing';
+
+  const hasLegacy = modes.includes('legacy-inline');
+  const hasManifestAuto = modes.includes('manifest-auto');
+  const hasManifestExplicit = modes.includes('manifest-explicit');
+  const hasManifest = hasManifestAuto || hasManifestExplicit;
+
+  if (hasLegacy && hasManifest) {
+    return manifestPresent ? 'mixed-legacy-and-manifest' : 'mixed-legacy-and-manifest-missing';
+  }
+  if (hasLegacy) return manifestPresent ? 'legacy-inline-with-manifest' : 'legacy-inline';
+  if (hasManifest) {
+    if (!manifestPresent) return 'manifest-missing';
+    if (hasManifestAuto && hasManifestExplicit) return 'manifest-mixed-selection';
+    return hasManifestExplicit ? 'manifest-explicit' : 'manifest-auto';
+  }
   return 'mixed-or-invalid';
 }
 
@@ -211,6 +225,7 @@ async function inspectRepository({ repository, defaultBranch, actionPaths, hasTj
 
   const mode = adoptionMode({ manifestPresent, workflows });
   const findings = [];
+  const allModes = sortedUnique(workflows.flatMap((workflow) => workflow.modes));
   for (const workflow of workflows) {
     for (const step of workflow.steps) {
       if (step.mode === 'invalid-mixed') {
@@ -228,23 +243,37 @@ async function inspectRepository({ repository, defaultBranch, actionPaths, hasTj
       }
     }
   }
-  if (mode === 'manifest-missing') {
+  if (mode === 'manifest-missing' || mode === 'mixed-legacy-and-manifest-missing') {
     findings.push(finding(
       'tjsv-manifest-required-by-workflow', 'blocking', '.ores-tjsv.toml',
       'A root TJSV Action uses manifest mode but the repository has no root .ores-tjsv.toml.',
     ));
   }
-  if (mode === 'legacy-inline' || mode === 'legacy-inline-with-manifest') {
+  if (['legacy-inline', 'legacy-inline-with-manifest', 'mixed-legacy-and-manifest', 'mixed-legacy-and-manifest-missing'].includes(mode)) {
     findings.push(finding(
       'tjsv-legacy-inline-migration-candidate', 'review', null,
       'Root TJSV Action usage still duplicates consumer contract configuration in workflow YAML.',
-      { manifestPresent, workflowPaths: workflows.map((workflow) => workflow.path) },
+      { manifestPresent, workflowPaths: workflows.map((workflow) => workflow.path), modes: allModes },
     ));
   }
   if (mode === 'legacy-inline-with-manifest') {
     findings.push(finding(
       'tjsv-manifest-present-but-inline-action', 'review', '.ores-tjsv.toml',
       'A root manifest exists but root TJSV Action steps still use legacy inline peer-authority inputs.',
+    ));
+  }
+  if (mode === 'mixed-legacy-and-manifest') {
+    findings.push(finding(
+      'tjsv-manifest-partial-repository-migration', 'review', null,
+      'The repository mixes legacy-inline and manifest-backed root TJSV Action workflows.',
+      { modes: allModes },
+    ));
+  }
+  if (mode === 'manifest-mixed-selection') {
+    findings.push(finding(
+      'tjsv-manifest-selection-style-mixed', 'review', null,
+      'The repository uses both implicit/default and explicit named manifest contract selection.',
+      { modes: allModes },
     ));
   }
   if (mode === 'manifest-present-no-root-action' && hasTjsvUsage) {
@@ -265,6 +294,12 @@ export async function auditFleetManifestAdoption({
 } = {}) {
   if (!fleetReceipt || typeof fleetReceipt !== 'object' || Array.isArray(fleetReceipt)) {
     throw new TypeError('fleetReceipt must be an object');
+  }
+  if (fleetReceipt.schema !== SOURCE_RECEIPT_SCHEMA) {
+    throw new Error(`fleetReceipt.schema must be ${SOURCE_RECEIPT_SCHEMA}`);
+  }
+  if (fleetReceipt.status !== 'passed') {
+    throw new Error('fleetReceipt.status must be passed before manifest adoption can be evaluated');
   }
   if (!Array.isArray(fleetReceipt.repositories)) throw new Error('fleetReceipt.repositories must be an array');
   if (typeof token !== 'string' || token.trim() === '') throw new Error('GitHub token is required');
@@ -293,17 +328,22 @@ export async function auditFleetManifestAdoption({
     0,
   );
   const migrationQueue = repositories
-    .filter((repository) => ['legacy-inline', 'legacy-inline-with-manifest'].includes(repository.mode))
+    .filter((repository) => [
+      'legacy-inline',
+      'legacy-inline-with-manifest',
+      'mixed-legacy-and-manifest',
+      'mixed-legacy-and-manifest-missing',
+    ].includes(repository.mode))
     .map((repository) => repository.repository)
     .sort();
   const manifestAdopted = repositories.filter(
-    (repository) => ['manifest-auto', 'manifest-explicit'].includes(repository.mode),
+    (repository) => ['manifest-auto', 'manifest-explicit', 'manifest-mixed-selection'].includes(repository.mode),
   ).length;
 
   return {
     schema: RECEIPT_SCHEMA,
     status: failures.length > 0 ? 'stopped_for_evaluation' : blockingCount > 0 ? 'failed' : 'passed',
-    sourceFleetReceiptSchema: fleetReceipt.schema ?? null,
+    sourceFleetReceiptSchema: fleetReceipt.schema,
     sourceAdmittedRevision: fleetReceipt.admittedRevision ?? null,
     summary: {
       repositoriesInspected: repositories.length,
