@@ -167,3 +167,14 @@ test('normalized WIT rejects named or multiple function results', () => {
   multiple.interfaces[0].functions[0].results.push({ name: null, type: 'u32' });
   assert.throws(() => normalizeWitProjection(multiple), /at most one WIT result/u);
 });
+
+
+test('strict mode rejects additive world exports while consumer mode allows them', () => {
+  const baseline = projection();
+  const current = structuredClone(baseline);
+  current.worlds[0].exports.push({ name: 'health', kind: 'function', target: 'health' });
+  assert.equal(compareWitCompatibility(baseline, current, { mode: 'consumer' }).status, 'passed');
+  const strict = compareWitCompatibility(baseline, current, { mode: 'strict' });
+  assert.equal(strict.status, 'stopped_for_evaluation');
+  assert.ok(strict.findings.some((item) => item.ruleId === 'wit-world-export-added'));
+});
