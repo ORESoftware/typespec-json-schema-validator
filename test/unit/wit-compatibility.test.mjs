@@ -141,3 +141,18 @@ test('malformed normalized WIT package versions fail closed', () => {
   value.package = 'ores:example@1.2.3+bad..meta';
   assert.throws(() => normalizeWitProjection(value), /valid full semver/u);
 });
+
+
+test('normalized WIT rejects interface item and parameter name collisions', () => {
+  const itemCollision = projection();
+  itemCollision.interfaces[0].types[0].name = 'send';
+  assert.throws(() => normalizeWitProjection(itemCollision), /case-insensitive uniqueness/u);
+
+  const paramCollision = projection();
+  paramCollision.interfaces[0].functions[0].params.push({ name: 'PAYLOAD', type: 'u32' });
+  assert.throws(() => normalizeWitProjection(paramCollision), /case-insensitive uniqueness/u);
+
+  const anonymousParam = projection();
+  anonymousParam.interfaces[0].functions[0].params[0].name = null;
+  assert.throws(() => normalizeWitProjection(anonymousParam), /must be a WIT identifier/u);
+});
