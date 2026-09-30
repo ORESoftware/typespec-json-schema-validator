@@ -30,11 +30,13 @@ function fileBody(name, text) {
   };
 }
 
-function fleetReceipt(repositories) {
+function fleetReceipt(repositories, overrides = {}) {
   return {
     schema: 'ores.typespec-json-schema-validator.github-fleet-audit/v1',
+    status: 'passed',
     admittedRevision: SHA,
     repositories,
+    ...overrides,
   };
 }
 
@@ -119,6 +121,45 @@ test('adoption audit emits a deterministic migration queue while accepting manif
   assert.equal(result.repositories.find((entry) => entry.repository === 'beta-org/manifest').mode, 'manifest-explicit');
 });
 
+test('partial repository migration stays in the migration queue', async () => {
+  const legacyPath = '.github/workflows/legacy.yml';
+  const manifestPath = '.github/workflows/manifest.yml';
+  const candidate = repository('alpha-org/partial', legacyPath);
+  candidate.refs.push({ kind: 'action', ref: SHA, path: manifestPath });
+  const receipt = fleetReceipt([candidate]);
+  const legacyWorkflow = workflow(
+    '        with:\n          typespec: contracts/main.tsp\n          schema: contracts/authored.schema.json\n',
+  );
+  const manifestWorkflow = workflow('        with:\n          contract: default\n');
+
+  const fetchImpl = async (url) => {
+    const value = String(url);
+    if (value.includes('/contents/.ores-tjsv.toml')) {
+      return response(fileBody('.ores-tjsv.toml', 'version = 1\n'));
+    }
+    if (value.includes('/contents/.github/workflows/legacy.yml')) {
+      return response(fileBody('legacy.yml', legacyWorkflow));
+    }
+    if (value.includes('/contents/.github/workflows/manifest.yml')) {
+      return response(fileBody('manifest.yml', manifestWorkflow));
+    }
+    throw new Error(`unexpected request: ${url}`);
+  };
+
+  const result = await auditFleetManifestAdoption({
+    fleetReceipt: receipt,
+    token: 'test-token',
+    fetchImpl,
+  });
+  assert.equal(result.status, 'passed');
+  assert.deepEqual(result.migrationQueue, ['alpha-org/partial']);
+  assert.equal(result.repositories[0].mode, 'mixed-legacy-and-manifest');
+  assert.equal(
+    result.repositories[0].findings.some((entry) => entry.rule === 'tjsv-manifest-partial-repository-migration'),
+    true,
+  );
+});
+
 test('manifest-mode Action without root manifest is blocking', async () => {
   const path = '.github/workflows/contracts.yml';
   const receipt = fleetReceipt([repository('alpha-org/missing', path)]);
@@ -142,6 +183,17 @@ test('manifest-mode Action without root manifest is blocking', async () => {
   assert.equal(
     result.repositories[0].findings.some((entry) => entry.rule === 'tjsv-manifest-required-by-workflow'),
     true,
+  );
+});
+
+test('non-passing first-stage receipt is refused before GitHub reads', async () => {
+  await assert.rejects(
+    auditFleetManifestAdoption({
+      fleetReceipt: fleetReceipt([], { status: 'failed' }),
+      token: 'test-token',
+      fetchImpl: async () => { throw new Error('must not fetch'); },
+    }),
+    /fleetReceipt\.status must be passed/,
   );
 });
 
