@@ -87,3 +87,17 @@ jobs:
 
       - name: Audit package boundary and execute clean consumer acceptance
         run: npm run release:preflight
+
+      - name: Exercise manifest-mode composite action
+        if: ${{ matrix.os == 'ubuntu-24.04' }}
+        uses: ./
+        with:
+          consumer_manifest: test/fixtures/pass/.ores-tjsv.toml
+
+      - name: Verify manifest-mode action evidence
+        if: ${{ matrix.os == 'ubuntu-24.04' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync("test/fixtures/pass/.tjsv/report.json","utf8")); if(r.status!=="passed") process.exit(1)'
+          test -f test/fixtures/pass/.tjsv/generated/typespec.generated.schema.json
