@@ -1,6 +1,8 @@
 const ROOT_ACTION = 'oresoftware/typespec-json-schema-validator';
 const SOURCE_RECEIPT_SCHEMA = 'ores.typespec-json-schema-validator.github-fleet-audit/v1';
 const RECEIPT_SCHEMA = 'ores.typespec-json-schema-validator.github-fleet-manifest-adoption/v1';
+const SHA40 = /^[0-9a-f]{40}$/i;
+const MAX_MANIFEST_BYTES = 256 * 1024;
 const MAX_WORKFLOW_BYTES = 1024 * 1024;
 const DEFAULT_RATE_FLOOR = 50;
 
@@ -164,20 +166,25 @@ function contentsText(body, path) {
     throw new Error(`${path} exceeds ${MAX_WORKFLOW_BYTES} bytes`);
   }
   if (body.encoding !== 'base64') throw new Error(`${path} must use base64 GitHub contents encoding`);
-  return Buffer.from(body.content.replace(/\s/g, ''), 'base64').toString('utf8');
+  const bytes = Buffer.from(body.content.replace(/\s/g, ''), 'base64');
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+  } catch {
+    throw new Error(`${path} must contain valid UTF-8`);
+  }
 }
 
 function normalizeFleetRepository(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
   const repository = typeof entry.repository === 'string' ? entry.repository : null;
-  const defaultBranch = typeof entry.defaultBranch === 'string' && entry.defaultBranch !== ''
-    ? entry.defaultBranch
-    : 'main';
-  if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository)) return null;
+  const defaultBranch = typeof entry.defaultBranch === 'string' && entry.defaultBranch.trim() !== ''
+    ? entry.defaultBranch.trim()
+    : null;
+  if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository) || !defaultBranch) return null;
   const actionPaths = sortedUnique((entry.refs ?? [])
     .filter((ref) => ref && ref.kind === 'action' && typeof ref.path === 'string')
     .map((ref) => ref.path)
-    .filter((path) => path.startsWith('.github/workflows/')));
+    .filter((path) => path.startsWith('.github/workflows/') && !path.includes('\\') && !path.split('/').includes('..')));
   return { repository, defaultBranch, actionPaths, hasTjsvUsage: entry.hasTjsvUsage === true };
 }
 
@@ -209,8 +216,16 @@ async function inspectRepository({ repository, defaultBranch, actionPaths, hasTj
   const manifestUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/contents/.ores-tjsv.toml?ref=${encodedRef}`;
   const manifestResponse = await githubJson(fetchImpl, manifestUrl, token, rateFloor);
   const manifestPresent = manifestResponse.status === 200;
-  if (manifestPresent && (manifestResponse.body?.type !== 'file' || manifestResponse.body?.name !== '.ores-tjsv.toml')) {
-    throw new Error('.ores-tjsv.toml must resolve to a regular repository file');
+  if (manifestPresent) {
+    if (manifestResponse.body?.type !== 'file' || manifestResponse.body?.name !== '.ores-tjsv.toml') {
+      throw new Error('.ores-tjsv.toml must resolve to a regular repository file');
+    }
+    if (!Number.isSafeInteger(manifestResponse.body?.size) || manifestResponse.body.size < 0) {
+      throw new Error('.ores-tjsv.toml must expose a bounded GitHub contents size');
+    }
+    if (manifestResponse.body.size > MAX_MANIFEST_BYTES) {
+      throw new Error(`.ores-tjsv.toml exceeds ${MAX_MANIFEST_BYTES} bytes`);
+    }
   }
 
   const workflows = [];
@@ -301,11 +316,20 @@ export async function auditFleetManifestAdoption({
   if (fleetReceipt.status !== 'passed') {
     throw new Error('fleetReceipt.status must be passed before manifest adoption can be evaluated');
   }
-  if (!Array.isArray(fleetReceipt.repositories)) throw new Error('fleetReceipt.repositories must be an array');
+  if (!SHA40.test(String(fleetReceipt.admittedRevision ?? ''))) {
+    throw new Error('fleetReceipt.admittedRevision must be a full 40-character Git SHA');
+  }
+  if (!Array.isArray(fleetReceipt.repositories) || fleetReceipt.repositories.length === 0) {
+    throw new Error('fleetReceipt.repositories must be a non-empty array');
+  }
   if (typeof token !== 'string' || token.trim() === '') throw new Error('GitHub token is required');
   if (!Number.isSafeInteger(rateFloor) || rateFloor < 1) throw new Error('rateFloor must be a positive integer');
 
-  const targets = fleetReceipt.repositories.map(normalizeFleetRepository).filter(Boolean);
+  const targets = fleetReceipt.repositories.map((entry, index) => {
+    const target = normalizeFleetRepository(entry);
+    if (!target) throw new Error(`fleetReceipt repository ${index} is malformed or missing defaultBranch`);
+    return target;
+  });
   const repositories = [];
   const failures = [];
   for (const target of targets) {
@@ -344,7 +368,7 @@ export async function auditFleetManifestAdoption({
     schema: RECEIPT_SCHEMA,
     status: failures.length > 0 ? 'stopped_for_evaluation' : blockingCount > 0 ? 'failed' : 'passed',
     sourceFleetReceiptSchema: fleetReceipt.schema,
-    sourceAdmittedRevision: fleetReceipt.admittedRevision ?? null,
+    sourceAdmittedRevision: fleetReceipt.admittedRevision,
     summary: {
       repositoriesInspected: repositories.length,
       manifestAdopted,
