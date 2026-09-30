@@ -42,6 +42,19 @@ test('verify-wit CLI emits a passed receipt', async () => {
   assert.equal(receipt.mode, 'consumer');
 });
 
+test('verify-wit CLI permits a version-only package bump', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'tsjsv-wit-cli-'));
+  const current = projection();
+  current.package = 'ores:example@1.1.0';
+  await writeFile(resolve(root, 'baseline.json'), JSON.stringify(projection()));
+  await writeFile(resolve(root, 'current.json'), JSON.stringify(current));
+  const child = run(root);
+  assert.equal(child.status, 0, child.stderr);
+  const receipt = JSON.parse(await readFile(resolve(root, 'receipt.json'), 'utf8'));
+  assert.equal(receipt.status, 'passed');
+  assert.equal(receipt.breakingChangeCount, 0);
+});
+
 test('verify-wit CLI stops for a changed closed WIT type', async () => {
   const root = await mkdtemp(resolve(tmpdir(), 'tsjsv-wit-cli-'));
   const current = projection();
