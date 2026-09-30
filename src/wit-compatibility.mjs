@@ -12,7 +12,7 @@ const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_-]*$/u;
 const TYPE_KINDS = new Set([
   'alias', 'record', 'variant', 'enum', 'flags', 'resource', 'handle', 'tuple', 'option', 'result', 'list', 'future', 'stream',
 ]);
-const MODES = new Set(['consumer', 'strict']);
+const MODES = new Set(['consumer', 'provider', 'strict']);
 
 export class WitProjectionError extends Error {
   constructor(message) {
@@ -176,61 +176,103 @@ function compareNamedBaseline(before, after, prefix, findings, maxFindings, comp
 }
 
 function compareInterfaces(baseline, current, findings, maxFindings, mode) {
-  compareNamedBaseline(
-    baseline.interfaces,
-    current.interfaces,
-    'interface',
-    findings,
-    maxFindings,
-    (before, after) => {
-      compareNamedBaseline(before.types, after.types, 'type', findings, maxFindings, (oldType, newType) => {
-        if (oldType.kind !== newType.kind || oldType.shape !== newType.shape) {
-          push(findings, maxFindings, 'wit-type-changed', `${before.name}.${oldType.name}`,
-            `WIT type ${before.name}.${oldType.name} changed`, oldType, newType);
-        }
-      });
+  const currentInterfaces = new Map(current.interfaces.map((item) => [item.name, item]));
+  for (const before of baseline.interfaces) {
+    const after = currentInterfaces.get(before.name);
+    if (!after) {
+      push(findings, maxFindings, 'wit-interface-removed', before.name,
+        `interface ${before.name} was removed`, before, null);
+      continue;
+    }
 
-      const currentFns = new Map(after.functions.map((item) => [item.name, item]));
-      for (const fn of before.functions) {
-        const next = currentFns.get(fn.name);
-        const subject = `${before.name}.${fn.name}`;
-        if (!next) {
+    compareNamedBaseline(before.types, after.types, 'type', findings, maxFindings, (oldType, newType) => {
+      if (oldType.kind !== newType.kind || oldType.shape !== newType.shape) {
+        push(findings, maxFindings, 'wit-type-changed', `${before.name}.${oldType.name}`,
+          `WIT type ${before.name}.${oldType.name} changed`, oldType, newType);
+      }
+    });
+
+    if (mode === 'strict') {
+      const baselineTypes = new Set(before.types.map((item) => item.name));
+      for (const type of after.types) {
+        if (!baselineTypes.has(type.name)) {
+          push(findings, maxFindings, 'wit-type-added', `${after.name}.${type.name}`,
+            `WIT type ${after.name}.${type.name} was added in strict mode`, null, type);
+        }
+      }
+    }
+
+    const currentFns = new Map(after.functions.map((item) => [item.name, item]));
+    const baselineFns = new Map(before.functions.map((item) => [item.name, item]));
+    for (const fn of before.functions) {
+      const next = currentFns.get(fn.name);
+      const subject = `${before.name}.${fn.name}`;
+      if (!next) {
+        if (mode !== 'provider') {
           push(findings, maxFindings, 'wit-function-removed', subject,
             `WIT function ${subject} was removed`, fn, null);
-          continue;
         }
-        if (canonicalStringify(fn.params) !== canonicalStringify(next.params)
-          || canonicalStringify(fn.results) !== canonicalStringify(next.results)) {
-          push(findings, maxFindings, 'wit-function-signature-changed', subject,
-            `WIT function ${subject} changed parameters or results`, fn, next);
-        }
+        continue;
       }
+      if (canonicalStringify(fn.params) !== canonicalStringify(next.params)
+        || canonicalStringify(fn.results) !== canonicalStringify(next.results)) {
+        push(findings, maxFindings, 'wit-function-signature-changed', subject,
+          `WIT function ${subject} changed parameters or results`, fn, next);
+      }
+    }
 
-      if (mode === 'strict') {
-        const baselineFns = new Set(before.functions.map((item) => item.name));
-        for (const fn of after.functions) {
-          if (!baselineFns.has(fn.name)) {
-            push(findings, maxFindings, 'wit-function-added', `${after.name}.${fn.name}`,
-              `WIT function ${after.name}.${fn.name} was added in strict mode`, null, fn);
-          }
+    if (mode !== 'consumer') {
+      for (const fn of after.functions) {
+        if (!baselineFns.has(fn.name)) {
+          push(findings, maxFindings, 'wit-function-added', `${after.name}.${fn.name}`,
+            `WIT function ${after.name}.${fn.name} was added in ${mode} mode`, null, fn);
         }
       }
-    },
-  );
+    }
+  }
+
+  if (mode === 'strict') {
+    const baselineInterfaces = new Set(baseline.interfaces.map((item) => item.name));
+    for (const iface of current.interfaces) {
+      if (!baselineInterfaces.has(iface.name)) {
+        push(findings, maxFindings, 'wit-interface-added', iface.name,
+          `WIT interface ${iface.name} was added in strict mode`, null, iface);
+      }
+    }
+  }
 }
 
-function compareWorlds(baseline, current, findings, maxFindings) {
-  compareNamedBaseline(baseline.worlds, current.worlds, 'world', findings, maxFindings, (before, after) => {
+function compareWorlds(baseline, current, findings, maxFindings, mode) {
+  const currentWorlds = new Map(current.worlds.map((item) => [item.name, item]));
+  for (const before of baseline.worlds) {
+    const after = currentWorlds.get(before.name);
+    if (!after) {
+      push(findings, maxFindings, 'wit-world-removed', before.name,
+        `world ${before.name} was removed`, before, null);
+      continue;
+    }
+
+    const baselineExports = new Map(before.exports.map((item) => [item.name, item]));
     const currentExports = new Map(after.exports.map((item) => [item.name, item]));
     for (const item of before.exports) {
       const next = currentExports.get(item.name);
       const subject = `${before.name}.export.${item.name}`;
       if (!next) {
-        push(findings, maxFindings, 'wit-world-export-removed', subject,
-          `WIT world export ${subject} was removed`, item, null);
+        if (mode !== 'provider') {
+          push(findings, maxFindings, 'wit-world-export-removed', subject,
+            `WIT world export ${subject} was removed`, item, null);
+        }
       } else if (canonicalStringify(item) !== canonicalStringify(next)) {
         push(findings, maxFindings, 'wit-world-export-changed', subject,
           `WIT world export ${subject} changed`, item, next);
+      }
+    }
+    if (mode !== 'consumer') {
+      for (const item of after.exports) {
+        if (!baselineExports.has(item.name)) {
+          push(findings, maxFindings, 'wit-world-export-added', `${after.name}.export.${item.name}`,
+            `WIT world export ${after.name}.export.${item.name} was added in ${mode} mode`, null, item);
+        }
       }
     }
 
@@ -239,18 +281,41 @@ function compareWorlds(baseline, current, findings, maxFindings) {
     for (const item of before.imports) {
       const next = currentImports.get(item.name);
       const subject = `${before.name}.import.${item.name}`;
-      if (next && canonicalStringify(item) !== canonicalStringify(next)) {
+      if (!next) {
+        if (mode !== 'consumer') {
+          push(findings, maxFindings, 'wit-world-import-removed', subject,
+            `WIT world import ${subject} was removed in ${mode} mode`, item, null);
+        }
+      } else if (canonicalStringify(item) !== canonicalStringify(next)) {
         push(findings, maxFindings, 'wit-world-import-changed', subject,
           `WIT world import ${subject} changed`, item, next);
       }
     }
-    for (const item of after.imports) {
-      if (!baselineImports.has(item.name)) {
-        push(findings, maxFindings, 'wit-world-import-added', `${after.name}.import.${item.name}`,
-          `WIT world import ${after.name}.import.${item.name} adds a new host requirement`, null, item);
+    if (mode !== 'provider') {
+      for (const item of after.imports) {
+        if (!baselineImports.has(item.name)) {
+          push(findings, maxFindings, 'wit-world-import-added', `${after.name}.import.${item.name}`,
+            `WIT world import ${after.name}.import.${item.name} adds a new host requirement`, null, item);
+        }
       }
     }
-  });
+  }
+
+  if (mode === 'strict') {
+    const baselineWorlds = new Set(baseline.worlds.map((item) => item.name));
+    for (const world of current.worlds) {
+      if (!baselineWorlds.has(world.name)) {
+        push(findings, maxFindings, 'wit-world-added', world.name,
+          `WIT world ${world.name} was added in strict mode`, null, world);
+      }
+    }
+  }
+}
+
+function packageIdentity(value) {
+  const colon = value.indexOf(':');
+  const at = value.lastIndexOf('@');
+  return at > colon ? value.slice(0, at) : value;
 }
 
 export function compareWitCompatibility(baselineValue, currentValue, options = {}) {
@@ -259,18 +324,18 @@ export function compareWitCompatibility(baselineValue, currentValue, options = {
   if (!Number.isSafeInteger(maxFindings) || maxFindings < 1 || maxFindings > 10_000) {
     fail('maxFindings must be a safe integer between 1 and 10000');
   }
-  if (!MODES.has(mode)) fail('mode must be consumer or strict');
+  if (!MODES.has(mode)) fail('mode must be consumer, provider, or strict');
 
   const baseline = normalizeWitProjection(baselineValue);
   const current = normalizeWitProjection(currentValue);
   const findings = [];
-  if (baseline.package !== current.package) {
-    push(findings, maxFindings, 'wit-package-changed', 'package',
-      `WIT package changed from ${baseline.package} to ${current.package}`,
+  if (packageIdentity(baseline.package) !== packageIdentity(current.package)) {
+    push(findings, maxFindings, 'wit-package-identity-changed', 'package',
+      `WIT package identity changed from ${baseline.package} to ${current.package}`,
       baseline.package, current.package);
   }
   compareInterfaces(baseline, current, findings, maxFindings, mode);
-  compareWorlds(baseline, current, findings, maxFindings);
+  compareWorlds(baseline, current, findings, maxFindings, mode);
 
   const truncated = findings.length > maxFindings;
   const visible = findings.slice(0, maxFindings);
