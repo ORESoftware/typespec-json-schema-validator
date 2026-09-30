@@ -18,11 +18,11 @@ Every production-installed vulnerable path is classified `conservatively-reachab
 
 The receipt schema is `tjsv-npm-production-audit-receipt/v1`. It records npm/registry identity, production-only audit arguments, package and lockfile digests, audit-document digest, advisory/package path evidence, exact applied exceptions, and every unwaived high/critical path. CI retains the receipt even when the gate fails.
 
-## Remediated advisory: GHSA-2q42-4q24-7rgv
+## Temporarily mitigated advisory: GHSA-2q42-4q24-7rgv
 
 The 2026-09-09 registry-backed audit reported one reviewed high-severity advisory, npm source `1193788` / `GHSA-2q42-4q24-7rgv`, propagated across `@typespec/compiler`, direct `@typespec/json-schema`, and transitive `@typespec/asset-emitter`. The advisory covered compiler/OpenAPI3 versions through `1.15.0`. While no patched release existed, three exact package-path exceptions held the gate open until `2026-09-16T04:00:00.000Z`, bounded by the sole-emitter argument that `test/unit/npm-advisory-boundary.test.mjs` still locks: the demonstrated exploit requires the separately packaged `@typespec/openapi3` emitter, TJSV installs only `@typespec/json-schema`, and the pinned-compiler fallback sets `emit: [emitterPath]`.
 
-Upstream published `@typespec/compiler` `1.16.0`, which is outside the advisory range. The dependency declaration and lockfile were upgraded to it, the exception ledger was emptied, and `security/typespec-runtime-provenance.json` records the exact remediated package identities. **`security/npm-audit-exceptions.json` currently holds zero exceptions**, and a registry-backed audit of the current lockfile reports zero advisory paths. Nothing about the advisory is waived any more; it is simply not present.
+A later registry-backed audit on 2026-09-30 again reports npm advisory `1193788` against the pinned `@typespec/compiler` `1.16.0`. Upstream fixed the spec-controlled path traversal in `microsoft/typespec#11777` (merge commit `e0f67bdf3c5a0875dfa98b475648af37caac71a6`), but that fix is not yet present in the pinned npm release. TJSV therefore carries one exact, short-lived exception for `npm:1193788` / `@typespec/compiler`, expiring `2026-10-14T04:00:00.000Z`. The exception is backed by compensating controls in this repository: only the JSON Schema emitter is invoked, `bundleId` is constrained to a plain JSON filename, and path-separator-bearing escaped TypeSpec identifiers are refused before output-directory creation or compiler execution. The exception must be deleted as soon as a compatible patched TypeSpec release is available.
 
 Exceptions were never the fix. Upgrading past the advisory is always the first remediation; renewing an exception is only for an advisory with no patched release.
 
