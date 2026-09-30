@@ -89,6 +89,10 @@ function normalizeParam(value, label, { allowAnonymous = false } = {}) {
 
 function normalizeFunction(value, label, budget) {
   exactKeys(value, ['name', 'async', 'params', 'results'], label);
+  if (!Array.isArray(value.params) || !Array.isArray(value.results)) {
+    fail(`${label}.params and .results must be arrays`);
+  }
+  if (value.results.length > 1) fail(`${label}.results must contain at most one WIT result`);
   const paramValues = boundedArray(value.params, `${label}.params`, budget);
   const resultValues = boundedArray(value.results, `${label}.results`, budget, 1);
   const params = paramValues.map((item, index) => normalizeParam(item, `${label}.params[${index}]`));
@@ -113,6 +117,9 @@ function normalizeFunction(value, label, budget) {
 
 function normalizeInterface(value, label, budget) {
   exactKeys(value, ['name', 'types', 'functions'], label);
+  if (!Array.isArray(value.types) || !Array.isArray(value.functions)) {
+    fail(`${label}.types and .functions must be arrays`);
+  }
   const typeValues = boundedArray(value.types, `${label}.types`, budget);
   const functionValues = boundedArray(value.functions, `${label}.functions`, budget);
   const types = typeValues.map((item, index) => normalizeNamedType(item, `${label}.types[${index}]`));
@@ -140,6 +147,9 @@ function normalizeBinding(value, label) {
 
 function normalizeWorld(value, label, budget) {
   exactKeys(value, ['name', 'imports', 'exports'], label);
+  if (!Array.isArray(value.imports) || !Array.isArray(value.exports)) {
+    fail(`${label}.imports and .exports must be arrays`);
+  }
   const importValues = boundedArray(value.imports, `${label}.imports`, budget);
   const exportValues = boundedArray(value.exports, `${label}.exports`, budget);
   const imports = importValues.map((item, index) => normalizeBinding(item, `${label}.imports[${index}]`));
@@ -195,6 +205,9 @@ function canonicalPackageIdentity(value) {
 export function normalizeWitProjection(value) {
   exactKeys(value, ['schema', 'package', 'worlds', 'interfaces'], 'projection');
   if (value.schema !== WIT_PROJECTION_SCHEMA) fail('projection.schema is unsupported');
+  if (!Array.isArray(value.worlds) || !Array.isArray(value.interfaces)) {
+    fail('projection.worlds and projection.interfaces must be arrays');
+  }
   const budget = { remaining: MAX_PROJECTION_ITEMS };
   const worldValues = boundedArray(value.worlds, 'projection.worlds', budget);
   const interfaceValues = boundedArray(value.interfaces, 'projection.interfaces', budget);
