@@ -423,7 +423,7 @@ env = "TSJSV_WIT_MODE"
 aliases = ["mode"]
 type = "string"
 default = "consumer"
-help = "Compatibility mode: consumer permits additive interface functions; strict treats them as breaking."
+help = "Compatibility mode: consumer protects callers/hosts, provider protects implementers/guests, strict rejects directional additions/removals."
 
 [commands.legal-rollout]
 help = "Admit legal-document inventory against exact peer authorities and Contract IR evidence."
