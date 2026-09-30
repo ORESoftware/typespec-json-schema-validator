@@ -193,6 +193,20 @@ export function loadCliConfiguration(argv = process.argv) {
         verification: env.TSJSV_VERIFICATION
           || '.typespec-json-schema-validator/consumer-verification.json',
       };
+    case 'verify-wit': {
+      const witMode = env.TSJSV_WIT_MODE || 'consumer';
+      if (!['consumer', 'strict'].includes(witMode)) {
+        throw new CliUsageError('--mode must be consumer or strict', { command });
+      }
+      return {
+        ...common,
+        witBaseline: required(env, 'TSJSV_WIT_BASELINE', '--baseline'),
+        witCurrent: required(env, 'TSJSV_WIT_CURRENT', '--current'),
+        witVerification: env.TSJSV_WIT_VERIFICATION
+          || '.typespec-json-schema-validator/wit-compatibility.json',
+        witMode,
+      };
+    }
     case 'verify-projection':
       return {
         ...common,

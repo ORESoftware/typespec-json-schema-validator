@@ -33,6 +33,11 @@ import {
 import { writeSarif } from './sarif.mjs';
 import { inventoryTypeSpec } from './typespec-inventory.mjs';
 import { runLegalRollout, writeLegalRolloutReceipt, renderLegalRolloutSummary } from './legal-rollout/index.mjs';
+import {
+  createWitCompatibilityReceipt,
+  failedWitCompatibilityReceipt,
+  writeWitCompatibilityReceipt,
+} from './wit-compatibility.mjs';
 
 function writeJson(value) {
   process.stdout.write(`${canonicalStringify(value, 2)}\n`);
@@ -200,6 +205,40 @@ async function runConsumerVerification(configuration) {
   return receipt.status === 'passed' ? EXIT_CODES.passed : EXIT_CODES.failed;
 }
 
+async function runWitVerification(configuration) {
+  let baseline = null;
+  let current = null;
+  let receipt;
+  try {
+    [baseline, current] = await Promise.all([
+      readJsonArtifact(configuration.witBaseline, 'WIT compatibility baseline'),
+      readJsonArtifact(configuration.witCurrent, 'current WIT projection'),
+    ]);
+    receipt = createWitCompatibilityReceipt({
+      baseline,
+      current,
+      mode: configuration.witMode,
+      maxFindings: configuration.maxFindings,
+    });
+  } catch {
+    receipt = failedWitCompatibilityReceipt({
+      baseline,
+      current,
+      mode: configuration.witMode,
+    });
+  }
+
+  const verificationPath = await writeWitCompatibilityReceipt(
+    configuration.witVerification,
+    receipt,
+  );
+  if (!configuration.quiet) {
+    writeJson(receipt);
+    process.stdout.write(`wit-compatibility: ${verificationPath}\n`);
+  }
+  return EXIT_CODES[receipt.status];
+}
+
 async function runProjectionVerification(configuration) {
   const root = resolve(configuration.root);
   let manifest = null;
@@ -310,6 +349,7 @@ export async function main(argv = process.argv) {
     }
 
     if (configuration.command === 'verify-ir') return runConsumerVerification(configuration);
+    if (configuration.command === 'verify-wit') return runWitVerification(configuration);
     if (configuration.command === 'verify-projection') {
       return runProjectionVerification(configuration);
     }
