@@ -19,7 +19,7 @@ function projection() {
   };
 }
 
-function run(root, mode = 'consumer') {
+function run(root, mode = 'strict') {
   return spawnSync(process.execPath, [
     resolve('bin/typespec-json-schema-validator.mjs'),
     'verify-wit',
@@ -39,7 +39,7 @@ test('verify-wit CLI emits a passed receipt', async () => {
   assert.equal(child.status, 0, child.stderr);
   const receipt = JSON.parse(await readFile(resolve(root, 'receipt.json'), 'utf8'));
   assert.equal(receipt.status, 'passed');
-  assert.equal(receipt.mode, 'consumer');
+  assert.equal(receipt.mode, 'strict');
 });
 
 test('verify-wit CLI stops for a changed closed WIT type', async () => {
