@@ -61,8 +61,9 @@ function normalizeNamedType(value, label) {
   };
 }
 
-function normalizeParam(value, label) {
+function normalizeParam(value, label, { allowAnonymous = false } = {}) {
   exactKeys(value, ['name', 'type'], label);
+  if (!allowAnonymous && value.name === null) fail(`${label}.name must be a WIT identifier`);
   return {
     name: value.name === null ? null : identifier(value.name, `${label}.name`),
     type: text(value.type, `${label}.type`, 2048),
@@ -75,7 +76,12 @@ function normalizeFunction(value, label) {
     fail(`${label}.params and .results must be arrays`);
   }
   const params = value.params.map((item, index) => normalizeParam(item, `${label}.params[${index}]`));
-  const results = value.results.map((item, index) => normalizeParam(item, `${label}.results[${index}]`));
+  const results = value.results.map((item, index) => normalizeParam(
+    item,
+    `${label}.results[${index}]`,
+    { allowAnonymous: true },
+  ));
+  uniqueNames(params, `${label}.params`);
   return {
     name: identifier(value.name, `${label}.name`),
     params,
@@ -92,6 +98,7 @@ function normalizeInterface(value, label) {
   const functions = value.functions.map((item, index) => normalizeFunction(item, `${label}.functions[${index}]`));
   uniqueNames(types, `${label}.types`);
   uniqueNames(functions, `${label}.functions`);
+  uniqueNames([...types, ...functions], `${label}.items`);
   return {
     name: identifier(value.name, `${label}.name`),
     types: types.sort(byName),
