@@ -281,7 +281,7 @@ function compareInterfaces(baseline, current, findings, maxFindings, mode) {
   );
 }
 
-function compareWorlds(baseline, current, findings, maxFindings) {
+function compareWorlds(baseline, current, findings, maxFindings, mode) {
   compareNamedBaseline(baseline.worlds, current.worlds, 'world', findings, maxFindings, (before, after) => {
     const currentExports = new Map(after.exports.map((item) => [item.name, item]));
     for (const item of before.exports) {
@@ -293,6 +293,16 @@ function compareWorlds(baseline, current, findings, maxFindings) {
       } else if (canonicalStringify(item) !== canonicalStringify(next)) {
         push(findings, maxFindings, 'wit-world-export-changed', subject,
           `WIT world export ${subject} changed`, item, next);
+      }
+    }
+    if (mode === 'strict') {
+      const baselineExports = new Set(before.exports.map((item) => item.name));
+      for (const item of after.exports) {
+        if (!baselineExports.has(item.name)) {
+          const subject = `${after.name}.export.${item.name}`;
+          push(findings, maxFindings, 'wit-world-export-added', subject,
+            `WIT world export ${subject} adds a new provider obligation in strict mode`, null, item);
+        }
       }
     }
 
@@ -332,7 +342,7 @@ export function compareWitCompatibility(baselineValue, currentValue, options = {
       baseline.package, current.package);
   }
   compareInterfaces(baseline, current, findings, maxFindings, mode);
-  compareWorlds(baseline, current, findings, maxFindings);
+  compareWorlds(baseline, current, findings, maxFindings, mode);
 
   const totalFindingCount = findings.totalCount ?? 0;
   delete findings.totalCount;
