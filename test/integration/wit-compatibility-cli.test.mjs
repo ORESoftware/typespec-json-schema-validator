@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, truncate, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -52,4 +52,17 @@ test('verify-wit CLI stops for a changed closed WIT type', async () => {
   assert.equal(child.status, 2, child.stderr);
   const receipt = JSON.parse(await readFile(resolve(root, 'receipt.json'), 'utf8'));
   assert.ok(receipt.breakingChanges.some((item) => item.ruleId === 'wit-type-changed'));
+});
+
+
+test('verify-wit CLI rejects oversized projection files before JSON parsing', async () => {
+  const root = await mkdtemp(resolve(tmpdir(), 'tsjsv-wit-cli-'));
+  await writeFile(resolve(root, 'baseline.json'), JSON.stringify(projection()));
+  await writeFile(resolve(root, 'current.json'), '{}');
+  await truncate(resolve(root, 'current.json'), (16 * 1024 * 1024) + 1);
+  const child = run(root);
+  assert.notEqual(child.status, 0);
+  const receipt = JSON.parse(await readFile(resolve(root, 'receipt.json'), 'utf8'));
+  assert.equal(receipt.status, 'failed');
+  assert.equal(receipt.failureCode, 'wit-compatibility-verification-failed');
 });
