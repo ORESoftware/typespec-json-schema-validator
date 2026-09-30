@@ -215,8 +215,24 @@ test('malformed repository/default-branch entries are refused rather than skippe
       token: 'test-token',
       fetchImpl: async () => { throw new Error('must not fetch'); },
     }),
-    /repository 0 is malformed or missing defaultBranch/,
+    /repository 0 is malformed or missing required consumer metadata/,
   );
+});
+
+test('branchless repositories with no TJSV usage are explicitly irrelevant', async () => {
+  const result = await auditFleetManifestAdoption({
+    fleetReceipt: fleetReceipt([{
+      repository: 'alpha-org/empty',
+      defaultBranch: null,
+      hasTjsvUsage: false,
+      refs: [],
+    }]),
+    token: 'test-token',
+    fetchImpl: async () => { throw new Error('must not fetch'); },
+  });
+  assert.equal(result.status, 'passed');
+  assert.equal(result.summary.repositoriesInspected, 0);
+  assert.deepEqual(result.repositories, []);
 });
 
 test('GitHub read failures stop evaluation rather than silently shrinking the fleet', async () => {
