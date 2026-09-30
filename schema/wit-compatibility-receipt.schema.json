@@ -9,7 +9,7 @@
     "schema": { "const": "ores.typespec-json-schema-validator.wit-compatibility-receipt/v1" },
     "status": { "enum": ["passed", "stopped_for_evaluation", "failed"] },
     "admissible": { "type": "boolean" },
-    "mode": { "enum": ["consumer", "strict"] },
+    "mode": { "enum": ["consumer", "provider", "strict"] },
     "baselineDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
     "currentDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
     "breakingChangeCount": { "type": "integer", "minimum": 0 },
