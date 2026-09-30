@@ -17,7 +17,9 @@
     "package": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 512
+      "maxLength": 512,
+      "pattern": "^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*(?::[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)+(?:/[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)*(?:@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?)?$",
+      "$comment": "WIT package declaration name with optional full Semantic Versioning 2.0 version; runtime comparison applies Component Model canonical-version identity."
     },
     "worlds": {
       "type": "array",
