@@ -177,15 +177,45 @@ function contentsText(body, path) {
 function normalizeFleetRepository(entry) {
   if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
   const repository = typeof entry.repository === 'string' ? entry.repository : null;
+  if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository)) return null;
+  if (!Array.isArray(entry.refs)) return null;
+
+  const rawActionRefs = entry.refs.filter((ref) => ref && ref.kind === 'action');
+  const actionPaths = [];
+  for (const ref of rawActionRefs) {
+    const path = ref.path;
+    if (typeof path !== 'string'
+      || !path.startsWith('.github/workflows/')
+      || path.includes('\\')
+      || path.split('/').includes('..')) {
+      return null;
+    }
+    actionPaths.push(path);
+  }
+  const uniqueActionPaths = sortedUnique(actionPaths);
+  const hasTjsvUsage = entry.hasTjsvUsage === true;
+
+  if (uniqueActionPaths.length === 0 && !hasTjsvUsage) {
+    return {
+      repository,
+      defaultBranch: null,
+      actionPaths: [],
+      hasTjsvUsage: false,
+      skip: true,
+    };
+  }
+
   const defaultBranch = typeof entry.defaultBranch === 'string' && entry.defaultBranch.trim() !== ''
     ? entry.defaultBranch.trim()
     : null;
-  if (!repository || !/^[^/\s]+\/[^/\s]+$/.test(repository) || !defaultBranch) return null;
-  const actionPaths = sortedUnique((entry.refs ?? [])
-    .filter((ref) => ref && ref.kind === 'action' && typeof ref.path === 'string')
-    .map((ref) => ref.path)
-    .filter((path) => path.startsWith('.github/workflows/') && !path.includes('\\') && !path.split('/').includes('..')));
-  return { repository, defaultBranch, actionPaths, hasTjsvUsage: entry.hasTjsvUsage === true };
+  if (!defaultBranch) return null;
+  return {
+    repository,
+    defaultBranch,
+    actionPaths: uniqueActionPaths,
+    hasTjsvUsage,
+    skip: false,
+  };
 }
 
 function adoptionMode({ manifestPresent, workflows }) {
@@ -327,13 +357,13 @@ export async function auditFleetManifestAdoption({
 
   const targets = fleetReceipt.repositories.map((entry, index) => {
     const target = normalizeFleetRepository(entry);
-    if (!target) throw new Error(`fleetReceipt repository ${index} is malformed or missing defaultBranch`);
+    if (!target) throw new Error(`fleetReceipt repository ${index} is malformed or missing required consumer metadata`);
     return target;
-  });
+  }).filter((target) => !target.skip);
+
   const repositories = [];
   const failures = [];
   for (const target of targets) {
-    if (target.actionPaths.length === 0 && !target.hasTjsvUsage) continue;
     try {
       repositories.push(await inspectRepository(target, token, fetchImpl, rateFloor));
     } catch (error) {
