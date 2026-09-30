@@ -8,53 +8,63 @@ branding:
 
 inputs:
   typespec:
-    description: Path to the independently authored TypeSpec entry file or project directory in the caller workspace.
-    required: true
+    description: Legacy-mode path to the independently authored TypeSpec entry file or project directory. Omit with schema to use .ores-tjsv.toml manifest mode.
+    required: false
+    default: ""
   schema:
-    description: Path to the independently authored JSON Schema Draft 2020-12 file or directory in the caller workspace.
-    required: true
+    description: Legacy-mode path to the independently authored JSON Schema Draft 2020-12 file or directory. Omit with typespec to use .ores-tjsv.toml manifest mode.
+    required: false
+    default: ""
+  consumer_manifest:
+    description: Optional explicit .ores-tjsv.toml path. When omitted in manifest mode, tjsv discovers it upward from github.workspace.
+    required: false
+    default: ""
+  contract:
+    description: Optional contract ID selected from .ores-tjsv.toml. Valid only in manifest mode.
+    required: false
+    default: ""
   report:
-    description: Path for the deterministic machine-readable parity receipt.
+    description: Legacy-mode path for the deterministic machine-readable parity receipt. Manifest mode takes this from .ores-tjsv.toml or TSJSV_REPORT.
     required: false
     default: .typespec-json-schema-validator/report.json
   sarif:
-    description: Optional path for deterministic SARIF 2.1.0 presentation output. Leave empty to disable.
+    description: Legacy-mode path for deterministic SARIF 2.1.0 presentation output. Leave empty to disable. Manifest mode takes this from .ores-tjsv.toml or TSJSV_SARIF.
     required: false
     default: .typespec-json-schema-validator/report.sarif
   contract_ir:
-    description: Optional path for a digest-bound parity-approved Contract IR. A stopped or failed run writes a non-admissible tombstone instead of leaving stale IR.
+    description: Legacy-mode optional path for a digest-bound parity-approved Contract IR. A stopped or failed run writes a non-admissible tombstone instead of leaving stale IR.
     required: false
     default: ""
   output_dir:
-    description: Dedicated directory for generated comparison evidence. This directory must not contain either authored authority.
+    description: Legacy-mode dedicated directory for generated comparison evidence. This directory must not contain either authored authority.
     required: false
     default: .typespec-json-schema-validator/generated
   mapping:
-    description: Optional declaration-mapping JSON file.
+    description: Legacy-mode optional declaration-mapping JSON file.
     required: false
     default: ""
   instances:
-    description: Optional independently maintained instance corpus directory.
+    description: Legacy-mode optional independently maintained instance corpus directory.
     required: false
     default: ""
   max_probes:
-    description: Maximum synthesized probes per declaration per authority lane.
+    description: Legacy-mode maximum synthesized probes per declaration per authority lane.
     required: false
     default: "64"
   int64_strategy:
-    description: TypeSpec JSON Schema emitter strategy for int64/uint64 wire values. Use string for lossless interoperability or number only when the authored wire contract intentionally uses JSON numbers.
+    description: Legacy-mode TypeSpec JSON Schema emitter strategy for int64/uint64 wire values.
     required: false
     default: string
   seal_object_schemas:
-    description: Whether generated comparison schemas reject undeclared object properties through the official emitter's seal-object-schemas option.
+    description: Legacy-mode official emitter seal-object-schemas option.
     required: false
     default: "true"
   polymorphic_models_strategy:
-    description: Official emitter strategy for polymorphic models; one of ignore, oneOf, or anyOf.
+    description: Legacy-mode official emitter strategy for polymorphic models; one of ignore, oneOf, or anyOf.
     required: false
     default: oneOf
   quiet:
-    description: Suppress the human-readable summary while retaining the JSON receipt.
+    description: Legacy-mode human-summary suppression. In manifest mode configure quiet in .ores-tjsv.toml or TSJSV_QUIET.
     required: false
     default: "false"
 
@@ -79,6 +89,8 @@ runs:
       env:
         TSJSV_TYPESPEC_INPUT: ${{ inputs.typespec }}
         TSJSV_SCHEMA_INPUT: ${{ inputs.schema }}
+        TSJSV_CONSUMER_MANIFEST_INPUT: ${{ inputs.consumer_manifest }}
+        TSJSV_CONTRACT_INPUT: ${{ inputs.contract }}
         TSJSV_REPORT_INPUT: ${{ inputs.report }}
         TSJSV_SARIF_INPUT: ${{ inputs.sarif }}
         TSJSV_CONTRACT_IR_INPUT: ${{ inputs.contract_ir }}
@@ -93,41 +105,80 @@ runs:
       run: |
         set -euo pipefail
 
-        args=(
-          check
-          "--typespec=${TSJSV_TYPESPEC_INPUT}"
-          "--schema=${TSJSV_SCHEMA_INPUT}"
-          "--report=${TSJSV_REPORT_INPUT}"
-          "--output-dir=${TSJSV_OUTPUT_DIR_INPUT}"
-          "--max-probes=${TSJSV_MAX_PROBES_INPUT}"
-          "--int64-strategy=${TSJSV_INT64_STRATEGY_INPUT}"
-          "--seal-object-schemas=${TSJSV_SEAL_OBJECT_SCHEMAS_INPUT}"
-          "--polymorphic-models-strategy=${TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT}"
-        )
-
-        if [[ -n "${TSJSV_SARIF_INPUT}" ]]; then
-          args+=("--sarif=${TSJSV_SARIF_INPUT}")
-        fi
-
-        if [[ -n "${TSJSV_CONTRACT_IR_INPUT}" ]]; then
-          args+=("--contract-ir=${TSJSV_CONTRACT_IR_INPUT}")
-        fi
-
-        if [[ -n "${TSJSV_MAPPING_INPUT}" ]]; then
-          args+=("--mapping=${TSJSV_MAPPING_INPUT}")
-        fi
-
-        if [[ -n "${TSJSV_INSTANCES_INPUT}" ]]; then
-          args+=("--instances=${TSJSV_INSTANCES_INPUT}")
-        fi
-
-        case "${TSJSV_QUIET_INPUT}" in
-          true) args+=("--quiet") ;;
-          false) ;;
-          *)
-            printf 'quiet must be true or false, got: %s\n' "${TSJSV_QUIET_INPUT}" >&2
+        if [[ -n "${TSJSV_CONSUMER_MANIFEST_INPUT}" || ( -z "${TSJSV_TYPESPEC_INPUT}" && -z "${TSJSV_SCHEMA_INPUT}" ) ]]; then
+          if [[ -n "${TSJSV_TYPESPEC_INPUT}" || -n "${TSJSV_SCHEMA_INPUT}" ]]; then
+            printf 'manifest mode cannot be combined with typespec/schema action inputs; put authority paths in .ores-tjsv.toml\n' >&2
             exit 3
-            ;;
-        esac
+          fi
+
+          # Existing action defaults are deliberately not forwarded in manifest
+          # mode. The manifest is the consumer configuration authority; job-level
+          # TSJSV_* environment variables remain the explicit override channel.
+          if [[ "${TSJSV_REPORT_INPUT}" != ".typespec-json-schema-validator/report.json" \
+            || "${TSJSV_SARIF_INPUT}" != ".typespec-json-schema-validator/report.sarif" \
+            || -n "${TSJSV_CONTRACT_IR_INPUT}" \
+            || "${TSJSV_OUTPUT_DIR_INPUT}" != ".typespec-json-schema-validator/generated" \
+            || -n "${TSJSV_MAPPING_INPUT}" \
+            || -n "${TSJSV_INSTANCES_INPUT}" \
+            || "${TSJSV_MAX_PROBES_INPUT}" != "64" \
+            || "${TSJSV_INT64_STRATEGY_INPUT}" != "string" \
+            || "${TSJSV_SEAL_OBJECT_SCHEMAS_INPUT}" != "true" \
+            || "${TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT}" != "oneOf" \
+            || "${TSJSV_QUIET_INPUT}" != "false" ]]; then
+            printf 'manifest mode does not accept legacy action configuration inputs; move them to .ores-tjsv.toml or TSJSV_* job environment variables\n' >&2
+            exit 3
+          fi
+
+          args=(check)
+          if [[ -n "${TSJSV_CONSUMER_MANIFEST_INPUT}" ]]; then
+            args+=("--consumer-manifest=${TSJSV_CONSUMER_MANIFEST_INPUT}")
+          fi
+          if [[ -n "${TSJSV_CONTRACT_INPUT}" ]]; then
+            args+=("--contract=${TSJSV_CONTRACT_INPUT}")
+          fi
+        else
+          if [[ -z "${TSJSV_TYPESPEC_INPUT}" || -z "${TSJSV_SCHEMA_INPUT}" ]]; then
+            printf 'legacy action mode requires both typespec and schema; omit both to use .ores-tjsv.toml\n' >&2
+            exit 3
+          fi
+          if [[ -n "${TSJSV_CONTRACT_INPUT}" ]]; then
+            printf 'contract is valid only in .ores-tjsv.toml manifest mode\n' >&2
+            exit 3
+          fi
+
+          args=(
+            check
+            "--typespec=${TSJSV_TYPESPEC_INPUT}"
+            "--schema=${TSJSV_SCHEMA_INPUT}"
+            "--report=${TSJSV_REPORT_INPUT}"
+            "--output-dir=${TSJSV_OUTPUT_DIR_INPUT}"
+            "--max-probes=${TSJSV_MAX_PROBES_INPUT}"
+            "--int64-strategy=${TSJSV_INT64_STRATEGY_INPUT}"
+            "--seal-object-schemas=${TSJSV_SEAL_OBJECT_SCHEMAS_INPUT}"
+            "--polymorphic-models-strategy=${TSJSV_POLYMORPHIC_MODELS_STRATEGY_INPUT}"
+          )
+
+          if [[ -n "${TSJSV_SARIF_INPUT}" ]]; then
+            args+=("--sarif=${TSJSV_SARIF_INPUT}")
+          fi
+          if [[ -n "${TSJSV_CONTRACT_IR_INPUT}" ]]; then
+            args+=("--contract-ir=${TSJSV_CONTRACT_IR_INPUT}")
+          fi
+          if [[ -n "${TSJSV_MAPPING_INPUT}" ]]; then
+            args+=("--mapping=${TSJSV_MAPPING_INPUT}")
+          fi
+          if [[ -n "${TSJSV_INSTANCES_INPUT}" ]]; then
+            args+=("--instances=${TSJSV_INSTANCES_INPUT}")
+          fi
+
+          case "${TSJSV_QUIET_INPUT}" in
+            true) args+=("--quiet") ;;
+            false) ;;
+            *)
+              printf 'quiet must be true or false, got: %s\n' "${TSJSV_QUIET_INPUT}" >&2
+              exit 3
+              ;;
+          esac
+        fi
 
         node "${GITHUB_ACTION_PATH}/bin/typespec-json-schema-validator.mjs" "${args[@]}"
