@@ -77,10 +77,23 @@ test('package semver changes do not create false breaking findings', () => {
   const current = structuredClone(baseline);
   current.package = 'ores:example@1.1.0';
   assert.equal(compareWitCompatibility(baseline, current).status, 'passed');
-  current.package = 'ores:renamed@1.1.0';
-  const changed = compareWitCompatibility(baseline, current);
+  current.package = 'ores:example@2.0.0';
+  let changed = compareWitCompatibility(baseline, current);
   assert.equal(changed.status, 'stopped_for_evaluation');
   assert.ok(changed.findings.some((item) => item.ruleId === 'wit-package-identity-changed'));
+
+  current.package = 'ores:renamed@1.1.0';
+  changed = compareWitCompatibility(baseline, current);
+  assert.equal(changed.status, 'stopped_for_evaluation');
+  assert.ok(changed.findings.some((item) => item.ruleId === 'wit-package-identity-changed'));
+
+  const preOne = projection();
+  preOne.package = 'ores:example@0.2.6';
+  const preTwo = structuredClone(preOne);
+  preTwo.package = 'ores:example@0.2.7';
+  assert.equal(compareWitCompatibility(preOne, preTwo).status, 'passed');
+  preTwo.package = 'ores:example@0.3.0';
+  assert.equal(compareWitCompatibility(preOne, preTwo).status, 'stopped_for_evaluation');
 });
 
 test('WIT names are rejected when they collide case-insensitively', () => {
@@ -116,4 +129,11 @@ test('receipt writer rejects tampered finding fingerprints', async () => {
     writeWitCompatibilityReceipt(resolve(root, 'receipt.json'), receipt),
     /malformed WIT compatibility evidence/u,
   );
+});
+
+
+test('malformed normalized WIT package versions fail closed', () => {
+  const value = projection();
+  value.package = 'ores:example@1.2';
+  assert.throws(() => normalizeWitProjection(value), /valid full semver/u);
 });
