@@ -7,7 +7,13 @@
   "required": ["schema", "package", "worlds", "interfaces"],
   "properties": {
     "schema": { "const": "ores.typespec-json-schema-validator.wit-projection/v1" },
-    "package": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "package": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*:[A-Za-z0-9][A-Za-z0-9._-]*(?:@[A-Za-z0-9][A-Za-z0-9.+_-]*)?$",
+      "description": "Normalized WIT package identity namespace:name with an optional @version suffix."
+    },
     "worlds": {
       "type": "array",
       "maxItems": 10000,
