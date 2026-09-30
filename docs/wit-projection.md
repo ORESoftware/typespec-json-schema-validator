@@ -37,7 +37,7 @@ parity receipt + Contract IR
         |                           |
         |                           +--> validated WIT tree
         |                           +--> WIT digest
-        |                           +--> WIT verification receipt
+        |                           +--> WIT syntax/toolchain verification receipt
         |                           +--> language binding evidence
         |                           |
         +<--------------------------+
