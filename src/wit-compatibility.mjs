@@ -362,16 +362,40 @@ function validDigest(value) {
   return typeof value === 'string' && /^[0-9a-f]{64}$/u.test(value);
 }
 
+function validFinding(value) {
+  if (!isPlainObject(value)) return false;
+  const keys = Object.keys(value).sort();
+  const expected = ['baseline', 'current', 'fingerprint', 'message', 'ruleId', 'subject'].sort();
+  if (canonicalStringify(keys) !== canonicalStringify(expected)) return false;
+  if (typeof value.ruleId !== 'string' || !/^wit-[a-z0-9-]+$/u.test(value.ruleId)) return false;
+  if (typeof value.subject !== 'string' || value.subject.length === 0) return false;
+  if (typeof value.message !== 'string' || value.message.length === 0) return false;
+  if (!validDigest(value.fingerprint)) return false;
+  const { fingerprint, ...body } = value;
+  return fingerprint === sha256(canonicalStringify(body));
+}
+
 function validReceipt(receipt) {
   if (!isPlainObject(receipt) || receipt.schema !== WIT_COMPATIBILITY_RECEIPT_SCHEMA) return false;
   if (!['passed', 'stopped_for_evaluation', 'failed'].includes(receipt.status)) return false;
   if (!MODES.has(receipt.mode) || receipt.admissible !== (receipt.status === 'passed')) return false;
   if (!Number.isSafeInteger(receipt.breakingChangeCount) || receipt.breakingChangeCount < 0) return false;
-  if (!Array.isArray(receipt.breakingChanges)) return false;
+  if (!Array.isArray(receipt.breakingChanges) || !receipt.breakingChanges.every(validFinding)) return false;
   if (receipt.truncated) {
     if (receipt.breakingChangeCount <= receipt.breakingChanges.length) return false;
   } else if (receipt.breakingChangeCount !== receipt.breakingChanges.length) return false;
   if (![receipt.baselineDigest, receipt.currentDigest].every((v) => v === null || validDigest(v))) return false;
+
+  if (receipt.status === 'passed') {
+    if (receipt.failureCode !== null || receipt.breakingChangeCount !== 0 || receipt.truncated) return false;
+    if (!validDigest(receipt.baselineDigest) || !validDigest(receipt.currentDigest)) return false;
+  } else if (receipt.status === 'stopped_for_evaluation') {
+    if (receipt.failureCode !== 'wit-breaking-change-detected' || receipt.breakingChangeCount === 0) return false;
+    if (!validDigest(receipt.baselineDigest) || !validDigest(receipt.currentDigest)) return false;
+  } else if (receipt.failureCode !== 'wit-compatibility-verification-failed') {
+    return false;
+  }
+
   if (!validDigest(receipt.verificationId)) return false;
   const { verificationId, ...body } = receipt;
   return verificationId === sha256(canonicalStringify(body));
