@@ -71,6 +71,7 @@ export {
   UNEXPECTED_PROPERTY,
 } from './witness.mjs';
 export {
+  assertTypeSpecEmitterInputSafe,
   declarationKindFamily,
   inventoryTypeSpec,
   inventoryTypeSpecSource,
