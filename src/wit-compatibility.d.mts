@@ -33,6 +33,7 @@ export interface WitCompatibilityResult {
   currentDigest: string;
   status: 'passed' | 'stopped_for_evaluation';
   admissible: boolean;
+  totalFindingCount: number;
   findings: readonly WitCompatibilityFinding[];
   truncated: boolean;
 }
