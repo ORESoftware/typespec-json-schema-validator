@@ -191,6 +191,10 @@
           },
           "currentDigest": {
             "$ref": "#/$defs/digest"
+          },
+          "breakingChanges": {
+            "type": "array",
+            "minItems": 1
           }
         }
       }
@@ -213,6 +217,15 @@
           },
           "failureCode": {
             "const": "wit-compatibility-verification-failed"
+          },
+          "breakingChangeCount": {
+            "const": 0
+          },
+          "truncated": {
+            "const": false
+          },
+          "breakingChanges": {
+            "maxItems": 0
           }
         }
       }
