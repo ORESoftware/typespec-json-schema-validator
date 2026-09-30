@@ -1,0 +1,15 @@
+version = 1
+default_contract = "pass"
+
+[authority]
+typespec = "peer-authority"
+json_schema = "peer-authority"
+
+[defaults]
+report = ".tjsv/report.json"
+output_dir = ".tjsv/generated"
+
+[[contracts]]
+id = "pass"
+typespec = "main.tsp"
+schema = "authored.schema.json"
