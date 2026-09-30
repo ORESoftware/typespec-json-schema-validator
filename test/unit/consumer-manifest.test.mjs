@@ -138,6 +138,16 @@ test('consumer manifest input is bounded before parsing', async (t) => {
   );
 });
 
+test('consumer manifest bytes must be valid UTF-8', async (t) => {
+  const root = await workspace(BASE);
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(join(root, '.ores-tjsv.toml'), Buffer.from([0x76, 0x65, 0x72, 0xff, 0x73]));
+  assert.throws(
+    () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
+    /must contain valid UTF-8/u,
+  );
+});
+
 test('manifest-owned paths cannot escape through an existing symlink ancestor', async (t) => {
   const root = await workspace(BASE.replace(
     'output_dir = ".typespec-json-schema-validator/generated"',
@@ -162,5 +172,24 @@ test('manifest-owned paths cannot escape through an existing symlink ancestor', 
   assert.throws(
     () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
     /after resolving symlinks/u,
+  );
+});
+
+test('a dangling manifest symlink fails closed instead of falling through discovery', async (t) => {
+  const root = await mkdtemp(join(tmpdir(), 'tjsv-manifest-link-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(join(root, '.git'));
+  try {
+    await symlink('missing-manifest.toml', join(root, '.ores-tjsv.toml'), 'file');
+  } catch (error) {
+    if (error?.code === 'EPERM' || error?.code === 'EACCES') {
+      t.skip('runner does not permit file symlinks');
+      return;
+    }
+    throw error;
+  }
+  assert.throws(
+    () => loadConsumerManifestConfiguration({ cwd: root, command: 'check' }),
+    /regular, non-symlink/u,
   );
 });
