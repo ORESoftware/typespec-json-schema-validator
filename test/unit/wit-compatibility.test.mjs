@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 import test from 'node:test';
 import {
   WIT_PROJECTION_SCHEMA,
   compareWitCompatibility,
   createWitCompatibilityReceipt,
   normalizeWitProjection,
+  writeWitCompatibilityReceipt,
 } from '../../src/wit-compatibility.mjs';
 
 function projection() {
@@ -98,4 +102,18 @@ test('receipt counts all breaking changes even when findings are truncated', () 
   assert.equal(receipt.truncated, true);
   assert.equal(receipt.breakingChanges.length, 1);
   assert.equal(receipt.breakingChangeCount, 2);
+});
+
+
+test('receipt writer rejects tampered finding fingerprints', async () => {
+  const baseline = projection();
+  const current = structuredClone(baseline);
+  current.interfaces[0].functions = [];
+  const receipt = structuredClone(createWitCompatibilityReceipt({ baseline, current }));
+  receipt.breakingChanges[0].message = 'tampered';
+  const root = await mkdtemp(resolve(tmpdir(), 'tsjsv-wit-receipt-'));
+  await assert.rejects(
+    writeWitCompatibilityReceipt(resolve(root, 'receipt.json'), receipt),
+    /malformed WIT compatibility evidence/u,
+  );
 });
