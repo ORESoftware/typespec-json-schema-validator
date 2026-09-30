@@ -37,6 +37,10 @@ Package identity and package version are handled using the Component Model canon
 
 WIT function parameters are always named and case-insensitively unique. The normalized function projection carries an explicit `async` boolean because sync↔async changes alter the component function type. A WIT function has at most one return type in the syntax; multiple logical values must be carried by a tuple or record. The normalized projection rejects representations that violate those invariants.
 
+Normalization is resource-bounded before compatibility comparison: each repeated collection is limited to 10,000 entries, one normalized projection has a 50,000-item aggregate complexity budget, and the CLI rejects baseline/current projection files larger than 16 MiB before JSON parsing. These runtime limits complement the JSON Schema collection bounds and prevent multiplicative interface/function/type inventories from turning compatibility verification into an unbounded memory/CPU sink.
+
+Semantic-version numeric components are canonicalized as decimal strings rather than JavaScript numbers. This matters because SemVer integers are not bounded to IEEE-754 precision; distinct very large valid major/minor/patch values must never collapse to the same compatibility line through `Infinity` or precision loss.
+
 World exports are protected from removal or signature/target changes. New world imports are breaking because they add host requirements. Existing interface functions may not be removed or have their signatures changed. In `strict` mode, adding interface functions or exports to an existing world is also breaking because either can add a new provider obligation.
 
 ## CLI
