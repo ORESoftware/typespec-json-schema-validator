@@ -29,7 +29,7 @@ digest-bound compatibility receipt
 
 ## Normalized projection
 
-The normalized representation is intentionally syntax-independent. Named WIT types carry a canonical `shape` string produced from the parsed WIT semantic model, not from raw source text. A change to an existing type shape is treated as breaking; this includes adding/removing enum or variant cases. The producer must resolve `use`/`include`, resource methods, handles, gated features, current async function semantics, and active value types such as `map<K,V>` before producing the canonical shape so formatting-only source changes cannot affect compatibility evidence. Fully-qualified interface targets must use Component Model canonical interface names; non-canonical version suffix metadata belongs in the syntax/toolchain evidence rather than being mistaken for a structural target change.
+The normalized representation is intentionally syntax-independent. Named WIT types carry a canonical `shape` string produced from the parsed WIT semantic model, not from raw source text. A change to an existing type shape is treated as breaking; this includes adding/removing enum or variant cases. The producer must resolve `use`/`include`, resource methods, handles, gated features, current async function semantics, and active value types such as `map<K,V>` before producing the canonical shape so formatting-only source changes cannot affect compatibility evidence. Fully-qualified interface targets must use Component Model canonical interface names; non-canonical version suffix metadata belongs in the syntax/toolchain evidence rather than being mistaken for a structural target change. Resolved `use` items that are exported from an interface must be materialized in the normalized semantic type inventory even when no function references them. For world bindings of `kind = function`, `target` must be the deterministic semantic function signature (including async, parameter names/types, and result type), not merely the local function name.
 
 WIT names are case-insensitively unique. Normalization therefore rejects names that differ only by case. Sorting uses deterministic code-point ordering rather than locale-sensitive collation.
 
@@ -65,3 +65,8 @@ Every `*-clients` SDK generator should retain:
 - at least one cross-language round-trip fixture for the SDK's RPC/HTTP/component boundary.
 
 The WIT lane complements OpenAPI/Protobuf/JSON Schema; it does not replace them.
+
+
+## Generation context
+
+TJSV deliberately does not parse raw WIT. The `ores-wit` syntax/toolchain receipt must bind the exact parser/emitter revision, Component Model/WASI feature level, selected world, target package version, enabled feature gates, source-tree digest, and Contract IR digest used to produce the normalized projection. Promotion must reject a compatibility receipt if that generation context is missing or does not belong to the same admitted source closure. This prevents a different target version or feature selection from looking like an ordinary API edit.
