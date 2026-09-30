@@ -74,6 +74,18 @@ aliases = ["tsp-bin"]
 type = "string"
 help = "Explicit TypeSpec compiler executable."
 
+[flags.consumer-manifest]
+env = "TSJSV_CONSUMER_MANIFEST"
+aliases = ["consumer-manifest", "tjsv-manifest"]
+type = "string"
+help = "Explicit .ores-tjsv.toml consumer manifest path; otherwise discover upward from the current directory."
+
+[flags.contract]
+env = "TSJSV_CONTRACT"
+aliases = ["contract"]
+type = "string"
+help = "Contract ID to select from .ores-tjsv.toml when the manifest declares multiple contracts."
+
 [flags.quiet]
 env = "TSJSV_QUIET"
 aliases = ["quiet"]
@@ -393,7 +405,6 @@ aliases = ["verification"]
 type = "string"
 default = ".typespec-json-schema-validator/projection-verification.json"
 help = "Deterministic self-digesting projection verification receipt path relative to root."
-
 
 [commands.verify-wit]
 help = "Compare a normalized current WIT projection with a retained released baseline and emit a deterministic compatibility receipt."
