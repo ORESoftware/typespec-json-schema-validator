@@ -193,3 +193,44 @@ test('sync to async function changes are breaking and map is supported', () => {
   withMap.interfaces[0].types.push({ name: 'headers', kind: 'map', shape: 'map<string,string>' });
   assert.equal(normalizeWitProjection(withMap).interfaces[0].types[0].kind, 'map');
 });
+
+
+test('canonical package compatibility preserves arbitrarily large semver integers', () => {
+  const baseline = projection();
+  const current = projection();
+  baseline.package = `ores:example@${'9'.repeat(200)}.0.0`;
+  current.package = `ores:example@${'8'.repeat(200)}.0.0`;
+  const result = compareWitCompatibility(baseline, current);
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((item) => item.ruleId === 'wit-package-identity-changed'));
+});
+
+test('normalized WIT enforces per-collection and global complexity budgets', () => {
+  const oversized = projection();
+  oversized.interfaces[0].types = Array.from({ length: 10_001 }, (_, index) => ({
+    name: `t${index}`,
+    kind: 'alias',
+    shape: 'u8',
+  }));
+  assert.throws(
+    () => normalizeWitProjection(oversized),
+    /at most 10000 items/u,
+  );
+
+  const sharedTypes = Array.from({ length: 10_000 }, (_, index) => ({
+    name: `t${index}`,
+    kind: 'alias',
+    shape: 'u8',
+  }));
+  const globallyOversized = projection();
+  globallyOversized.worlds = [];
+  globallyOversized.interfaces = Array.from({ length: 6 }, (_, index) => ({
+    name: `i${index}`,
+    types: sharedTypes,
+    functions: [],
+  }));
+  assert.throws(
+    () => normalizeWitProjection(globallyOversized),
+    /global 50000-item complexity budget/u,
+  );
+});
