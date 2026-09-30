@@ -31,6 +31,7 @@ json_schema = "peer-authority"
 report = ".typespec-json-schema-validator/report.json"
 probes = true
 max_probes = 72
+quiet = true
 
 [[contracts]]
 id = "api"
@@ -47,6 +48,7 @@ test('discovers the consumer manifest to the git boundary and resolves repo-loca
   assert.equal(loaded.env.TSJSV_AUTHORED_SCHEMA, join(root, 'contracts', 'authored.schema.json'));
   assert.equal(loaded.env.TSJSV_MAX_PROBES, 72);
   assert.equal(loaded.env.TSJSV_PROBES, true);
+  assert.equal(loaded.env.TSJSV_QUIET, true);
 });
 
 test('a single contract is selected without default_contract', async () => {
@@ -70,7 +72,7 @@ schema = "contracts/admin.schema.json"
   assert.equal(selected.contractId, 'admin');
 });
 
-test('authority downgrades, unknown tables, duplicate IDs, executable config, and path escapes are rejected', async () => {
+test('authority downgrades, unknown tables, duplicate IDs, invalid booleans, executable config, and path escapes are rejected', async () => {
   assert.throws(
     () => validateConsumerManifest(parseConsumerManifestToml(`${BASE}\n[authority2]\nx = 1\n`)),
     /unsupported table/u,
@@ -87,6 +89,10 @@ typespec = "contracts/second.tsp"
 schema = "contracts/second.schema.json"
 `)),
     /duplicate contract id/u,
+  );
+  assert.throws(
+    () => validateConsumerManifest(parseConsumerManifestToml(BASE.replace('quiet = true', 'quiet = "yes"'))),
+    /defaults\.quiet must be a boolean/u,
   );
   assert.throws(
     () => validateConsumerManifest(parseConsumerManifestToml(BASE.replace(
