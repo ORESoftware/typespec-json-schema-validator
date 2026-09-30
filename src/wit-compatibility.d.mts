@@ -33,6 +33,9 @@ export interface WitCompatibilityResult {
   currentDigest: string;
   status: 'passed' | 'stopped_for_evaluation';
   admissible: boolean;
+  /** Total findings before maxFindings truncation. */
+  breakingChangeCount: number;
+  /** Visible findings, bounded by maxFindings. */
   findings: readonly WitCompatibilityFinding[];
   truncated: boolean;
 }
@@ -43,8 +46,10 @@ export interface WitCompatibilityReceipt {
   mode: WitCompatibilityMode;
   baselineDigest: string | null;
   currentDigest: string | null;
+  /** Total findings; may exceed breakingChanges.length when truncated is true. */
   breakingChangeCount: number;
   truncated: boolean;
+  /** Visible bounded findings retained in the receipt. */
   breakingChanges: readonly WitCompatibilityFinding[];
   failureCode: 'wit-breaking-change-detected' | 'wit-compatibility-verification-failed' | null;
   verificationId: string;
