@@ -20,7 +20,7 @@
     }
   },
   "$defs": {
-    "identifier": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]*$", "maxLength": 256 },
+    "identifier": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$", "maxLength": 256, "$comment": "Normalized semantic WIT identifier; runtime normalization additionally enforces case-insensitive uniqueness within each scope." },
     "param": {
       "type": "object",
       "additionalProperties": false,
