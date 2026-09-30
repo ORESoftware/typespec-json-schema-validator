@@ -1,0 +1,24 @@
+{
+  "schema": "tjsv.wit-package-identity/v1",
+  "issue": 225,
+  "valid": [
+    "ores:example",
+    "ores-core:example-package",
+    "ores:example@1.2.3",
+    "ores-core:example-package@1.2.3-alpha.1+build.7"
+  ],
+  "invalid": [
+    "ores:example:extra",
+    "ores:example/item",
+    "ores::example",
+    "ores:example/",
+    "ores:example:item@1.2.3",
+    "ores:example/item@1.2.3"
+  ],
+  "invariants": {
+    "package_identity_shape": "namespace:name[@semver]",
+    "exactly_one_namespace_separator": true,
+    "interface_or_world_reference_syntax_is_out_of_scope": true,
+    "runtime_and_json_schema_must_agree": true
+  }
+}
