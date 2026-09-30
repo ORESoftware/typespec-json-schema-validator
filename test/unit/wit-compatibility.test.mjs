@@ -136,4 +136,8 @@ test('malformed normalized WIT package versions fail closed', () => {
   const value = projection();
   value.package = 'ores:example@1.2';
   assert.throws(() => normalizeWitProjection(value), /valid full semver/u);
+  value.package = 'ores:example@1.2.3-01';
+  assert.throws(() => normalizeWitProjection(value), /valid full semver/u);
+  value.package = 'ores:example@1.2.3+bad..meta';
+  assert.throws(() => normalizeWitProjection(value), /valid full semver/u);
 });
