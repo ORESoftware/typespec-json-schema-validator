@@ -13,6 +13,8 @@ const TYPE_KINDS = new Set([
   'alias', 'record', 'variant', 'enum', 'flags', 'resource', 'handle', 'tuple', 'option', 'result', 'list', 'future', 'stream', 'map',
 ]);
 const MODES = new Set(['consumer', 'strict']);
+const MAX_COLLECTION_ITEMS = 10_000;
+const MAX_PROJECTION_ITEMS = 50_000;
 
 export class WitProjectionError extends Error {
   constructor(message) {
@@ -50,6 +52,21 @@ function identifier(value, label) {
   return value;
 }
 
+function spendBudget(budget, count, label) {
+  if (!Number.isSafeInteger(count) || count < 0) fail(`${label} has an invalid item count`);
+  budget.remaining -= count;
+  if (budget.remaining < 0) {
+    fail(`WIT projection exceeds the global ${MAX_PROJECTION_ITEMS}-item complexity budget`);
+  }
+}
+
+function boundedArray(value, label, budget, max = MAX_COLLECTION_ITEMS) {
+  if (!Array.isArray(value)) fail(`${label} must be an array`);
+  if (value.length > max) fail(`${label} must contain at most ${max} items`);
+  spendBudget(budget, value.length, label);
+  return value;
+}
+
 function normalizeNamedType(value, label) {
   exactKeys(value, ['name', 'kind', 'shape'], label);
   const kind = text(value.kind, `${label}.kind`, 32);
@@ -70,14 +87,12 @@ function normalizeParam(value, label, { allowAnonymous = false } = {}) {
   };
 }
 
-function normalizeFunction(value, label) {
+function normalizeFunction(value, label, budget) {
   exactKeys(value, ['name', 'async', 'params', 'results'], label);
-  if (!Array.isArray(value.params) || !Array.isArray(value.results)) {
-    fail(`${label}.params and .results must be arrays`);
-  }
-  if (value.results.length > 1) fail(`${label}.results must contain at most one WIT result`);
-  const params = value.params.map((item, index) => normalizeParam(item, `${label}.params[${index}]`));
-  const results = value.results.map((item, index) => {
+  const paramValues = boundedArray(value.params, `${label}.params`, budget);
+  const resultValues = boundedArray(value.results, `${label}.results`, budget, 1);
+  const params = paramValues.map((item, index) => normalizeParam(item, `${label}.params[${index}]`));
+  const results = resultValues.map((item, index) => {
     const result = normalizeParam(
       item,
       `${label}.results[${index}]`,
@@ -96,13 +111,12 @@ function normalizeFunction(value, label) {
   };
 }
 
-function normalizeInterface(value, label) {
+function normalizeInterface(value, label, budget) {
   exactKeys(value, ['name', 'types', 'functions'], label);
-  if (!Array.isArray(value.types) || !Array.isArray(value.functions)) {
-    fail(`${label}.types and .functions must be arrays`);
-  }
-  const types = value.types.map((item, index) => normalizeNamedType(item, `${label}.types[${index}]`));
-  const functions = value.functions.map((item, index) => normalizeFunction(item, `${label}.functions[${index}]`));
+  const typeValues = boundedArray(value.types, `${label}.types`, budget);
+  const functionValues = boundedArray(value.functions, `${label}.functions`, budget);
+  const types = typeValues.map((item, index) => normalizeNamedType(item, `${label}.types[${index}]`));
+  const functions = functionValues.map((item, index) => normalizeFunction(item, `${label}.functions[${index}]`, budget));
   uniqueNames(types, `${label}.types`);
   uniqueNames(functions, `${label}.functions`);
   uniqueNames([...types, ...functions], `${label}.items`);
@@ -124,13 +138,12 @@ function normalizeBinding(value, label) {
   };
 }
 
-function normalizeWorld(value, label) {
+function normalizeWorld(value, label, budget) {
   exactKeys(value, ['name', 'imports', 'exports'], label);
-  if (!Array.isArray(value.imports) || !Array.isArray(value.exports)) {
-    fail(`${label}.imports and .exports must be arrays`);
-  }
-  const imports = value.imports.map((item, index) => normalizeBinding(item, `${label}.imports[${index}]`));
-  const exports = value.exports.map((item, index) => normalizeBinding(item, `${label}.exports[${index}]`));
+  const importValues = boundedArray(value.imports, `${label}.imports`, budget);
+  const exportValues = boundedArray(value.exports, `${label}.exports`, budget);
+  const imports = importValues.map((item, index) => normalizeBinding(item, `${label}.imports[${index}]`));
+  const exports = exportValues.map((item, index) => normalizeBinding(item, `${label}.exports[${index}]`));
   uniqueNames(imports, `${label}.imports`);
   uniqueNames(exports, `${label}.exports`);
   return {
@@ -167,14 +180,14 @@ function canonicalPackageIdentity(value) {
   const version = value.slice(at + 1);
   const match = SEMVER.exec(version);
   if (!match) fail('projection.package version must be valid full semver');
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  const patch = Number(match[3]);
+  const major = match[1];
+  const minor = match[2];
+  const patch = match[3];
   const prerelease = match[4];
   let canonicalVersion;
   if (prerelease !== undefined) canonicalVersion = `${major}.${minor}.${patch}-${prerelease}`;
-  else if (major > 0) canonicalVersion = String(major);
-  else if (minor > 0) canonicalVersion = `0.${minor}`;
+  else if (major !== '0') canonicalVersion = major;
+  else if (minor !== '0') canonicalVersion = `0.${minor}`;
   else canonicalVersion = `0.0.${patch}`;
   return `${name}@${canonicalVersion}`;
 }
@@ -182,11 +195,11 @@ function canonicalPackageIdentity(value) {
 export function normalizeWitProjection(value) {
   exactKeys(value, ['schema', 'package', 'worlds', 'interfaces'], 'projection');
   if (value.schema !== WIT_PROJECTION_SCHEMA) fail('projection.schema is unsupported');
-  if (!Array.isArray(value.worlds) || !Array.isArray(value.interfaces)) {
-    fail('projection.worlds and projection.interfaces must be arrays');
-  }
-  const worlds = value.worlds.map((item, index) => normalizeWorld(item, `projection.worlds[${index}]`));
-  const interfaces = value.interfaces.map((item, index) => normalizeInterface(item, `projection.interfaces[${index}]`));
+  const budget = { remaining: MAX_PROJECTION_ITEMS };
+  const worldValues = boundedArray(value.worlds, 'projection.worlds', budget);
+  const interfaceValues = boundedArray(value.interfaces, 'projection.interfaces', budget);
+  const worlds = worldValues.map((item, index) => normalizeWorld(item, `projection.worlds[${index}]`, budget));
+  const interfaces = interfaceValues.map((item, index) => normalizeInterface(item, `projection.interfaces[${index}]`, budget));
   uniqueNames(worlds, 'projection.worlds');
   uniqueNames(interfaces, 'projection.interfaces');
   const packageName = text(value.package, 'projection.package', 512);
