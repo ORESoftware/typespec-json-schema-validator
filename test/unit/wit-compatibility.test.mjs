@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { resolve } from 'node:path';
 import test from 'node:test';
 import {
   WIT_PROJECTION_SCHEMA,
+  UnsafeWitCompatibilityReceiptDestinationError,
   compareWitCompatibility,
   createWitCompatibilityReceipt,
   normalizeWitProjection,
+  writeWitCompatibilityReceipt,
 } from '../../src/wit-compatibility.mjs';
 
 function projection() {
@@ -94,7 +99,7 @@ test('normalizer fails closed on duplicate names and malformed package IDs', () 
   assert.throws(() => normalizeWitProjection(malformed), /package identifier/u);
 });
 
-test('finding truncation retains the total breaking-change count', () => {
+function truncatedFixture() {
   const baseline = projection();
   const current = structuredClone(baseline);
   baseline.interfaces[0].functions = Array.from({ length: 5 }, (_, index) => ({
@@ -103,7 +108,11 @@ test('finding truncation retains the total breaking-change count', () => {
     results: [],
   }));
   current.interfaces[0].functions = [];
+  return { baseline, current };
+}
 
+test('finding truncation retains the total breaking-change count', () => {
+  const { baseline, current } = truncatedFixture();
   const result = compareWitCompatibility(baseline, current, { maxFindings: 2 });
   assert.equal(result.status, 'stopped_for_evaluation');
   assert.equal(result.breakingChangeCount, 5);
@@ -114,6 +123,25 @@ test('finding truncation retains the total breaking-change count', () => {
   assert.equal(receipt.breakingChangeCount, 5);
   assert.equal(receipt.breakingChanges.length, 2);
   assert.equal(receipt.truncated, true);
+});
+
+test('safe writer accepts a valid truncated receipt and rejects count tampering', async () => {
+  const { baseline, current } = truncatedFixture();
+  const receipt = createWitCompatibilityReceipt({ baseline, current, maxFindings: 2 });
+  const root = await mkdtemp(resolve(tmpdir(), 'tjsv-wit-write-'));
+  const path = resolve(root, 'receipt.json');
+
+  await writeWitCompatibilityReceipt(path, receipt);
+  const written = JSON.parse(await readFile(path, 'utf8'));
+  assert.equal(written.breakingChangeCount, 5);
+  assert.equal(written.breakingChanges.length, 2);
+  assert.equal(written.truncated, true);
+
+  const tampered = { ...receipt, breakingChangeCount: 1 };
+  await assert.rejects(
+    writeWitCompatibilityReceipt(resolve(root, 'tampered.json'), tampered),
+    UnsafeWitCompatibilityReceiptDestinationError,
+  );
 });
 
 test('normalization order is deterministic by code point rather than host locale', () => {
