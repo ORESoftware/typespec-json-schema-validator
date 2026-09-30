@@ -284,6 +284,7 @@ export function verifyContractIr(input: {
 }): Promise<ContractIrVerification>;
 export function writeContractIr(path: string, contractIr: ContractIrArtifact): Promise<string>;
 export function writeContractIrFile(path: string, serializedIr: string, schema: string): Promise<string>;
+export function assertTypeSpecEmitterInputSafe(inputPath: string): Promise<Record<string, unknown>>;
 export function inventoryTypeSpec(inputPath: string): Promise<Record<string, unknown>>;
 export function inventoryTypeSpecSource(source: string, file?: string): Record<string, unknown>;
 export function loadSchemaCollection(input: string, options?: Record<string, unknown>): Promise<Record<string, unknown>>;
