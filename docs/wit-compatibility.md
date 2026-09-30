@@ -33,7 +33,7 @@ The normalized representation is intentionally syntax-independent. Named WIT typ
 
 WIT names are case-insensitively unique. Normalization therefore rejects names that differ only by case. Sorting uses deterministic code-point ordering rather than locale-sensitive collation.
 
-Package identity and package version are handled separately. Changing `namespace:package` is breaking; a semver-only package version change is not itself a breaking finding because the structural comparison is what decides compatibility.
+Package identity and package version are handled using the Component Model canonical-version rules. Changing `namespace:package` is breaking. Stable `1.x.y` revisions share the `1` compatibility line, `0.2.x` revisions share `0.2`, and `0.0.x` patch releases are distinct; prereleases remain distinct. Structural comparison still decides whether changes inside one compatible version line are admissible.
 
 World exports are protected from removal or signature/target changes. New world imports are breaking because they add host requirements. Existing interface functions may not be removed or have their signatures changed. In `strict` mode, adding interface functions is also breaking for implementers.
 
