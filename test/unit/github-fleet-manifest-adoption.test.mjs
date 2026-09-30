@@ -197,6 +197,28 @@ test('non-passing first-stage receipt is refused before GitHub reads', async () 
   );
 });
 
+test('bad admitted revision provenance is refused before GitHub reads', async () => {
+  await assert.rejects(
+    auditFleetManifestAdoption({
+      fleetReceipt: fleetReceipt([repository('alpha-org/repo')], { admittedRevision: 'main' }),
+      token: 'test-token',
+      fetchImpl: async () => { throw new Error('must not fetch'); },
+    }),
+    /admittedRevision must be a full 40-character Git SHA/,
+  );
+});
+
+test('malformed repository/default-branch entries are refused rather than skipped', async () => {
+  await assert.rejects(
+    auditFleetManifestAdoption({
+      fleetReceipt: fleetReceipt([{ ...repository('alpha-org/repo'), defaultBranch: null }]),
+      token: 'test-token',
+      fetchImpl: async () => { throw new Error('must not fetch'); },
+    }),
+    /repository 0 is malformed or missing defaultBranch/,
+  );
+});
+
 test('GitHub read failures stop evaluation rather than silently shrinking the fleet', async () => {
   const receipt = fleetReceipt([repository('alpha-org/private')]);
   const fetchImpl = async () => response({ message: 'denied' }, { status: 403 });
