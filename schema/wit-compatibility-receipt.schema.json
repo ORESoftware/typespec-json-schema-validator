@@ -4,37 +4,218 @@
   "title": "ORESoftware WIT compatibility receipt v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "status", "admissible", "mode", "baselineDigest", "currentDigest", "breakingChangeCount", "truncated", "breakingChanges", "failureCode", "verificationId"],
+  "required": [
+    "schema",
+    "status",
+    "admissible",
+    "mode",
+    "baselineDigest",
+    "currentDigest",
+    "breakingChangeCount",
+    "truncated",
+    "breakingChanges",
+    "failureCode",
+    "verificationId"
+  ],
   "properties": {
-    "schema": { "const": "ores.typespec-json-schema-validator.wit-compatibility-receipt/v1" },
-    "status": { "enum": ["passed", "stopped_for_evaluation", "failed"] },
-    "admissible": { "type": "boolean" },
-    "mode": { "enum": ["consumer", "strict"] },
-    "baselineDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
-    "currentDigest": { "oneOf": [{ "$ref": "#/$defs/digest" }, { "type": "null" }] },
-    "breakingChangeCount": { "type": "integer", "minimum": 0 },
-    "truncated": { "type": "boolean" },
-    "breakingChanges": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/finding" } },
-    "failureCode": { "oneOf": [
-      { "enum": ["wit-breaking-change-detected", "wit-compatibility-verification-failed"] },
-      { "type": "null" }
-    ] },
-    "verificationId": { "$ref": "#/$defs/digest" }
+    "schema": {
+      "const": "ores.typespec-json-schema-validator.wit-compatibility-receipt/v1"
+    },
+    "status": {
+      "enum": [
+        "passed",
+        "stopped_for_evaluation",
+        "failed"
+      ]
+    },
+    "admissible": {
+      "type": "boolean"
+    },
+    "mode": {
+      "enum": [
+        "consumer",
+        "strict"
+      ]
+    },
+    "baselineDigest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "currentDigest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "breakingChangeCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "breakingChanges": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "failureCode": {
+      "oneOf": [
+        {
+          "enum": [
+            "wit-breaking-change-detected",
+            "wit-compatibility-verification-failed"
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verificationId": {
+      "$ref": "#/$defs/digest"
+    }
   },
   "$defs": {
-    "digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "finding": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ruleId", "subject", "message", "baseline", "current", "fingerprint"],
+      "required": [
+        "ruleId",
+        "subject",
+        "message",
+        "baseline",
+        "current",
+        "fingerprint"
+      ],
       "properties": {
-        "ruleId": { "type": "string", "pattern": "^wit-[a-z0-9-]+$" },
-        "subject": { "type": "string", "minLength": 1 },
-        "message": { "type": "string", "minLength": 1 },
+        "ruleId": {
+          "type": "string",
+          "pattern": "^wit-[a-z0-9-]+$"
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
         "baseline": {},
         "current": {},
-        "fingerprint": { "$ref": "#/$defs/digest" }
+        "fingerprint": {
+          "$ref": "#/$defs/digest"
+        }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "passed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "admissible": {
+            "const": true
+          },
+          "breakingChangeCount": {
+            "const": 0
+          },
+          "truncated": {
+            "const": false
+          },
+          "breakingChanges": {
+            "maxItems": 0
+          },
+          "failureCode": {
+            "type": "null"
+          },
+          "baselineDigest": {
+            "$ref": "#/$defs/digest"
+          },
+          "currentDigest": {
+            "$ref": "#/$defs/digest"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "stopped_for_evaluation"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "admissible": {
+            "const": false
+          },
+          "breakingChangeCount": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "failureCode": {
+            "const": "wit-breaking-change-detected"
+          },
+          "baselineDigest": {
+            "$ref": "#/$defs/digest"
+          },
+          "currentDigest": {
+            "$ref": "#/$defs/digest"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "failed"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "admissible": {
+            "const": false
+          },
+          "failureCode": {
+            "const": "wit-compatibility-verification-failed"
+          }
+        }
+      }
+    }
+  ]
 }
