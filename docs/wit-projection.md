@@ -18,10 +18,10 @@ This document defines the interface between the two repositories so that WIT can
 
 - parse/validate/canonicalize WIT packages with the Component Model toolchain;
 - compute deterministic WIT source-tree digests;
-- bind a validated WIT tree to exact Contract IR bytes in a WIT verification receipt;
+- bind a validated WIT tree to exact Contract IR bytes in a WIT syntax/toolchain verification receipt;
+- emit the normalized semantic WIT projection consumed by TJSV compatibility checks;
 - orchestrate pinned binding generators where supported;
-- define adapter/conformance policy for SDK languages outside a built-in WIT generator;
-- maintain WIT compatibility/baseline tooling.
+- define adapter/conformance policy for SDK languages outside a built-in WIT generator.
 
 ## Handoff
 
@@ -46,7 +46,7 @@ parity receipt + Contract IR
 projection admission / verification
 ```
 
-A WIT verification receipt is necessary evidence but is not, by itself, semantic admission. A receipt proves that a specific WIT tree was syntactically validated and bound to specific Contract IR bytes. This repository remains responsible for proving that the WIT projection is semantically consistent with the admitted contract inventory and current projection policy.
+A WIT syntax/toolchain verification receipt is necessary evidence but is not, by itself, semantic admission or compatibility admission. A receipt proves that a specific WIT tree was syntactically validated and bound to specific Contract IR bytes. This repository remains responsible for proving that the WIT projection is semantically consistent with the admitted contract inventory and current projection policy.
 
 ## Required invariants
 
@@ -69,13 +69,20 @@ tjsv ...
 ores-wit check wit
 ores-wit verify wit \
   --contract-ir generated/contract-ir.json \
-  --receipt generated/wit-verification.json
+  --receipt generated/wit-toolchain-verification.json
+
+# TJSV owns the released-baseline compatibility decision.
+tjsv verify-wit \
+  --baseline contracts/wit/baseline.projection.json \
+  --current generated/wit.projection.json \
+  --mode strict \
+  --verification generated/wit-compatibility.json
 
 # This repository's projection admission/verification consumes the WIT evidence
 # alongside the current projection manifest and parity receipt.
 ```
 
-The WIT receipt schema is owned by `ORESoftware/ores-wit`; the projection manifest/admission schema remains owned here.
+`ORESoftware/ores-wit` owns the WIT syntax/toolchain verification receipt. TJSV owns the normalized WIT projection schema and WIT compatibility receipt/baseline decision. The projection manifest/admission schema also remains owned here.
 
 ## Fleet policy
 
