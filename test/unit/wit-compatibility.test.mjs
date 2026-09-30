@@ -4,6 +4,7 @@ import {
   WIT_PROJECTION_SCHEMA,
   compareWitCompatibility,
   createWitCompatibilityReceipt,
+  normalizeWitProjection,
 } from '../../src/wit-compatibility.mjs';
 
 function projection() {
@@ -54,4 +55,47 @@ test('receipt is deterministic and self-digesting', () => {
   assert.deepEqual(a, b);
   assert.equal(a.status, 'passed');
   assert.match(a.verificationId, /^[0-9a-f]{64}$/u);
+});
+
+
+test('default mode is strict and rejects additive interface functions', () => {
+  const baseline = projection();
+  const current = structuredClone(baseline);
+  current.interfaces[0].functions.push({ name: 'ping', params: [], results: [] });
+  const result = compareWitCompatibility(baseline, current);
+  assert.equal(result.mode, 'strict');
+  assert.equal(result.status, 'stopped_for_evaluation');
+  assert.ok(result.findings.some((item) => item.ruleId === 'wit-function-added'));
+});
+
+test('package semver changes do not create false breaking findings', () => {
+  const baseline = projection();
+  const current = structuredClone(baseline);
+  current.package = 'ores:example@1.1.0';
+  assert.equal(compareWitCompatibility(baseline, current).status, 'passed');
+  current.package = 'ores:renamed@1.1.0';
+  const changed = compareWitCompatibility(baseline, current);
+  assert.equal(changed.status, 'stopped_for_evaluation');
+  assert.ok(changed.findings.some((item) => item.ruleId === 'wit-package-identity-changed'));
+});
+
+test('WIT names are rejected when they collide case-insensitively', () => {
+  const value = projection();
+  value.interfaces.push({ name: 'CLIENT', types: [], functions: [] });
+  assert.throws(
+    () => normalizeWitProjection(value),
+    /case-insensitive uniqueness/u,
+  );
+});
+
+test('receipt counts all breaking changes even when findings are truncated', () => {
+  const baseline = projection();
+  const current = structuredClone(baseline);
+  current.interfaces[0].functions = [];
+  current.worlds[0].exports = [];
+  const receipt = createWitCompatibilityReceipt({ baseline, current, maxFindings: 1 });
+  assert.equal(receipt.status, 'stopped_for_evaluation');
+  assert.equal(receipt.truncated, true);
+  assert.equal(receipt.breakingChanges.length, 1);
+  assert.equal(receipt.breakingChangeCount, 2);
 });
