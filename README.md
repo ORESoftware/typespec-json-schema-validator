@@ -114,6 +114,18 @@ Inspect the installed compiler and emitter:
 npx tjsv doctor
 ```
 
+Verify a normalized WIT projection against the retained released baseline:
+
+```bash
+npx tjsv verify-wit \\
+  --baseline=./contracts/wit/baseline.json \\
+  --current=./artifacts/wit/current.json \\
+  --mode=consumer \\
+  --verification=./artifacts/wit-compatibility.json
+```
+
+Raw `.wit` parsing, formatting, component tooling, and binding generation belong in `ORESoftware/ores-wit`; this package owns the deterministic compatibility evidence. See [WIT projection compatibility](docs/wit-compatibility.md).
+
 All flags and defaults are declared in the repository-root `.cli-flags.toml` contract and parsed through `flags-2-env`; there is no second ad hoc flag parser.
 
 ## Instance corpus
