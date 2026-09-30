@@ -37,7 +37,7 @@ Package identity and package version are handled using the Component Model canon
 
 WIT function parameters are always named and case-insensitively unique. A WIT function has at most one return type in the syntax; multiple logical values must be carried by a tuple or record. The normalized projection rejects representations that violate those invariants.
 
-World exports are protected from removal or signature/target changes. New world imports are breaking because they add host requirements. Existing interface functions may not be removed or have their signatures changed. In `strict` mode, adding interface functions is also breaking for implementers.
+World exports are protected from removal or signature/target changes. New world imports are breaking because they add host requirements. Existing interface functions may not be removed or have their signatures changed. In `strict` mode, adding interface functions or exports to an existing world is also breaking because either can add a new provider obligation.
 
 ## CLI
 
