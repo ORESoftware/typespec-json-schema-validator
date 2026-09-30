@@ -1,5 +1,6 @@
 import {
   closeSync,
+  constants,
   fstatSync,
   lstatSync,
   openSync,
@@ -30,6 +31,7 @@ const PATH_KEYS = new Set([
 ]);
 const CONTRACT_ID = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/u;
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
+const POSIX_NOFOLLOW = process.platform !== 'win32' && Number.isInteger(constants.O_NOFOLLOW);
 const ENV = Object.freeze({
   typespec: 'TSJSV_TYPESPEC', schema: 'TSJSV_AUTHORED_SCHEMA', generated_schema: 'TSJSV_GENERATED_SCHEMA',
   report: 'TSJSV_REPORT', sarif: 'TSJSV_SARIF', mapping: 'TSJSV_MAPPING', instances: 'TSJSV_INSTANCES',
@@ -152,24 +154,50 @@ function assertManifestFile(path, info = undefined) {
   return assertManifestInfo(path, inspected, true);
 }
 
+function samePathSnapshot(left, right) {
+  return left.size === right.size
+    && left.mtimeMs === right.mtimeMs
+    && left.ctimeMs === right.ctimeMs
+    && left.birthtimeMs === right.birthtimeMs
+    && left.mode === right.mode
+    && left.nlink === right.nlink;
+}
+
 function readConsumerManifest(path) {
   const before = assertManifestFile(path);
   let fd;
   try {
-    fd = openSync(path, 'r');
-  } catch {
+    const flags = POSIX_NOFOLLOW
+      ? constants.O_RDONLY | constants.O_NOFOLLOW
+      : constants.O_RDONLY;
+    fd = openSync(path, flags);
+  } catch (error) {
+    if (error?.code === 'ELOOP') fail('consumer manifest must not be a symbolic link', path);
     fail('consumer manifest could not be opened', path);
   }
 
   try {
     const opened = assertManifestInfo(path, fstatSync(fd), false);
-    if (before.dev !== opened.dev || before.ino !== opened.ino) {
+    if (POSIX_NOFOLLOW && (before.dev !== opened.dev || before.ino !== opened.ino)) {
       fail('consumer manifest changed while it was being opened', path);
     }
+
     const bytes = readFileSync(fd);
     if (bytes.length > CONSUMER_MANIFEST_MAX_BYTES) {
       fail(`consumer manifest exceeds ${CONSUMER_MANIFEST_MAX_BYTES} bytes`, path);
     }
+
+    const after = assertManifestFile(path);
+    if (!samePathSnapshot(before, after)) {
+      fail('consumer manifest changed while it was being read', path);
+    }
+    if (POSIX_NOFOLLOW && (after.dev !== opened.dev || after.ino !== opened.ino)) {
+      fail('consumer manifest changed while it was being read', path);
+    }
+    if (!POSIX_NOFOLLOW && opened.size !== after.size) {
+      fail('consumer manifest changed while it was being read', path);
+    }
+
     try {
       return UTF8.decode(bytes);
     } catch {
