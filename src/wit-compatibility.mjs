@@ -140,7 +140,7 @@ function uniqueNames(items, label) {
 }
 
 const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*(?::[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)+(?:\/[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)*$/u;
-const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u;
+const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/u;
 
 function canonicalPackageIdentity(value) {
   const at = value.lastIndexOf('@');
@@ -323,6 +323,7 @@ export function compareWitCompatibility(baselineValue, currentValue, options = {
   compareWorlds(baseline, current, findings, maxFindings);
 
   const totalFindingCount = findings.totalCount ?? 0;
+  delete findings.totalCount;
   const truncated = totalFindingCount > findings.length;
   return Object.freeze({
     baseline,
@@ -414,9 +415,11 @@ function validReceipt(receipt) {
     if (!validDigest(receipt.baselineDigest) || !validDigest(receipt.currentDigest)) return false;
   } else if (receipt.status === 'stopped_for_evaluation') {
     if (receipt.failureCode !== 'wit-breaking-change-detected' || receipt.breakingChangeCount === 0) return false;
+    if (receipt.breakingChanges.length === 0) return false;
     if (!validDigest(receipt.baselineDigest) || !validDigest(receipt.currentDigest)) return false;
-  } else if (receipt.failureCode !== 'wit-compatibility-verification-failed') {
-    return false;
+  } else {
+    if (receipt.failureCode !== 'wit-compatibility-verification-failed') return false;
+    if (receipt.breakingChangeCount !== 0 || receipt.breakingChanges.length !== 0 || receipt.truncated) return false;
   }
 
   if (!validDigest(receipt.verificationId)) return false;
