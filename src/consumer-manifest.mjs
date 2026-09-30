@@ -1,5 +1,14 @@
-import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import {
+  closeSync,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { TextDecoder } from 'node:util';
 import { ConsumerManifestSyntaxError, parseConsumerManifestToml } from './consumer-manifest-toml.mjs';
 
 export const CONSUMER_MANIFEST_NAME = '.ores-tjsv.toml';
@@ -20,6 +29,7 @@ const PATH_KEYS = new Set([
   'contract_ir', 'output_dir',
 ]);
 const CONTRACT_ID = /^[a-z0-9](?:[a-z0-9._-]{0,126}[a-z0-9])?$/u;
+const UTF8 = new TextDecoder('utf-8', { fatal: true });
 const ENV = Object.freeze({
   typespec: 'TSJSV_TYPESPEC', schema: 'TSJSV_AUTHORED_SCHEMA', generated_schema: 'TSJSV_GENERATED_SCHEMA',
   report: 'TSJSV_REPORT', sarif: 'TSJSV_SARIF', mapping: 'TSJSV_MAPPING', instances: 'TSJSV_INSTANCES',
@@ -122,6 +132,16 @@ function tryLstat(path) {
   }
 }
 
+function assertManifestInfo(path, info, rejectSymlink = true) {
+  if (!info.isFile() || (rejectSymlink && info.isSymbolicLink()) || info.nlink !== 1) {
+    fail('consumer manifest must be a regular, non-symlink, single-link file', path);
+  }
+  if (info.size > CONSUMER_MANIFEST_MAX_BYTES) {
+    fail(`consumer manifest exceeds ${CONSUMER_MANIFEST_MAX_BYTES} bytes`, path);
+  }
+  return info;
+}
+
 function assertManifestFile(path, info = undefined) {
   let inspected = info;
   try {
@@ -129,27 +149,35 @@ function assertManifestFile(path, info = undefined) {
   } catch {
     fail('consumer manifest could not be read', path);
   }
-  if (!inspected.isFile() || inspected.isSymbolicLink() || inspected.nlink !== 1) {
-    fail('consumer manifest must be a regular, non-symlink, single-link file', path);
-  }
-  if (inspected.size > CONSUMER_MANIFEST_MAX_BYTES) {
-    fail(`consumer manifest exceeds ${CONSUMER_MANIFEST_MAX_BYTES} bytes`, path);
-  }
-  return inspected;
+  return assertManifestInfo(path, inspected, true);
 }
 
 function readConsumerManifest(path) {
-  assertManifestFile(path);
-  let text;
+  const before = assertManifestFile(path);
+  let fd;
   try {
-    text = readFileSync(path, 'utf8');
+    fd = openSync(path, 'r');
   } catch {
-    fail('consumer manifest could not be read', path);
+    fail('consumer manifest could not be opened', path);
   }
-  if (Buffer.byteLength(text, 'utf8') > CONSUMER_MANIFEST_MAX_BYTES) {
-    fail(`consumer manifest exceeds ${CONSUMER_MANIFEST_MAX_BYTES} bytes`, path);
+
+  try {
+    const opened = assertManifestInfo(path, fstatSync(fd), false);
+    if (before.dev !== opened.dev || before.ino !== opened.ino) {
+      fail('consumer manifest changed while it was being opened', path);
+    }
+    const bytes = readFileSync(fd);
+    if (bytes.length > CONSUMER_MANIFEST_MAX_BYTES) {
+      fail(`consumer manifest exceeds ${CONSUMER_MANIFEST_MAX_BYTES} bytes`, path);
+    }
+    try {
+      return UTF8.decode(bytes);
+    } catch {
+      fail('consumer manifest must contain valid UTF-8', path);
+    }
+  } finally {
+    closeSync(fd);
   }
-  return text;
 }
 
 export function discoverConsumerManifest(start = process.cwd()) {
