@@ -139,12 +139,17 @@ function uniqueNames(items, label) {
   }
 }
 
+const PACKAGE_NAME = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*(?::[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)+(?:\/[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)*$/u;
 const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u;
 
 function canonicalPackageIdentity(value) {
   const at = value.lastIndexOf('@');
-  if (at === -1) return value;
+  if (at === -1) {
+    if (!PACKAGE_NAME.test(value)) fail('projection.package name must be a normalized WIT package name');
+    return value;
+  }
   const name = value.slice(0, at);
+  if (!PACKAGE_NAME.test(name)) fail('projection.package name must be a normalized WIT package name');
   const version = value.slice(at + 1);
   const match = SEMVER.exec(version);
   if (!match) fail('projection.package version must be valid full semver');
@@ -170,9 +175,11 @@ export function normalizeWitProjection(value) {
   const interfaces = value.interfaces.map((item, index) => normalizeInterface(item, `projection.interfaces[${index}]`));
   uniqueNames(worlds, 'projection.worlds');
   uniqueNames(interfaces, 'projection.interfaces');
+  const packageName = text(value.package, 'projection.package', 512);
+  canonicalPackageIdentity(packageName);
   return Object.freeze({
     schema: WIT_PROJECTION_SCHEMA,
-    package: text(value.package, 'projection.package', 512),
+    package: packageName,
     worlds: worlds.sort(byName),
     interfaces: interfaces.sort(byName),
   });
