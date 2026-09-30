@@ -1,6 +1,6 @@
 # `.ores-tjsv.toml` consumer manifest
 
-`.ores-tjsv.toml` is repository-owned configuration for consumers of the `tjsv` CLI. It is separate from the package-owned `.cli-flags.toml`, which defines the CLI argument contract.
+`.ores-tjsv.toml` is repository-owned configuration for consumers of the `tjsv` CLI and reusable GitHub Action. It is separate from the package-owned `.cli-flags.toml`, which defines the CLI argument contract.
 
 `tjsv check`, `compare`, `validate`, `inventory`, and `generate` discover `.ores-tjsv.toml` from the current directory upward, stopping at the repository `.git` boundary. Manifest paths are resolved relative to the manifest directory. Explicit CLI flags and environment values continue to override manifest values.
 
@@ -21,6 +21,7 @@ output_dir = ".typespec-json-schema-validator/generated"
 probes = true
 max_probes = 64
 format_assertion = false
+quiet = true
 
 [[contracts]]
 id = "api"
@@ -44,6 +45,8 @@ tjsv check --consumer-manifest=./config/.ores-tjsv.toml --contract=api
 ```
 
 The corresponding environment variables are `TSJSV_CONTRACT` and `TSJSV_CONSUMER_MANIFEST`. These selectors are part of the package-owned `.cli-flags.toml` contract and go through `flags-2-env`; there is no separate argv parser.
+
+The root reusable Action also enters manifest mode when its legacy `typespec` and `schema` inputs are both omitted. It may select a contract with `with: { contract: api }` without restating authority or evidence paths.
 
 ## Admission and filesystem boundaries
 
