@@ -139,9 +139,25 @@ function uniqueNames(items, label) {
   }
 }
 
-function packageIdentity(value) {
+const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/u;
+
+function canonicalPackageIdentity(value) {
   const at = value.lastIndexOf('@');
-  return at === -1 ? value : value.slice(0, at);
+  if (at === -1) return value;
+  const name = value.slice(0, at);
+  const version = value.slice(at + 1);
+  const match = SEMVER.exec(version);
+  if (!match) fail('projection.package version must be valid full semver');
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  const patch = Number(match[3]);
+  const prerelease = match[4];
+  let canonicalVersion;
+  if (prerelease !== undefined) canonicalVersion = `${major}.${minor}.${patch}-${prerelease}`;
+  else if (major > 0) canonicalVersion = String(major);
+  else if (minor > 0) canonicalVersion = `0.${minor}`;
+  else canonicalVersion = `0.0.${patch}`;
+  return `${name}@${canonicalVersion}`;
 }
 
 export function normalizeWitProjection(value) {
@@ -291,7 +307,7 @@ export function compareWitCompatibility(baselineValue, currentValue, options = {
   const baseline = normalizeWitProjection(baselineValue);
   const current = normalizeWitProjection(currentValue);
   const findings = [];
-  if (packageIdentity(baseline.package) !== packageIdentity(current.package)) {
+  if (canonicalPackageIdentity(baseline.package) !== canonicalPackageIdentity(current.package)) {
     push(findings, maxFindings, 'wit-package-identity-changed', 'package',
       `WIT package identity changed from ${baseline.package} to ${current.package}`,
       baseline.package, current.package);
