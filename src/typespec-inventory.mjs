@@ -230,6 +230,15 @@ export function lexTypeSpec(source, file = '<memory>') {
           message: 'unterminated TypeSpec escaped identifier',
         });
       }
+      if (/[\\/]/u.test(raw)) {
+        errors.push({
+          code: 'unsafe-escaped-identifier-path-separator',
+          file,
+          line: startLine,
+          column: startColumn,
+          message: 'escaped TypeSpec identifiers containing path separators are refused before emitter execution',
+        });
+      }
       push('identifier', raw, startIndex, startLine, startColumn, { escaped: true });
       continue;
     }
@@ -613,6 +622,21 @@ export async function inventoryTypeSpec(inputPath) {
     errors,
     ambiguities,
   };
+}
+
+
+export async function assertTypeSpecEmitterInputSafe(inputPath) {
+  const inventory = await inventoryTypeSpec(inputPath);
+  const unsafe = inventory.errors.filter(
+    (error) => error.code === 'unsafe-escaped-identifier-path-separator',
+  );
+  if (unsafe.length > 0) {
+    const first = unsafe[0];
+    throw new Error(
+      `unsafe TypeSpec emitter input refused before compilation: ${first.file}:${first.line}:${first.column}: ${first.message}`,
+    );
+  }
+  return inventory;
 }
 
 export function declarationKindFamily(kind) {
