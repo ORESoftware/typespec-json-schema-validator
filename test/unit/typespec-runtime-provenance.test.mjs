@@ -19,10 +19,27 @@ test('TypeSpec remediation provenance matches the immutable production lockfile'
   assert.equal(provenance.schema, 'tjsv-typespec-runtime-provenance/v1');
   assert.equal(provenance.advisory, 'GHSA-2q42-4q24-7rgv');
   assert.equal(provenance.npm_advisory_id, 'npm:1193788');
-  assert.equal(provenance.status, 'remediated');
-  assert.equal(provenance.audit_policy.production_high_critical_exceptions, 0);
+  assert.equal(provenance.status, 'mitigated_pending_upstream_release');
+  assert.equal(provenance.audit_policy.production_high_critical_exceptions, 1);
   assert.equal(provenance.audit_policy.lockfile_required, true);
-  assert.deepEqual(exceptions.exceptions, []);
+  assert.equal(exceptions.exceptions.length, 1);
+  assert.deepEqual(
+    {
+      advisoryId: exceptions.exceptions[0].advisoryId,
+      package: exceptions.exceptions[0].package,
+      expiresAt: exceptions.exceptions[0].expiresAt,
+    },
+    {
+      advisoryId: 'npm:1193788',
+      package: '@typespec/compiler',
+      expiresAt: '2026-10-14T04:00:00.000Z',
+    },
+  );
+  assert.equal(provenance.upstream_fix.pull_request, 11777);
+  assert.equal(
+    provenance.upstream_fix.merge_commit,
+    'e0f67bdf3c5a0875dfa98b475648af37caac71a6',
+  );
 
   const names = new Set();
   for (const expected of provenance.packages) {
