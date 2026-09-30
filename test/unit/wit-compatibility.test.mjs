@@ -156,3 +156,14 @@ test('normalized WIT rejects interface item and parameter name collisions', () =
   anonymousParam.interfaces[0].functions[0].params[0].name = null;
   assert.throws(() => normalizeWitProjection(anonymousParam), /must be a WIT identifier/u);
 });
+
+
+test('normalized WIT rejects named or multiple function results', () => {
+  const named = projection();
+  named.interfaces[0].functions[0].results[0].name = 'value';
+  assert.throws(() => normalizeWitProjection(named), /name must be null/u);
+
+  const multiple = projection();
+  multiple.interfaces[0].functions[0].results.push({ name: null, type: 'u32' });
+  assert.throws(() => normalizeWitProjection(multiple), /at most one WIT result/u);
+});
