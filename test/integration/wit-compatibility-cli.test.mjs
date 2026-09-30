@@ -13,7 +13,7 @@ function projection() {
     interfaces: [{
       name: 'client',
       types: [{ name: 'status', kind: 'enum', shape: 'enum{ok,error}' }],
-      functions: [{ name: 'send', params: [{ name: 'payload', type: 'list<u8>' }], results: [] }],
+      functions: [{ name: 'send', async: false, params: [{ name: 'payload', type: 'list<u8>' }], results: [] }],
     }],
     worlds: [{ name: 'sdk', imports: [], exports: [{ name: 'client', kind: 'interface', target: 'client' }] }],
   };
