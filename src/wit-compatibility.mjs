@@ -8,7 +8,7 @@ export const WIT_PROJECTION_SCHEMA =
 export const WIT_COMPATIBILITY_RECEIPT_SCHEMA =
   'ores.typespec-json-schema-validator.wit-compatibility-receipt/v1';
 
-const IDENTIFIER = /^[A-Za-z][A-Za-z0-9_-]*$/u;
+const IDENTIFIER = /^[A-Za-z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)*$/u;
 const TYPE_KINDS = new Set([
   'alias', 'record', 'variant', 'enum', 'flags', 'resource', 'handle', 'tuple', 'option', 'result', 'list', 'future', 'stream',
 ]);
@@ -127,12 +127,21 @@ function normalizeWorld(value, label) {
 }
 
 function byName(left, right) {
-  return left.name.localeCompare(right.name);
+  if (left.name < right.name) return -1;
+  if (left.name > right.name) return 1;
+  return 0;
 }
 
 function uniqueNames(items, label) {
-  const names = items.map((item) => item.name);
-  if (new Set(names).size !== names.length) fail(`${label} contains duplicate names`);
+  const names = items.map((item) => item.name.toLowerCase());
+  if (new Set(names).size !== names.length) {
+    fail(`${label} contains names that collide under WIT case-insensitive uniqueness`);
+  }
+}
+
+function packageIdentity(value) {
+  const at = value.lastIndexOf('@');
+  return at === -1 ? value : value.slice(0, at);
 }
 
 export function normalizeWitProjection(value) {
@@ -159,16 +168,26 @@ function finding(ruleId, subject, message, baseline, current) {
 }
 
 function push(findings, maxFindings, ...args) {
-  if (findings.length <= maxFindings) findings.push(finding(...args));
+  findings.totalCount = (findings.totalCount ?? 0) + 1;
+  if (findings.length < maxFindings) findings.push(finding(...args));
 }
 
-function compareNamedBaseline(before, after, prefix, findings, maxFindings, compare) {
+function compareNamedBaseline(
+  before,
+  after,
+  prefix,
+  findings,
+  maxFindings,
+  compare,
+  subjectPrefix = '',
+) {
   const current = new Map(after.map((item) => [item.name, item]));
   for (const item of before) {
     const next = current.get(item.name);
     if (!next) {
-      push(findings, maxFindings, `wit-${prefix}-removed`, item.name,
-        `${prefix} ${item.name} was removed`, item, null);
+      const subject = `${subjectPrefix}${item.name}`;
+      push(findings, maxFindings, `wit-${prefix}-removed`, subject,
+        `${prefix} ${subject} was removed`, item, null);
       continue;
     }
     compare(item, next);
@@ -183,12 +202,20 @@ function compareInterfaces(baseline, current, findings, maxFindings, mode) {
     findings,
     maxFindings,
     (before, after) => {
-      compareNamedBaseline(before.types, after.types, 'type', findings, maxFindings, (oldType, newType) => {
-        if (oldType.kind !== newType.kind || oldType.shape !== newType.shape) {
-          push(findings, maxFindings, 'wit-type-changed', `${before.name}.${oldType.name}`,
-            `WIT type ${before.name}.${oldType.name} changed`, oldType, newType);
-        }
-      });
+      compareNamedBaseline(
+        before.types,
+        after.types,
+        'type',
+        findings,
+        maxFindings,
+        (oldType, newType) => {
+          if (oldType.kind !== newType.kind || oldType.shape !== newType.shape) {
+            push(findings, maxFindings, 'wit-type-changed', `${before.name}.${oldType.name}`,
+              `WIT type ${before.name}.${oldType.name} changed`, oldType, newType);
+          }
+        },
+        `${before.name}.`,
+      );
 
       const currentFns = new Map(after.functions.map((item) => [item.name, item]));
       for (const fn of before.functions) {
@@ -255,7 +282,7 @@ function compareWorlds(baseline, current, findings, maxFindings) {
 
 export function compareWitCompatibility(baselineValue, currentValue, options = {}) {
   const maxFindings = options.maxFindings ?? 250;
-  const mode = options.mode ?? 'consumer';
+  const mode = options.mode ?? 'strict';
   if (!Number.isSafeInteger(maxFindings) || maxFindings < 1 || maxFindings > 10_000) {
     fail('maxFindings must be a safe integer between 1 and 10000');
   }
@@ -264,25 +291,26 @@ export function compareWitCompatibility(baselineValue, currentValue, options = {
   const baseline = normalizeWitProjection(baselineValue);
   const current = normalizeWitProjection(currentValue);
   const findings = [];
-  if (baseline.package !== current.package) {
-    push(findings, maxFindings, 'wit-package-changed', 'package',
-      `WIT package changed from ${baseline.package} to ${current.package}`,
+  if (packageIdentity(baseline.package) !== packageIdentity(current.package)) {
+    push(findings, maxFindings, 'wit-package-identity-changed', 'package',
+      `WIT package identity changed from ${baseline.package} to ${current.package}`,
       baseline.package, current.package);
   }
   compareInterfaces(baseline, current, findings, maxFindings, mode);
   compareWorlds(baseline, current, findings, maxFindings);
 
-  const truncated = findings.length > maxFindings;
-  const visible = findings.slice(0, maxFindings);
+  const totalFindingCount = findings.totalCount ?? 0;
+  const truncated = totalFindingCount > findings.length;
   return Object.freeze({
     baseline,
     current,
     mode,
     baselineDigest: sha256(canonicalStringify(baseline)),
     currentDigest: sha256(canonicalStringify(current)),
-    status: findings.length === 0 ? 'passed' : 'stopped_for_evaluation',
-    admissible: findings.length === 0,
-    findings: Object.freeze(visible),
+    status: totalFindingCount === 0 ? 'passed' : 'stopped_for_evaluation',
+    admissible: totalFindingCount === 0,
+    totalFindingCount,
+    findings: Object.freeze(findings),
     truncated,
   });
 }
@@ -292,10 +320,12 @@ function receiptBody(result, failureCode = null) {
     schema: WIT_COMPATIBILITY_RECEIPT_SCHEMA,
     status: result.status,
     admissible: result.status === 'passed',
-    mode: result.mode ?? 'consumer',
+    mode: result.mode ?? 'strict',
     baselineDigest: result.baselineDigest ?? null,
     currentDigest: result.currentDigest ?? null,
-    breakingChangeCount: Array.isArray(result.findings) ? result.findings.length : 0,
+    breakingChangeCount: Number.isSafeInteger(result.totalFindingCount)
+      ? result.totalFindingCount
+      : Array.isArray(result.findings) ? result.findings.length : 0,
     truncated: result.truncated === true,
     breakingChanges: Array.isArray(result.findings) ? result.findings : [],
     failureCode: result.status === 'passed'
@@ -312,14 +342,14 @@ export function createWitCompatibilityReceipt({ baseline, current, maxFindings, 
   return Object.freeze({ ...body, verificationId: sha256(canonicalStringify(body)) });
 }
 
-export function failedWitCompatibilityReceipt({ baseline, current, mode = 'consumer' } = {}) {
+export function failedWitCompatibilityReceipt({ baseline, current, mode = 'strict' } = {}) {
   let baselineDigest = null;
   let currentDigest = null;
   try { baselineDigest = sha256(canonicalStringify(normalizeWitProjection(baseline))); } catch {}
   try { currentDigest = sha256(canonicalStringify(normalizeWitProjection(current))); } catch {}
   const body = receiptBody({
     status: 'failed',
-    mode: MODES.has(mode) ? mode : 'consumer',
+    mode: MODES.has(mode) ? mode : 'strict',
     baselineDigest,
     currentDigest,
     findings: [],
@@ -337,7 +367,10 @@ function validReceipt(receipt) {
   if (!['passed', 'stopped_for_evaluation', 'failed'].includes(receipt.status)) return false;
   if (!MODES.has(receipt.mode) || receipt.admissible !== (receipt.status === 'passed')) return false;
   if (!Number.isSafeInteger(receipt.breakingChangeCount) || receipt.breakingChangeCount < 0) return false;
-  if (!Array.isArray(receipt.breakingChanges) || receipt.breakingChangeCount !== receipt.breakingChanges.length) return false;
+  if (!Array.isArray(receipt.breakingChanges)) return false;
+  if (receipt.truncated) {
+    if (receipt.breakingChangeCount <= receipt.breakingChanges.length) return false;
+  } else if (receipt.breakingChangeCount !== receipt.breakingChanges.length) return false;
   if (![receipt.baselineDigest, receipt.currentDigest].every((v) => v === null || validDigest(v))) return false;
   if (!validDigest(receipt.verificationId)) return false;
   const { verificationId, ...body } = receipt;
