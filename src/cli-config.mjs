@@ -1,6 +1,10 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseStructured } from '@oresoftware/f2e';
+import {
+  ConsumerManifestError,
+  loadConsumerManifestConfiguration,
+} from './consumer-manifest.mjs';
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CONFIG_PATH = resolve(PACKAGE_ROOT, '.cli-flags.toml');
@@ -38,14 +42,32 @@ function required(env, key, label) {
   return value;
 }
 
-function mergedEnvironment(parsed) {
+function mergedEnvironment(parsed, manifestEnvironment = {}) {
   return {
     ...parsed.flags,
+    ...manifestEnvironment,
     ...parsed.dotenv,
     ...process.env,
     ...parsed.dotenvOverrides,
     ...parsed.providedFlags,
   };
+}
+
+function loadConsumerManifest(command) {
+  try {
+    return loadConsumerManifestConfiguration({
+      command,
+      manifestPath: process.env.TSJSV_CONSUMER_MANIFEST || undefined,
+      contractId: process.env.TSJSV_CONTRACT || undefined,
+    });
+  } catch (error) {
+    if (!(error instanceof ConsumerManifestError)) throw error;
+    throw new CliUsageError(error.message, {
+      command,
+      consumerManifest: error.details?.manifest,
+      consumerManifestLine: error.details?.line,
+    });
+  }
 }
 
 function validateEmitterOptions(options) {
@@ -63,23 +85,25 @@ export function loadCliConfiguration(argv = process.argv) {
   if (parsed.isHelpMenu) {
     return { help: true, printHelp: () => parsed.printTable(), command: parsed.command };
   }
-  const env = mergedEnvironment(parsed);
-  const parsedCommand = parsed.command || env.TSJSV_COMMAND || '';
+  const baseEnv = mergedEnvironment(parsed);
+  const parsedCommand = parsed.command || baseEnv.TSJSV_COMMAND || '';
   if (parsed.unknownOptions.length > 0 || parsed.errors.length > 0) {
     throw new CliUsageError('flags-2-env rejected the command line', {
       command: parsedCommand,
       unknownOptions: parsed.unknownOptions,
       errors: parsed.errors,
-      report: env.TSJSV_REPORT || undefined,
-      sarif: env.TSJSV_SARIF || undefined,
-      contractIr: env.TSJSV_CONTRACT_IR || undefined,
-      parityReceipt: env.TSJSV_PARITY_RECEIPT || undefined,
-      verification: env.TSJSV_VERIFICATION || undefined,
-      projectionRoot: env.TSJSV_PROJECTION_ROOT || undefined,
-      projectionVerification: env.TSJSV_PROJECTION_VERIFICATION || undefined,
-      configMode: env.TSJSV_CONFIG_MODE || undefined,
+      report: baseEnv.TSJSV_REPORT || undefined,
+      sarif: baseEnv.TSJSV_SARIF || undefined,
+      contractIr: baseEnv.TSJSV_CONTRACT_IR || undefined,
+      parityReceipt: baseEnv.TSJSV_PARITY_RECEIPT || undefined,
+      verification: baseEnv.TSJSV_VERIFICATION || undefined,
+      projectionRoot: baseEnv.TSJSV_PROJECTION_ROOT || undefined,
+      projectionVerification: baseEnv.TSJSV_PROJECTION_VERIFICATION || undefined,
+      configMode: baseEnv.TSJSV_CONFIG_MODE || undefined,
     });
   }
+  const consumerManifest = loadConsumerManifest(parsedCommand);
+  const env = mergedEnvironment(parsed, consumerManifest?.env);
   const command = parsedCommand;
   const common = {
     command,
@@ -94,6 +118,9 @@ export function loadCliConfiguration(argv = process.argv) {
     probes: booleanValue(env.TSJSV_PROBES, true),
     maxProbes: integerValue(env.TSJSV_MAX_PROBES, 64),
     formatAssertion: booleanValue(env.TSJSV_FORMAT_ASSERTION, false),
+    consumerManifest: consumerManifest
+      ? { path: consumerManifest.path, contractId: consumerManifest.contractId }
+      : undefined,
   };
   if (common.maxFindings < 1 || common.maxFindings > 10_000) {
     throw new CliUsageError('--max-findings must be between 1 and 10000');
