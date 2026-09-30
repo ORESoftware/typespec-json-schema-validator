@@ -33,6 +33,10 @@
       "import": "./src/protobuf-compatibility.mjs",
       "types": "./src/protobuf-compatibility.d.mts"
     },
+    "./wit-compatibility": {
+      "import": "./src/wit-compatibility.mjs",
+      "types": "./src/wit-compatibility.d.mts"
+    },
     "./protobuf-behavior-bindings": {
       "import": "./src/protobuf-behavior-bindings.mjs",
       "types": "./src/protobuf-behavior-bindings.d.mts"
@@ -84,6 +88,8 @@
     "./schema/projection-verification-receipt": "./schema/projection-verification-receipt.schema.json",
     "./schema/protobuf-projection": "./schema/protobuf-projection.schema.json",
     "./schema/protobuf-compatibility-receipt": "./schema/protobuf-compatibility-receipt.schema.json",
+    "./schema/wit-projection": "./schema/wit-projection.schema.json",
+    "./schema/wit-compatibility-receipt": "./schema/wit-compatibility-receipt.schema.json",
     "./schema/protobuf-behavior-bindings": "./schema/protobuf-behavior-bindings.schema.json",
     "./schema/protobuf-behavior-bindings-receipt": "./schema/protobuf-behavior-bindings-receipt.schema.json",
     "./schema/report": "./schema/report.schema.json",
@@ -140,6 +146,8 @@
     "json-schema",
     "static-analysis",
     "schema-parity",
-    "linter"
+    "linter",
+    "wit",
+    "webassembly-component-model"
   ]
 }
