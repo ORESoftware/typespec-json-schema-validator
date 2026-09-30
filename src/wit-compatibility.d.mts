@@ -6,8 +6,9 @@ export interface WitNamedTypeProjection {
   kind: 'alias' | 'record' | 'variant' | 'enum' | 'flags' | 'resource' | 'handle' | 'tuple' | 'option' | 'result' | 'list' | 'future' | 'stream';
   shape: string;
 }
-export interface WitParamProjection { name: string | null; type: string; }
-export interface WitFunctionProjection { name: string; params: WitParamProjection[]; results: WitParamProjection[]; }
+export interface WitParamProjection { name: string; type: string; }
+export interface WitResultProjection { name: null; type: string; }
+export interface WitFunctionProjection { name: string; params: WitParamProjection[]; results: WitResultProjection[]; }
 export interface WitInterfaceProjection { name: string; types: WitNamedTypeProjection[]; functions: WitFunctionProjection[]; }
 export interface WitWorldBindingProjection { name: string; kind: 'interface' | 'function'; target: string; }
 export interface WitWorldProjection { name: string; imports: WitWorldBindingProjection[]; exports: WitWorldBindingProjection[]; }
