@@ -97,13 +97,13 @@ test("legacy direct REST handlers are rejected", () => {
   assert.match(verified.findings.join("\n"), /does not match semantic_authority/);
 });
 
-test("GraphQL funcs.rs and singular resolver.rs are rejected in favor of resolver.rs", () => {
-  for (const graphql_source of ["src/graphql/users/funcs.rs", "src/graphql/users/resolver.rs"]) {
+test("GraphQL non-authority filenames are rejected in favor of singular resolver.rs", () => {
+  for (const graphql_source of ["src/graphql/users/funcs.rs", "src/graphql/users/resolvers.rs", "src/graphql/users/graphql.rs"]) {
     const verified = verifyGraphqlProjectionManifest(manifest([
       operation({ graphql_source }),
     ]));
     assert.equal(verified.ok, false);
-    assert.match(verified.findings.join("\n"), /resolvers\.rs/);
+    assert.match(verified.findings.join("\n"), /resolver\.rs/);
   }
 });
 
