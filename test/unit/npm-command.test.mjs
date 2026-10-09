@@ -12,8 +12,8 @@ test('non-Windows npm launch preserves argv and uses PATH', () => {
 });
 
 test('Windows direct action invocation uses npm bundled with the active Node runtime', () => {
-  const node = 'C:\\hostedtoolcache\\windows\\node\\22.16.0\\x64\\node.exe';
-  const npmCli = 'C:\\hostedtoolcache\\windows\\node\\22.16.0\\x64\\node_modules\\npm\\bin\\npm-cli.js';
+  const node = 'C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node.exe';
+  const npmCli = 'C:\\hostedtoolcache\\windows\\node\\22.18.0\\x64\\node_modules\\npm\\bin\\npm-cli.js';
   const result = resolveNpmLaunch(['--version'], {
     platform: 'win32',
     execPath: node,
@@ -29,8 +29,8 @@ test('Windows direct action invocation uses npm bundled with the active Node run
 });
 
 test('Windows may use an existing npm_execpath only inside the active Node installation', () => {
-  const node = 'C:\\node\\22.16.0\\node.exe';
-  const configured = 'C:\\node\\22.16.0\\tools\\npm\\npm-cli.js';
+  const node = 'C:\\node\\22.18.0\\node.exe';
+  const configured = 'C:\\node\\22.18.0\\tools\\npm\\npm-cli.js';
   const result = resolveNpmLaunch(['config', 'get', 'registry'], {
     platform: 'win32',
     execPath: node,
@@ -49,7 +49,7 @@ test('Windows refuses an npm_execpath outside the active Node installation', () 
   const untrusted = 'D:\\untrusted\\npm-cli.js';
   assert.throws(() => resolveNpmLaunch(['audit'], {
     platform: 'win32',
-    execPath: 'C:\\node\\22.16.0\\node.exe',
+    execPath: 'C:\\node\\22.18.0\\node.exe',
     env: { npm_execpath: untrusted },
     exists: (candidate) => candidate === untrusted,
   }), /npm CLI JS entry point is unavailable/u);

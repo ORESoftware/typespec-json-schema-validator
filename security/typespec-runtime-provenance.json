@@ -2,40 +2,41 @@
   "schema": "tjsv-typespec-runtime-provenance/v1",
   "advisory": "GHSA-2q42-4q24-7rgv",
   "npm_advisory_id": "npm:1193788",
-  "status": "mitigated_pending_upstream_release",
+  "status": "remediated",
   "audit_policy": {
-    "production_high_critical_exceptions": 1,
+    "production_high_critical_exceptions": 0,
     "lockfile_required": true
   },
   "packages": [
     {
       "name": "@typespec/compiler",
-      "version": "1.16.0",
-      "resolved": "https://registry.npmjs.org/@typespec/compiler/-/compiler-1.16.0.tgz",
-      "integrity": "sha512-pT4gN+OSEXZMLxIhtI3QgIUafeFktfIBKVb7p+X/rAzDymQSO8yAb+srMBQ43PIcmfrvMxCNaD1SKBa9AGhWtA=="
+      "version": "1.17.0",
+      "resolved": "https://registry.npmjs.org/@typespec/compiler/-/compiler-1.17.0.tgz",
+      "integrity": "sha512-Prj9o2bjoWNS9wJ6sUk532jGm8h2AtpQ/lCFH6dhcywiP7UTj9cJtNlDAHptAS9Irh3YJM2g5D4/7S/u/vcG8Q=="
     },
     {
       "name": "@typespec/json-schema",
-      "version": "1.16.0",
-      "resolved": "https://registry.npmjs.org/@typespec/json-schema/-/json-schema-1.16.0.tgz",
-      "integrity": "sha512-an9fuC2KFSJraODr8ZNcQwMKNemcuFN3V2RYdsOpexzMtdldd81fTid19N8of10OotBd8O7+TeMW9s3PZ4H7Uw=="
+      "version": "1.17.0",
+      "resolved": "https://registry.npmjs.org/@typespec/json-schema/-/json-schema-1.17.0.tgz",
+      "integrity": "sha512-sqetPUc6mat4e5eD53lCRyIMM1FgcSjAcS94bg1/p8u9m/G1k61ebuiHLIAdXhCr1wmYHy425m0Q6kYR5oPo1A=="
     },
     {
       "name": "@typespec/asset-emitter",
-      "version": "0.79.2",
-      "resolved": "https://registry.npmjs.org/@typespec/asset-emitter/-/asset-emitter-0.79.2.tgz",
-      "integrity": "sha512-hcr0jxYgXM0suBwPtjnScYXZVIIqkcdd8jgYh1T7VLHem8+q0WthFQxeKbDIrip4k/nCFtnZui6Dj5oOVJb8fA=="
+      "version": "0.79.3",
+      "resolved": "https://registry.npmjs.org/@typespec/asset-emitter/-/asset-emitter-0.79.3.tgz",
+      "integrity": "sha512-mqEcgz4wSLe+Y8epvOTJnoOar/ePLSA/xirIaCSPVUvdbZo+fKvPfnKNiPvwtSuhEYlDPewva3PLTPtOTe6GXA=="
     }
   ],
   "upstream_fix": {
     "repository": "microsoft/typespec",
     "pull_request": 11777,
     "merge_commit": "e0f67bdf3c5a0875dfa98b475648af37caac71a6",
-    "release_status": "merged_not_yet_present_in_pinned_npm_release"
+    "release_status": "published_and_pinned"
   },
   "compensating_controls": [
-    "TJSV uses only the JSON Schema emitter and supplies a fixed plain bundleId.",
-    "Path-separator-bearing escaped TypeSpec identifiers are rejected before output-directory creation or compiler execution.",
-    "The exception is exact to npm:1193788 / @typespec/compiler and expires 2026-10-14T04:00:00.000Z."
+    "The pinned @typespec/compiler 1.17.0 includes the upstream sanitizePathSegment fix from microsoft/typespec#11777.",
+    "The pinned @typespec/json-schema 1.17.0 and @typespec/asset-emitter 0.79.3 use path-segment sanitization for spec-derived output names.",
+    "TJSV's assertTypeSpecEmitterInputSafe check and fixed plain bundleId remain defense in depth, not a substitute for the upstream patch.",
+    "The npm advisory exception ledger is empty; the production audit remains fail-closed for any reported high or critical finding."
   ]
 }

@@ -9,7 +9,7 @@ async function read(path) {
   return readFile(resolve(root, path), 'utf8');
 }
 
-test('temporary GHSA-2q42-4q24-7rgv exception is bounded by the JSON Schema emitter path controls', async () => {
+test('patched TypeSpec release is pinned and the advisory exception ledger is empty', async () => {
   const [packageText, lockText, emitterText, inventoryText, exceptionText] = await Promise.all([
     read('package.json'),
     read('package-lock.json'),
@@ -21,8 +21,16 @@ test('temporary GHSA-2q42-4q24-7rgv exception is bounded by the JSON Schema emit
   const lock = JSON.parse(lockText);
   const exceptionLedger = JSON.parse(exceptionText);
 
-  assert.equal(typeof packageJson.dependencies?.['@typespec/compiler'], 'string');
-  assert.equal(typeof packageJson.dependencies?.['@typespec/json-schema'], 'string');
+  assert.equal(packageJson.dependencies?.['@typespec/compiler'], '1.17.0');
+  assert.equal(packageJson.dependencies?.['@typespec/json-schema'], '1.17.0');
+  assert.equal(packageJson.engines?.node, '^22.18.0 || >=24.11.0');
+  assert.equal(lock.packages?.['node_modules/@typespec/compiler']?.version, '1.17.0');
+  assert.equal(lock.packages?.['node_modules/@typespec/compiler']?.integrity, 'sha512-Prj9o2bjoWNS9wJ6sUk532jGm8h2AtpQ/lCFH6dhcywiP7UTj9cJtNlDAHptAS9Irh3YJM2g5D4/7S/u/vcG8Q==');
+  assert.equal(lock.packages?.['node_modules/@typespec/json-schema']?.version, '1.17.0');
+  assert.equal(lock.packages?.['node_modules/@typespec/asset-emitter']?.version, '0.79.3');
+  assert.equal(lock.packages?.['node_modules/@typespec/compiler/node_modules/@babel/code-frame']?.version, '8.0.6');
+  assert.equal(lock.packages?.['node_modules/@typespec/compiler/node_modules/@babel/code-frame/node_modules/@babel/helper-validator-identifier']?.version, '8.0.6');
+  assert.equal(lock.packages?.['node_modules/@typespec/compiler/node_modules/@babel/code-frame/node_modules/js-tokens']?.version, '10.0.0');
   assert.equal(packageJson.dependencies?.['@typespec/openapi3'], undefined);
   assert.equal(lock.packages?.['node_modules/@typespec/openapi3'], undefined);
   assert.match(emitterText, /import\.meta\.resolve\('@typespec\/json-schema'\)/u);
@@ -31,18 +39,7 @@ test('temporary GHSA-2q42-4q24-7rgv exception is bounded by the JSON Schema emit
   assert.match(emitterText, /assertTypeSpecEmitterInputSafe\(entry\)/u);
   assert.match(emitterText, /basename\(bundleId\) !== bundleId/u);
   assert.match(inventoryText, /unsafe-escaped-identifier-path-separator/u);
-  assert.deepEqual(
-    exceptionLedger.exceptions.map(({ advisoryId, package: packageName, expiresAt }) => ({
-      advisoryId,
-      package: packageName,
-      expiresAt,
-    })),
-    [{
-      advisoryId: 'npm:1193788',
-      package: '@typespec/compiler',
-      expiresAt: '2026-10-14T04:00:00.000Z',
-    }],
-  );
+  assert.deepEqual(exceptionLedger.exceptions, []);
 });
 
 test('default compiler CLI is coupled to the pinned emitter dependency tree', async () => {
