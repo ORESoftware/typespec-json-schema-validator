@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- Pin the published TypeSpec path-sanitization release set (compiler/json-schema 1.17.0 and asset-emitter 0.79.3), remove the `npm:1193788` exception, and align Node support with the patched compiler dependency closure.
+
 ### Added
 
 - Early warning for npm advisory exceptions: every production audit run, including a passing one and including runs inside a consumer's pinned action, warns for each applied exception expiring within `TSJSV_NPM_AUDIT_EXPIRY_WARNING_DAYS` (default 30) and records `scope.expiryWarningDays` plus an `exceptionsExpiringSoon` array in the receipt.
