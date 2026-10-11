@@ -13,6 +13,7 @@ import {
 import {
   RUNTIME_EVIDENCE_SCHEMA,
   verifyRuntimeEvidenceAgainstCurrentInputs,
+  verifyOreslangRuntimeAdmission,
 } from '../../src/runtime-conformance/index.mjs';
 
 const packageRoot = resolve(import.meta.dirname, '../..');
@@ -198,4 +199,46 @@ test('preferred runtime API fails closed when a current input cannot be loaded',
   } finally {
     await rm(artifacts.directory, { recursive: true, force: true });
   }
+});
+
+test('Oreslang runtime admission requires both independently executed backend receipts', async () => {
+  const artifacts = await parityArtifacts();
+  try {
+    // The existing TypeScript evidence is deliberately valid, but it cannot
+    // substitute for any Oreslang runtime or native backend execution.
+    const report = await verifyOreslangRuntimeAdmission({
+      graalvmValidator: 'oreslang-graalvm@1.0.0',
+      llvmValidator: 'oreslang-llvm@1.0.0',
+      evidence: runtimeEvidence(artifacts.contractIr, artifacts.parityReport),
+      contractIr: artifacts.contractIr,
+      parityReport: artifacts.parityReport,
+      typespec: sourceTypeSpec,
+      generatedSchema: artifacts.generatedSchema,
+      authoredSchema: sourceAuthoredSchema,
+      expectedCorpusDigest: corpusDigest,
+      expectedCases,
+    });
+    assert.equal(report.status, 'stopped_for_evaluation');
+    assert.equal(report.zeroUnexplainedFindings, false);
+    assert.equal(ruleIds(report).filter((id) => id === 'runtime-required-adapter-missing').length > 0, true);
+    assert.equal(report.summary.requiredAdapters, 2);
+  } finally {
+    await rm(artifacts.directory, { recursive: true, force: true });
+  }
+});
+
+test('Oreslang runtime gate refuses floating or missing validator identities', async () => {
+  await assert.rejects(
+    verifyOreslangRuntimeAdmission({
+      graalvmValidator: 'latest',
+      llvmValidator: 'oreslang-llvm@1.0.0',
+    }),
+    /exact bounded name@version/,
+  );
+  await assert.rejects(
+    verifyOreslangRuntimeAdmission({
+      graalvmValidator: 'oreslang-graalvm@1.0.0',
+    }),
+    /exact bounded name@version/,
+  );
 });
