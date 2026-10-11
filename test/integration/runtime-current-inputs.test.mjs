@@ -233,12 +233,41 @@ test('Oreslang runtime gate refuses floating or missing validator identities', a
       graalvmValidator: 'latest',
       llvmValidator: 'oreslang-llvm@1.0.0',
     }),
-    /exact bounded name@version/,
+    /exact oreslang-(?:graalvm|llvm)@major\.minor\.patch/,
   );
   await assert.rejects(
     verifyOreslangRuntimeAdmission({
       graalvmValidator: 'oreslang-graalvm@1.0.0',
     }),
-    /exact bounded name@version/,
+    /exact oreslang-(?:graalvm|llvm)@major\.minor\.patch/,
   );
+});
+
+
+test('Oreslang runtime gate rejects partial SemVer and cross-backend validator impersonation', async () => {
+  const invalidGraal = [
+    'oreslang-graalvm@1', 'oreslang-graalvm@1.2',
+    'oreslang-graalvm@1.2.x', 'oreslang-graalvm@01.2.3',
+    'oreslang-graalvm@latest', 'zod@4.5.4',
+    'oreslang-llvm@1.2.3', 'oreslang-graalvm@1.2.3@4',
+  ];
+  for (const graalvmValidator of invalidGraal) {
+    await assert.rejects(
+      verifyOreslangRuntimeAdmission({
+        graalvmValidator,
+        llvmValidator: 'oreslang-llvm@1.2.3',
+      }),
+      /exact oreslang-graalvm@major\.minor\.patch/,
+    );
+  }
+  for (const llvmValidator of ['oreslang-llvm@1', 'oreslang-graalvm@1.2.3',
+    'oreslang-llvm@1.2.3.*']) {
+    await assert.rejects(
+      verifyOreslangRuntimeAdmission({
+        graalvmValidator: 'oreslang-graalvm@1.2.3',
+        llvmValidator,
+      }),
+      /exact oreslang-llvm@major\.minor\.patch/,
+    );
+  }
 });
