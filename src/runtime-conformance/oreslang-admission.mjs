@@ -1,17 +1,21 @@
 import { RUNTIME_EVIDENCE_SCHEMA_V2 } from './constants.mjs';
 import { verifyRuntimeEvidenceAgainstCurrentInputs } from './current-inputs.mjs';
 
-function pinnedValidatorIdentity(value, label) {
+function pinnedValidatorIdentity(value, label, expectedName) {
+  // An identity is a label, not an artifact digest or proof that a job ran.
+  // Require an exact backend-specific package and complete SemVer version.
+  const semver = '(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)'
+    + '(?:-[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?'
+    + '(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?';
+  const pattern = new RegExp('^' + expectedName + '@' + semver + '$', 'u');
   if (typeof value !== 'string'
-    || value.length < 5
     || value.length > 128
     || value.trim() !== value
-    || !/^[a-z0-9][a-z0-9._+-]*@[0-9][a-z0-9._+-]*$/u.test(value)) {
-    throw new TypeError(label + ' must be an exact bounded name@version validator identity');
+    || !pattern.test(value)) {
+    throw new TypeError(label + ' must be an exact ' + expectedName + '@major.minor.patch validator identity');
   }
   return value;
 }
-
 /**
  * Oreslang runtime admission policy, using the canonical current-source TJSV
  * verifier. Static generator/Java-parser success is not a runtime adapter.
@@ -28,12 +32,12 @@ export async function verifyOreslangRuntimeAdmission({
     Object.freeze({
       id: 'oreslang-graalvm',
       language: 'oreslang',
-      validator: pinnedValidatorIdentity(graalvmValidator, 'graalvmValidator'),
+      validator: pinnedValidatorIdentity(graalvmValidator, 'graalvmValidator', 'oreslang-graalvm'),
     }),
     Object.freeze({
       id: 'oreslang-llvm',
       language: 'oreslang',
-      validator: pinnedValidatorIdentity(llvmValidator, 'llvmValidator'),
+      validator: pinnedValidatorIdentity(llvmValidator, 'llvmValidator', 'oreslang-llvm'),
     }),
   ];
   return verifyRuntimeEvidenceAgainstCurrentInputs({
