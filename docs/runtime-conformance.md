@@ -175,3 +175,9 @@ A finite corpus provides bounded behavioral evidence only. It does not prove uni
 Contract IR validation reports safe identifiers, digests, booleans, and bounded status metadata rather than serializing arbitrary Contract IR content into findings. Raw schema values and instance payloads remain outside runtime evidence and its deterministic report.
 
 These functions validate and compare evidence only. Separate sandboxed language-specific runners still need to compile generated validators, execute the corpus, and emit the minimal receipt. Their commands, filesystem permissions, network policy, CPU/memory/time limits, immutable toolchain versions, and artifact retention remain explicit CI responsibilities.
+
+## Oreslang dual-backend admission policy
+
+The typed API `verifyOreslangRuntimeAdmission` is a restrictive policy wrapper around `verifyRuntimeEvidenceAgainstCurrentInputs`, not another validator. It requires **both** independent Oreslang runtime adapter IDs (`oreslang-graalvm` and `oreslang-llvm`), each reporting language `oreslang` with a reviewer-pinned exact `name@version` validator identity. It requires the v2 evidence schema, including trusted exact-input digests and the current TypeSpec/JSON Schema A/Schema B parity closure.
+
+A Java parser or ownership-checker success, generated header, C++ declaration-only syntax pass, copied adapter metadata, or admission of only one backend cannot satisfy this gate. Neither is the adapter execution performed by TJSV: each actual Oreslang SDK/validator job must run independently and report all accepted/rejected corpus cases. Missing or unsupported LLVM String runtime lowering therefore remains a real release blocker. The caller must provide trusted current source inputs and the exact native adapter results. This policy does **not** certify the origin of externally supplied evidence; only the trusted execution/orchestration environment can do that.
