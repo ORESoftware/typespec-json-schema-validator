@@ -138,7 +138,7 @@
     "@typespec/json-schema": "1.16.0"
   },
   "engines": {
-    "node": ">=22.9"
+    "node": ">=22.18.0"
   },
   "publishConfig": {
     "access": "public"
