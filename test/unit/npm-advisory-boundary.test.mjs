@@ -9,7 +9,7 @@ async function read(path) {
   return readFile(resolve(root, path), 'utf8');
 }
 
-test('temporary GHSA-2q42-4q24-7rgv exception is bounded by the JSON Schema emitter path controls', async () => {
+test('patched GHSA-2q42-4q24-7rgv TypeSpec pin has zero waivers and defense-in-depth emitter controls', async () => {
   const [packageText, lockText, emitterText, inventoryText, exceptionText] = await Promise.all([
     read('package.json'),
     read('package-lock.json'),
@@ -31,18 +31,13 @@ test('temporary GHSA-2q42-4q24-7rgv exception is bounded by the JSON Schema emit
   assert.match(emitterText, /assertTypeSpecEmitterInputSafe\(entry\)/u);
   assert.match(emitterText, /basename\(bundleId\) !== bundleId/u);
   assert.match(inventoryText, /unsafe-escaped-identifier-path-separator/u);
-  assert.deepEqual(
-    exceptionLedger.exceptions.map(({ advisoryId, package: packageName, expiresAt }) => ({
-      advisoryId,
-      package: packageName,
-      expiresAt,
-    })),
-    [{
-      advisoryId: 'npm:1193788',
-      package: '@typespec/compiler',
-      expiresAt: '2026-10-14T04:00:00.000Z',
-    }],
-  );
+  assert.deepEqual(exceptionLedger.exceptions, [], 'expired waivers must not survive the patched compiler');
+  assert.equal(packageJson.dependencies['@typespec/compiler'], '1.17.0');
+  assert.equal(packageJson.dependencies['@typespec/json-schema'], '1.17.0');
+  assert.equal(lock.packages['node_modules/@typespec/compiler'].version, '1.17.0');
+  assert.equal(lock.packages['node_modules/@typespec/json-schema'].version, '1.17.0');
+  assert.equal(lock.version, packageJson.version);
+  assert.equal(lock.packages[''].version, packageJson.version);
 });
 
 test('default compiler CLI is coupled to the pinned emitter dependency tree', async () => {

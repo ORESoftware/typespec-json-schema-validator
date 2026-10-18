@@ -18,13 +18,40 @@ Every production-installed vulnerable path is classified `conservatively-reachab
 
 The receipt schema is `tjsv-npm-production-audit-receipt/v1`. It records npm/registry identity, production-only audit arguments, package and lockfile digests, audit-document digest, advisory/package path evidence, exact applied exceptions, and every unwaived high/critical path. CI retains the receipt even when the gate fails.
 
-## Temporarily mitigated advisory: GHSA-2q42-4q24-7rgv
+## Patched TypeSpec advisory: GHSA-2q42-4q24-7rgv
 
-The 2026-09-09 registry-backed audit reported one reviewed high-severity advisory, npm source `1193788` / `GHSA-2q42-4q24-7rgv`, propagated across `@typespec/compiler`, direct `@typespec/json-schema`, and transitive `@typespec/asset-emitter`. The advisory covered compiler/OpenAPI3 versions through `1.15.0`. While no patched release existed, three exact package-path exceptions held the gate open until `2026-09-16T04:00:00.000Z`, bounded by the sole-emitter argument that `test/unit/npm-advisory-boundary.test.mjs` still locks: the demonstrated exploit requires the separately packaged `@typespec/openapi3` emitter, TJSV installs only `@typespec/json-schema`, and the pinned-compiler fallback sets `emit: [emitterPath]`.
+The 2026-09-09 production advisory audit reported high severity npm advisory
+`npm:1193788` for `@typespec/compiler` and affected downstream package paths.
+The prior compiler 1.16.0 integration carried a narrowly scoped, time-limited
+exception that expired **2026-10-14T04:00:00Z**. It was not an upstream patch
+and is no longer an acceptable remediation.
 
-A later registry-backed audit on 2026-09-30 again reports npm advisory `1193788` against the pinned `@typespec/compiler` `1.16.0`. Upstream fixed the spec-controlled path traversal in `microsoft/typespec#11777` (merge commit `e0f67bdf3c5a0875dfa98b475648af37caac71a6`), but that fix is not yet present in the pinned npm release. TJSV therefore carries one exact, short-lived exception for `npm:1193788` / `@typespec/compiler`, expiring `2026-10-14T04:00:00.000Z`. The exception is backed by compensating controls in this repository: only the JSON Schema emitter is invoked, `bundleId` is constrained to a plain JSON filename, and path-separator-bearing escaped TypeSpec identifiers are refused before output-directory creation or compiler execution. The exception must be deleted as soon as a compatible patched TypeSpec release is available.
+TypeSpec **1.17.0** (released 2026-10-07) incorporates upstream filesystem
+containment hardening from the TypeSpec project. TJSV's security update pins
+`@typespec/compiler` and `@typespec/json-schema` to exact `1.17.0`, and
+transitive `@typespec/asset-emitter` to its registry-resolved compatible
+version via `package-lock.json`. `security/npm-audit-exceptions.json` now has
+**zero** exceptions. `security/typespec-runtime-provenance.json` binds all
+three versions, resolved package URLs and npm integrity digests.
 
-Exceptions were never the fix. Upgrading past the advisory is always the first remediation; renewing an exception is only for an advisory with no patched release.
+The production action still runs `npm audit` **before** installing dependencies
+or compiling TypeSpec, and refuses an unwaived high/critical finding.
+The emitter's explicit unsafe-path checks remain as defense-in-depth; they do
+not substitute for upstream patching.
+
+The upgraded dependency graph requires **Node 22.18.0 or newer** (its transitive
+`@babel/code-frame` dependency rejects Node 22.16.0). CI, the release job,
+Shared Auth downstream conformance, and advisory-expiry watcher now pin
+Node 22.18.0. The temporary exact-head, branch-scoped workflow used to generate
+the lockfile from npm was removed from the proposed change after it completed.
+No npm integrity strings were fabricated or manually altered.
+
+**Promotion condition:** verify the exact final PR SHA with registry-backed
+production audit, `npm ci`, unit and integration suites, the composite action
+consumer, release preflight and external consumer CI. Earlier candidate runs
+or the fact that the waiver was deleted cannot substitute for those receipts.
+The merged immutable action commit must be adopted separately by consumers.
+Tracking: [#230](https://github.com/ORESoftware/typespec-json-schema-validator/issues/230).
 
 ## Expiry is an outage, so it is announced early
 
