@@ -109,3 +109,28 @@ test('Contract IR flag remains scoped to full check and compare commands', async
   assert.equal(report.status, 'failed');
   assert.equal(report.context.usageError, true);
 });
+
+test('synthetic scalar refinements admit two peer-authored constraints into Contract IR',async()=>{
+  // Public, independent synthetic declarations. This is not private Zorde
+  // source or evidence of guest/runtime compilation.
+  const temp=await mkdtemp(join(tmpdir(),'tjsv-scalar-canary-'));
+  const reportPath=join(temp,'report.json'),irPath=join(temp,'contract-ir.json');
+  const result=await run(checkArgs('peer-scalar-refinement-canary',temp,reportPath,irPath));
+  assert.equal(result.code,0,result.stderr||result.stdout);
+  const report=JSON.parse(await readFile(reportPath,'utf8'));
+  const ir=JSON.parse(await readFile(irPath,'utf8'));
+  assert.equal(report.status,'passed');
+  assert.equal(report.differential.summary.divergences,0);
+  assert.ok(report.differential.summary.probesEvaluated>0);
+  assert.equal(ir.admissible,true);
+  assert.equal(ir.admission.scope.complete,true);
+  assert.deepEqual(ir.declarations.map(x=>x.id).sort(),[
+    'Canary.Refinement.AliasLabel','Canary.Refinement.RetryLimit']);
+  const byId=Object.fromEntries(ir.declarations.map(x=>[x.id,x]));
+  assert.equal(byId['Canary.Refinement.RetryLimit'].assertionSchema.minimum,2);
+  assert.equal(byId['Canary.Refinement.RetryLimit'].assertionSchema.maximum,500);
+  assert.equal(byId['Canary.Refinement.AliasLabel'].assertionSchema.minLength,2);
+  assert.equal(byId['Canary.Refinement.AliasLabel'].assertionSchema.maxLength,48);
+  assert.equal(ir.admission.receipt.runId,report.runId);
+});
+
