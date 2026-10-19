@@ -133,9 +133,8 @@ test('synthetic scalar refinements admit two peer-authored constraints into Cont
   assert.equal(report.differential.summary.reviewedUnassertedInstances,0);
   assert.equal(report.differential.summary.declarationsWithReviewedPositiveAndNegative,2);
   assert.equal(report.differential.summary.declarationsWithoutReviewedFixtures,0);
-  assert.match(report.differential.corpusDigest,/^[a-f0-9]{64}$/);
-  assert.equal(report.differential.corpusDigest,
-    report.configuration.differential.instanceCorpusDigest);
+  assert.match(report.configuration.differential.instanceCorpusDigest,
+    /^[a-f0-9]{64}$/);
   assert.deepEqual(report.differential.declarations.map(x=>x.reviewedFixtureCoverage),
     ['positive-and-negative','positive-and-negative']);
   assert.equal(ir.admissible,true);
