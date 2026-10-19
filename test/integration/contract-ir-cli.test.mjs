@@ -116,7 +116,9 @@ test('synthetic scalar refinements admit two peer-authored constraints into Cont
   const temp=await mkdtemp(join(tmpdir(),'tjsv-scalar-canary-'));
   const reportPath=join(temp,'report.json'),irPath=join(temp,'contract-ir.json');
   const result=await run(checkArgs('peer-scalar-refinement-canary',temp,reportPath,irPath));
-  assert.equal(result.code,0,result.stderr||result.stdout);
+  const emittedReport=await readFile(reportPath,'utf8').catch(()=>'(report not created)');
+  assert.equal(result.code,0,
+    'synthetic peer scalar parity did not pass: '+result.stderr+' '+result.stdout+' report='+emittedReport);
   const report=JSON.parse(await readFile(reportPath,'utf8'));
   const ir=JSON.parse(await readFile(irPath,'utf8'));
   assert.equal(report.status,'passed');
