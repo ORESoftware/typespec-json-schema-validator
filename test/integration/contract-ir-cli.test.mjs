@@ -115,7 +115,9 @@ test('synthetic scalar refinements admit two peer-authored constraints into Cont
   // source or evidence of guest/runtime compilation.
   const temp=await mkdtemp(join(tmpdir(),'tjsv-scalar-canary-'));
   const reportPath=join(temp,'report.json'),irPath=join(temp,'contract-ir.json');
-  const result=await run(checkArgs('peer-scalar-refinement-canary',temp,reportPath,irPath));
+  const corpusRoot=resolve(fixtures,'peer-scalar-refinement-canary/instances');
+  const result=await run(checkArgs('peer-scalar-refinement-canary',temp,reportPath,irPath,
+    ['--instances='+corpusRoot]));
   const emittedReport=await readFile(reportPath,'utf8').catch(()=>'(report not created)');
   assert.equal(result.code,0,
     'synthetic peer scalar parity did not pass: '+result.stderr+' '+result.stdout+' report='+emittedReport);
@@ -124,6 +126,18 @@ test('synthetic scalar refinements admit two peer-authored constraints into Cont
   assert.equal(report.status,'passed');
   assert.equal(report.differential.summary.divergences,0);
   assert.ok(report.differential.summary.probesEvaluated>0);
+  assert.equal(report.differential.summary.corpusInstances,8);
+  assert.equal(report.differential.summary.matchedReviewedCorpusInstances,8);
+  assert.equal(report.differential.summary.reviewedAcceptedInstances,4);
+  assert.equal(report.differential.summary.reviewedRejectedInstances,4);
+  assert.equal(report.differential.summary.reviewedUnassertedInstances,0);
+  assert.equal(report.differential.summary.declarationsWithReviewedPositiveAndNegative,2);
+  assert.equal(report.differential.summary.declarationsWithoutReviewedFixtures,0);
+  assert.match(report.differential.corpusDigest,/^[a-f0-9]{64}$/);
+  assert.equal(report.differential.corpusDigest,
+    report.configuration.differential.instanceCorpusDigest);
+  assert.deepEqual(report.differential.declarations.map(x=>x.reviewedFixtureCoverage),
+    ['positive-and-negative','positive-and-negative']);
   assert.equal(ir.admissible,true);
   assert.equal(ir.admission.scope.complete,true);
   assert.deepEqual(ir.declarations.map(x=>x.id).sort(),[
@@ -149,7 +163,8 @@ test('synthetic scalar refinements admit two peer-authored constraints into Cont
     '--schema='+mutantPath,
     '--output-dir='+join(temp,'mutant.generated'),
     '--report='+mutantReportPath,
-    '--contract-ir='+mutantIrPath,'--quiet']);
+    '--contract-ir='+mutantIrPath,
+    '--instances='+corpusRoot,'--quiet']);
   assert.equal(drift.code,2,drift.stderr||drift.stdout);
   const stopped=JSON.parse(await readFile(mutantReportPath,'utf8'));
   const tombstone=JSON.parse(await readFile(mutantIrPath,'utf8'));
