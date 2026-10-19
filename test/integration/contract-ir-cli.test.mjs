@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -134,5 +134,28 @@ test('synthetic scalar refinements admit two peer-authored constraints into Cont
   assert.equal(byId['Canary.Refinement.AliasLabel'].assertionSchema.minLength,2);
   assert.equal(byId['Canary.Refinement.AliasLabel'].assertionSchema.maxLength,48);
   assert.equal(ir.admission.receipt.runId,report.runId);
+  // Semantic authority cannot gain an extra annotation simply because the
+  // alternate lane's runtime probes happen to make the same decisions.
+  const mutant=JSON.parse(await readFile(resolve(fixtures,
+    'peer-scalar-refinement-canary/authored.schema.json'),'utf8'));
+  mutant.$defs.RetryLimit.format='int32';
+  const mutantPath=join(temp,'mutant.schema.json');
+  await writeFile(mutantPath,JSON.stringify(mutant)+'\n');
+  const mutantReportPath=join(temp,'mutant.report.json');
+  const mutantIrPath=join(temp,'mutant.contract-ir.json');
+  const drift=await run([
+    'check',
+    '--typespec='+resolve(fixtures,'peer-scalar-refinement-canary/main.tsp'),
+    '--schema='+mutantPath,
+    '--output-dir='+join(temp,'mutant.generated'),
+    '--report='+mutantReportPath,
+    '--contract-ir='+mutantIrPath,'--quiet']);
+  assert.equal(drift.code,2,drift.stderr||drift.stdout);
+  const stopped=JSON.parse(await readFile(mutantReportPath,'utf8'));
+  const tombstone=JSON.parse(await readFile(mutantIrPath,'utf8'));
+  assert.equal(stopped.status,'stopped_for_evaluation');
+  assert.ok(stopped.findings.some(x=>x.pointer==='#/$defs/RetryLimit/format'));
+  assert.equal(tombstone.admissible,false);
+  assert.equal(tombstone.declarations.length,0);
 });
 
