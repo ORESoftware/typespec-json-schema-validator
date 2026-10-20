@@ -5,6 +5,56 @@ import unittest
 class BadSyntax(ValueError):
     pass
 
+def mask_noncode(text):
+    out = list(text)
+    i = 0
+    quote = None
+    block = 0
+    while i < len(text):
+        c = text[i]
+        n = text[i + 1] if i + 1 < len(text) else ""
+        if block:
+            if c == "*" and n == "/":
+                out[i] = out[i + 1] = " "
+                block -= 1
+                i += 2
+                continue
+            if c != "\n":
+                out[i] = " "
+            i += 1
+            continue
+        if quote is not None:
+            if c == "\\":
+                out[i] = " "
+                if i + 1 < len(text) and text[i + 1] != "\n":
+                    out[i + 1] = " "
+                i += 2
+                continue
+            if c == quote:
+                out[i] = " "
+                quote = None
+            elif c != "\n":
+                out[i] = " "
+            i += 1
+            continue
+        if c == "/" and n == "/":
+            while i < len(text) and text[i] != "\n":
+                out[i] = " "
+                i += 1
+            continue
+        if c == "/" and n == "*":
+            out[i] = out[i + 1] = " "
+            block += 1
+            i += 2
+            continue
+        if c in ('"', "'", "`"):
+            out[i] = " "
+            quote = c
+        i += 1
+    if block or quote is not None:
+        raise BadSyntax("unterminated comment or literal")
+    return "".join(out)
+
 def fn_type(text):
     text = re.sub(r"\s+", " ", text.strip())
     def parse(s):
@@ -38,6 +88,7 @@ def fn_type(text):
     return parse(text)
 
 def normalize_body(text):
+    text = mask_noncode(text)
     tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*|\d+|==|!=|>=|<=|[()><,+*/-]", text.replace(";", " "))
     depth = 0
     for t in tokens:
@@ -59,21 +110,27 @@ def definition(src):
     if not m:
         raise BadSyntax("missing slim-arrow header")
     rest = m.group(3)
-    dm = re.search(r"\bdo\b", rest)
+    visible = mask_noncode(rest)
+    dm = re.search(r"\bdo\b", visible)
     if dm:
-        typ = rest[:dm.start()].strip()
-        tail = rest[dm.end():].strip()
+        typ = mask_noncode(rest[:dm.start()]).strip()
+        tail = rest[dm.end():]
     else:
-        p = rest.find("\n")
+        p = visible.find("\n")
         if p < 0:
             raise BadSyntax("same-line body requires do")
-        typ = rest[:p].strip()
-        tail = rest[p+1:].strip()
+        typ = mask_noncode(rest[:p]).strip()
+        tail = rest[p+1:]
     if not typ or typ.endswith(";"):
         raise BadSyntax("invalid return boundary")
-    if not re.search(r"\bend\s*$", tail):
+    visible_tail = mask_noncode(tail)
+    end_matches = list(re.finditer(r"\bend\b", visible_tail))
+    if not end_matches:
         raise BadSyntax("missing end")
-    body = re.sub(r"\bend\s*$", "", tail).strip()
+    closer = end_matches[-1]
+    if visible_tail[closer.end():].strip():
+        raise BadSyntax("trailing syntax after end")
+    body = tail[:closer.start()].strip()
     return (m.group(1), m.group(2), fn_type(typ), normalize_body(body))
 
 def signature(src):
@@ -148,6 +205,19 @@ class Oracle(unittest.TestCase):
     def test_missing_fi_rejected(self):
         with self.assertRaises(BadSyntax):
             definition("fnc f(int x) -> int do if x > 0 then return 1; end")
+
+    def test_comments_and_literals_do_not_own_boundaries(self):
+        got = definition(
+            'fnc value() -> int /* ; do end */ do /* end */ return 7; end // do end'
+        )
+        self.assertEqual(got[2], ("name", "int"))
+        text = definition('fnc text() -> string do return "do end fi;"; end')
+        self.assertEqual(text[2], ("name", "string"))
+
+    def test_semicolon_hidden_in_comment_is_not_signature_terminator(self):
+        got = definition("fnc value() -> int /* ; */ do return 7; end")
+        self.assertEqual(got[2], ("name", "int"))
+
 
 if __name__ == "__main__":
     result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(Oracle))
