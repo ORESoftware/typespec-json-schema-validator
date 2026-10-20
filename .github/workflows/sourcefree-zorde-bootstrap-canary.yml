@@ -6,6 +6,7 @@ on:
     paths:
       - .github/workflows/sourcefree-zorde-bootstrap-canary.yml
       - tests/source_free/test_sourcefree_bootstrap_startup_canary.py
+      - tests/source_free/test_sourcefree_native_output_safety.py
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,4 +24,5 @@ jobs:
         run: |
           set -euo pipefail
           python3 -I -S tests/source_free/test_sourcefree_bootstrap_startup_canary.py
+          python3 -I -S tests/source_free/test_sourcefree_native_output_safety.py
           echo 'SOURCE_FREE_ONLY_NO_PRIVATE_ORESLANG_SOURCE'
