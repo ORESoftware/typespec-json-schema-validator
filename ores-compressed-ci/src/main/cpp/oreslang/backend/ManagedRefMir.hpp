@@ -64,6 +64,9 @@ public:
 
 inline VerifiedActorCompressed32 verify_actor_compressed32(
         const ActorManagedRefMir& source) {
+    if (source.access != ManagedRefAccess::Read &&
+            source.access != ManagedRefAccess::Write)
+        throw std::invalid_argument("unsupported managed reference access mode");
     if (source.origin != ManagedRefOrigin::ActorOwned ||
             !source.allocation_is_actor_private ||
             !source.typed_provenance_verified)
