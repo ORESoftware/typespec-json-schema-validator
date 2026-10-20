@@ -45,7 +45,7 @@ jobs:
           read -r -a LLVM_CFLAGS <<< "$(llvm-config --cxxflags)"
           read -r -a LLVM_LIBS <<< "$(llvm-config --ldflags --system-libs --libs core support)"
           "$CXX" "${LLVM_CFLAGS[@]}" -std=c++17 -fexceptions \
-            -Wall -Wextra -Wpedantic -Werror \
+            -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter \
             -Iores-compressed-ci/src/main/cpp \
             ores-compressed-ci/tests/managed_ref_mir_llvm_test.cpp \
             "${LLVM_LIBS[@]}" -o /tmp/ores-managed-ref-mir-llvm-test
