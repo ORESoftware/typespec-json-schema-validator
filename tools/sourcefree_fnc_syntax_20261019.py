@@ -188,6 +188,10 @@ class Oracle(unittest.TestCase):
         with self.assertRaises(BadSyntax):
             definition("routine identity(int x) -> int do return x; end")
 
+    def test_body_cast_as_cannot_impersonate_header_separator(self):
+        with self.assertRaises(BadSyntax):
+            definition("fnc casty() -> int return value as int; end")
+
     def test_same_line_without_as_rejected(self):
         with self.assertRaises(BadSyntax):
             definition("fnc bad() -> int return 1; end")
