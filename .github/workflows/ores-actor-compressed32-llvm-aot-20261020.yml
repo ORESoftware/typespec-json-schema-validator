@@ -1,0 +1,56 @@
+name: LLVM typed actor compact32 exact-blob AOT
+on:
+  push:
+    branches:
+      - ci/ores-actor-compressed32-mir-20261020
+permissions:
+  contents: read
+jobs:
+  llvm-backend-aot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [g++, clang++]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify all original source blob identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.c)" = "4f346c6ddfee874f72f09a34bcc11a95808150e8"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.h)" = "3ad557042f0351a3e6dd0b36e4e6e649f237edcf"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "2bdba4d6cb9e4aa8536a73c51465aa9e98ce401a"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMirLowering.hpp)" = "3ac00a3810acbb4e07ef1f0a3769d0b932e9e550"
+          test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_llvm_test.cpp)" = "4934720f07722c8eaf239999eabf296b4f2555e2"
+          test "$(git hash-object ores-compressed-ci/tests/native_actor_compressed32_llvm_driver.c)" = "57fdb7a3b45f43e58edb19d171314403db8f8898"
+          test "$(git hash-object ores-compressed-ci/tests/native_actor_compressed32_llvm_aot.py)" = "305ac32675c07b13e2b63b9fd650571d1149f373"
+      - name: Ensure LLVM native toolchain available
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v llvm-config >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq llvm-dev clang
+          fi
+          llvm-config --version
+          clang --version | head -1
+      - name: Build LLVM IR producer and run real native actor AOT
+        shell: bash
+        env:
+          CXX: ${{ matrix.compiler }}
+        run: |
+          set -euo pipefail
+          read -r -a LLVM_CFLAGS <<< "$(llvm-config --cxxflags)"
+          read -r -a LLVM_LIBS <<< "$(llvm-config --ldflags --system-libs --libs core support)"
+          "$CXX" "${LLVM_CFLAGS[@]}" -std=c++17 -fexceptions \
+            -Wall -Wextra -Wpedantic -Werror \
+            -Iores-compressed-ci/src/main/cpp \
+            ores-compressed-ci/tests/managed_ref_mir_llvm_test.cpp \
+            "${LLVM_LIBS[@]}" -o /tmp/ores-managed-ref-mir-llvm-test
+          /tmp/ores-managed-ref-mir-llvm-test
+          python3 ores-compressed-ci/tests/native_actor_compressed32_llvm_aot.py \
+            --producer /tmp/ores-managed-ref-mir-llvm-test \
+            --clang "$(command -v clang)" \
+            --root ores-compressed-ci

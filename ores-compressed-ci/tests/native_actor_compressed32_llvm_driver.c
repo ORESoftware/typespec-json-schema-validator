@@ -1,0 +1,66 @@
+#include "oreslang/runtime/ActorArena.h"
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+/* These symbols are defined in the LLVM verifier-produced .ll module, then
+ * compiled by clang and linked against the REAL production ActorArena.c. */
+extern uint64_t checked_actor_read(
+    OresActorArena*, uint64_t actor_domain, uint64_t actor_epoch, uint32_t ref32);
+extern uint32_t checked_actor_publish_write(
+    OresActorArena*, uint64_t actor_domain, uint64_t actor_epoch,
+    uint64_t allocation_index, uint64_t allocation_generation, uint64_t value);
+
+static void check(int ok, const char* diagnostic) {
+    if (!ok) {
+        fprintf(stderr, "compressed32 LLVM native AOT: %s\n", diagnostic);
+        exit(1);
+    }
+}
+
+int main(void) {
+    OresActorArena* first = ores_actor_arena_open(202, 1, 2, 64, 64);
+    OresActorArena* second = ores_actor_arena_open(203, 1, 2, 64, 64);
+    check(first != NULL && second != NULL, "could not open distinct actor arenas");
+
+    OresArenaTurn t1 = ores_actor_arena_enter(first, 202, 1);
+    OresArenaHandle h1 = ores_actor_arena_alloc(first, t1, 16);
+    const uint64_t x = UINT64_C(0x8899aabbccddeeff);
+    const uint32_t ref1 = checked_actor_publish_write(
+        first, t1.domain, t1.epoch, h1.index, h1.generation, x);
+    check(ref1 == 1u && checked_actor_read(first, t1.domain, t1.epoch, ref1) == x,
+          "compiled actor-private compressed32 round trip failed");
+    ores_actor_arena_leave(first, t1);
+
+    OresArenaTurn t2 = ores_actor_arena_enter(second, 203, 1);
+    OresArenaHandle h2 = ores_actor_arena_alloc(second, t2, 16);
+    const uint64_t y = UINT64_C(0x123456789abcdef0);
+    const uint32_t ref2 = checked_actor_publish_write(
+        second, t2.domain, t2.epoch, h2.index, h2.generation, y);
+    // Same 32-bit bits in different actor heaps are EXPECTED: the runtime
+    // base and domain, not the guest field, disambiguate them.
+    check(ref1 == ref2 && t1.domain != t2.domain,
+          "independent actor arenas did not produce a colliding local offset");
+    check(checked_actor_read(second, t2.domain, t2.epoch, ref2) == y,
+          "compiled second actor's compact reference resolved incorrectly");
+    ores_actor_arena_leave(second, t2);
+
+    // Each new actor turn obtains its own epoch. A logical actor reference
+    // persists, but a prior turn token is invalid after carrier handoff.
+    t1 = ores_actor_arena_enter(first, 202, 1);
+    check(checked_actor_read(first, t1.domain, t1.epoch, ref1) == x,
+          "persisted compact reference failed a new actor turn");
+    ores_actor_arena_drop(first, t1, h1);
+    OresArenaHandle unreferenced = ores_actor_arena_alloc(first, t1, 16);
+    check(unreferenced.index != h1.index,
+          "published reference's freed slot was incorrectly recycled");
+    ores_actor_arena_leave(first, t1);
+
+    ores_actor_arena_retire(first);
+    ores_actor_arena_retire(second);
+    check(ores_actor_arena_try_destroy(first), "actor A failed quiesced retirement");
+    check(ores_actor_arena_try_destroy(second), "actor B failed quiesced retirement");
+    puts("LLVM_MANAGED_COMPRESSED32_ACTOR_RUNTIME_PASS");
+    return 0;
+}
