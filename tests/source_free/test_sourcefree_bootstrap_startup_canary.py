@@ -12,7 +12,8 @@ import tempfile
 from pathlib import Path
 
 if not (sys.flags.isolated and sys.flags.no_site and sys.flags.optimize == 0):
-    raise SystemExit("SOURCE_FREE_REFUSED: python3 -I -S without -O required")
+    sys.stderr.write("SOURCE_FREE_REFUSED: python3 -I -S without -O required\\n")
+    raise SystemExit(2)
 
 
 def run(args, env=None, cwd=None):
