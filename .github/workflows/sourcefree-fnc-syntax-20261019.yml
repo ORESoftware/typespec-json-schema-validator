@@ -1,0 +1,40 @@
+name: Source-free function syntax oracle
+on:
+  push:
+    branches:
+      - ci/sourcefree-fnc-syntax-20261019
+  pull_request:
+    paths:
+      - tools/sourcefree_fnc_syntax_20261019.py
+      - .github/workflows/sourcefree-fnc-syntax-20261019.yml
+
+permissions:
+  contents: read
+
+jobs:
+  sourcefree-fnc-syntax:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout source-free carrier branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify source-free scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = 'ORESoftware/typespec-json-schema-validator'
+          test ! -e private-oreslang-source
+          test ! -e src/main/java/dev/oreslang
+          test ! -e src/main/cpp/oreslang
+          echo SOURCE_FREE_ONLY=1
+
+      - name: Run independent syntax oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/sourcefree_fnc_syntax_20261019.py
+          python3 tools/sourcefree_fnc_syntax_20261019.py
+          echo SOURCE_FREE_REFERENCE_ONLY=1
