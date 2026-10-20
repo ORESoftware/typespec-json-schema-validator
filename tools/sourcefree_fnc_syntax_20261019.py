@@ -220,7 +220,7 @@ class Oracle(unittest.TestCase):
             'fnc value() -> int /* ; as do end */ as /* end */ return 7; end // as do end'
         )
         self.assertEqual(got[2], ("name", "int"))
-        text = definition('fnc text() -> string do return "do end fi;"; end')
+        text = definition('fnc text() -> string as return "do end fi;"; end')
         self.assertEqual(text[2], ("name", "string"))
 
     def test_semicolon_hidden_in_comment_is_not_as_boundary_terminator(self):
