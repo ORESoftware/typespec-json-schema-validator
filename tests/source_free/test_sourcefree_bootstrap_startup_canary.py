@@ -69,7 +69,7 @@ with tempfile.TemporaryDirectory(prefix="sourcefree-bash-startup-") as tmp:
     gate.write_text('test -z "${BASH_ENV:-}" && '
                     'test -z "${GIT_DIR:-}" && '
                     'test -z "${NODE_OPTIONS:-}" && '
-                    "printf SAFE\\n")
+                    "printf SAFE")
     gate.chmod(0o700)
     checked_regular_paths(launcher, gate)
     success(True, "real unique executable files and ancestors accepted")
