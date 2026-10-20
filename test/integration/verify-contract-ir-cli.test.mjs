@@ -4,6 +4,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
+import {canonicalStringify,sha256} from '../../src/canonical.mjs';
 
 const packageRoot = resolve(import.meta.dirname, '../..');
 const executable = resolve(packageRoot, 'bin/typespec-json-schema-validator.mjs');
@@ -119,6 +120,34 @@ test('verify-ir detects tampered IR and never repairs or overwrites its input', 
   const verification = JSON.parse(await readFile(verificationPath, 'utf8'));
   assert.equal(verification.status, 'failed');
   assert.equal(verification.admissible, false);
+});
+
+test('verify-ir rejects tampered IR despite attacker recomputing the self digest', async () => {
+  // Entirely public synthetic fixtures; does not import Oreslang private source.
+  const temp = await mkdtemp(join(tmpdir(), 'tsjsv-verify-ir-forged-self-digest-'));
+  const artifacts = await createPassingArtifacts(temp);
+  const ir = JSON.parse(await readFile(artifacts.contractIrPath, 'utf8'));
+  const originalId = ir.irId;
+  // Two altered representations agree with each other but no longer agree
+  // with the admitted live TypeSpec/JSON Schema sources.
+  ir.declarations[0].assertionSchema.type = 'integer';
+  ir.declarations[0].lanes.typespecGeneratedJsonSchema.normalizedSchema.type = 'integer';
+  ir.declarations[0].lanes.authoredJsonSchema.normalizedSchema.type = 'integer';
+  const {irId:ignored, ...body} = ir;
+  ir.irId = sha256(canonicalStringify(body));
+  assert.notEqual(ir.irId, originalId);
+  await writeFile(artifacts.contractIrPath, JSON.stringify(ir,null,2)+'\n');
+
+  const verificationPath = join(temp, 'verification.json');
+  const result = await run(verifyArgs(artifacts, verificationPath));
+  assert.equal(result.code, 3, result.stderr || result.stdout);
+  const verification = JSON.parse(await readFile(verificationPath,'utf8'));
+  assert.equal(verification.status, 'failed');
+  assert.equal(verification.admissible, false);
+  assert.equal(verification.suppliedIrId, ir.irId);
+  assert.equal(verification.computedIrId, ir.irId,
+    'a self-consistent but source-inconsistent IR should still be rejected');
+  assert.notEqual(verification.expectedIrId,ir.irId);
 });
 
 test('verify-ir rejects partial consumer scope while preserving all source artifacts', async () => {
