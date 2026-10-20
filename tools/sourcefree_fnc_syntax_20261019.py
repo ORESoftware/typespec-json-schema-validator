@@ -234,7 +234,7 @@ class Oracle(unittest.TestCase):
         path = pathlib.Path(__file__).with_name("sourcefree_fnc_roundtrip_20261019.ores")
         data = path.read_bytes()
         digest = hashlib.sha1(
-            b"blob " + str(len(data)).encode("ascii") + b"\\0" + data
+            b"blob " + str(len(data)).encode("ascii") + b"\0" + data
         ).hexdigest()
         self.assertEqual(digest, "5d9384b6d2acfd6d21a805315fed4bd7518022b1")
         text = data.decode("utf-8")
