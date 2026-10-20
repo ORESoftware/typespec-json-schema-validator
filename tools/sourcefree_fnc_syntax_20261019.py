@@ -118,6 +118,11 @@ def definition(src):
     sep = re.search(r"\bas\b", header_visible)
     if sep:
         typ = mask_noncode(rest[:sep.start()]).strip()
+        if re.search(
+            r"\b(return|if|elif|else|fi|do|done|select|match|switch|const|let|val|for|while|loop|try|catch|finally|throw|raise|panic|await|spawn|break|continue|yield|defer)\b",
+            typ,
+        ):
+            raise BadSyntax("body syntax before as separator")
         tail = rest[sep.end():]
     else:
         if p < 0:
