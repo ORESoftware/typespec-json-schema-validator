@@ -1,0 +1,39 @@
+name: Source-free nominal enum identity oracle
+on:
+  push:
+    branches:
+      - ci/sourcefree-nominal-enum-identity-20261019
+  pull_request:
+    paths:
+      - tools/sourcefree_nominal_enum_identity_20261019.py
+      - .github/workflows/sourcefree-nominal-enum-identity-20261019.yml
+
+permissions:
+  contents: read
+
+jobs:
+  sourcefree-nominal-enum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout source-free carrier branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Verify source-free scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REPOSITORY}" = 'ORESoftware/typespec-json-schema-validator'
+          test ! -e private-oreslang-source
+          test ! -e src/main/java/dev/oreslang
+          test ! -e src/main/cpp/oreslang
+          echo PRIVATE_ORESLANG_SOURCE_TRANSFERRED=0
+
+      - name: Run independent nominal enum oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/sourcefree_nominal_enum_identity_20261019.py
+          python3 tools/sourcefree_nominal_enum_identity_20261019.py
