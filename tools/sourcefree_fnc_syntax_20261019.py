@@ -111,12 +111,13 @@ def definition(src):
         raise BadSyntax("missing slim-arrow header")
     rest = m.group(3)
     visible = mask_noncode(rest)
-    dm = re.search(r"\bdo\b", visible)
+    p = visible.find("\n")
+    header_visible = visible if p < 0 else visible[:p]
+    dm = re.search(r"\bdo\b", header_visible)
     if dm:
         typ = mask_noncode(rest[:dm.start()]).strip()
         tail = rest[dm.end():]
     else:
-        p = visible.find("\n")
         if p < 0:
             raise BadSyntax("same-line body requires do")
         typ = mask_noncode(rest[:p]).strip()
@@ -217,6 +218,16 @@ class Oracle(unittest.TestCase):
     def test_semicolon_hidden_in_comment_is_not_signature_terminator(self):
         got = definition("fnc value() -> int /* ; */ do return 7; end")
         self.assertEqual(got[2], ("name", "int"))
+
+    def test_next_line_do_belongs_to_body_not_header(self):
+        got = definition("fnc consume() -> void\ndo select token\nend")
+        self.assertEqual(got[3][0], "do")
+
+    def test_compact_routine_uses_same_boundary_rules(self):
+        got = definition("routine identity(int x) -> int do return x; end")
+        self.assertEqual(got[0], "routine")
+        self.assertEqual(got[2], ("name", "int"))
+
 
 
 if __name__ == "__main__":
