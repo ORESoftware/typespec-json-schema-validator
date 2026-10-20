@@ -197,6 +197,9 @@ OresArenaCompactHandle ores_actor_arena_compact_encode(
     enter_lock(a);
     require_turn(a, turn);
     Slot* s = require_slot(a, h);
+    /* Publication changes the allocation's reachable lifetime contract.
+     * Never mutate provenance while external owner loans remain live. */
+    if (s->loans) deny();
     if ((a->slot_bytes & 7u) != 0 || a->slot_bytes == 0) deny();
     const size_t offset = checked_mul((size_t) h.index, a->slot_bytes);
     if ((offset & 7u) != 0 || (uint64_t)(offset / 8u) >= UINT32_MAX) deny();

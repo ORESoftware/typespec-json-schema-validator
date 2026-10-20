@@ -3,6 +3,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#if defined(__unix__) || defined(__APPLE__)
+#include <signal.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 /* These symbols are defined in the LLVM verifier-produced .ll module, then
  * compiled by clang and linked against the REAL production ActorArena.c. */
@@ -19,6 +25,30 @@ static void check(int ok, const char* diagnostic) {
     }
 }
 
+#if defined(__unix__) || defined(__APPLE__)
+typedef enum { BAD_DOMAIN, BAD_EPOCH, NULL_REF, INTERIOR_REF, STALE_DROPPED } InvalidRead;
+static void require_compiled_read_abort(
+        OresActorArena* arena, OresArenaTurn turn, uint32_t bits,
+        InvalidRead mode) {
+    pid_t child = fork();
+    check(child >= 0, "could not create negative AOT child");
+    if (child == 0) {
+        struct rlimit core = {0, 0};
+        (void)setrlimit(RLIMIT_CORE, &core);
+        if (mode == BAD_DOMAIN) ++turn.domain;
+        if (mode == BAD_EPOCH) ++turn.epoch;
+        if (mode == NULL_REF) bits = 0;
+        if (mode == INTERIOR_REF) ++bits;
+        (void) checked_actor_read(arena, turn.domain, turn.epoch, bits);
+        _exit(95);
+    }
+    int status = 0;
+    check(waitpid(child, &status, 0) == child &&
+          WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT,
+          "LLVM-generated read did not fail closed on invalid reference");
+}
+#endif
+
 int main(void) {
     OresActorArena* first = ores_actor_arena_open(202, 1, 2, 64, 64);
     OresActorArena* second = ores_actor_arena_open(203, 1, 2, 64, 64);
@@ -31,6 +61,12 @@ int main(void) {
         first, t1.domain, t1.epoch, h1.index, h1.generation, x);
     check(ref1 == 1u && checked_actor_read(first, t1.domain, t1.epoch, ref1) == x,
           "compiled actor-private compressed32 round trip failed");
+#if defined(__unix__) || defined(__APPLE__)
+    require_compiled_read_abort(first, t1, ref1, BAD_DOMAIN);
+    require_compiled_read_abort(first, t1, ref1, BAD_EPOCH);
+    require_compiled_read_abort(first, t1, ref1, NULL_REF);
+    require_compiled_read_abort(first, t1, ref1, INTERIOR_REF);
+#endif
     ores_actor_arena_leave(first, t1);
 
     OresArenaTurn t2 = ores_actor_arena_enter(second, 203, 1);
@@ -52,6 +88,9 @@ int main(void) {
     check(checked_actor_read(first, t1.domain, t1.epoch, ref1) == x,
           "persisted compact reference failed a new actor turn");
     ores_actor_arena_drop(first, t1, h1);
+#if defined(__unix__) || defined(__APPLE__)
+    require_compiled_read_abort(first, t1, ref1, STALE_DROPPED);
+#endif
     OresArenaHandle unreferenced = ores_actor_arena_alloc(first, t1, 16);
     check(unreferenced.index != h1.index,
           "published reference's freed slot was incorrectly recycled");

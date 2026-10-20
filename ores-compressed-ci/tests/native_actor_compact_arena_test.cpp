@@ -72,7 +72,7 @@ enum class Violation {
     UnpublishedSlot, BorrowedWrite, WrongCarrier, UnalignedSlot,
     QuarantinedExhaustion, OutOfBounds, StaleTurn,
     ScalarForgedDomain, ScalarForgedInterior, ScalarForgedGeneration,
-    ScalarInvalidOffset, ScalarReadWrongCarrier
+    ScalarInvalidOffset, ScalarReadWrongCarrier, PublishWhileLoaned
 };
 
 static void invalid(Violation violation) {
@@ -168,6 +168,13 @@ static void invalid(Violation violation) {
             other.join();
             break;
         }
+        case Violation::PublishWhileLoaned: {
+            const OresArenaLoan hold = ores_actor_arena_borrow(a, turn, h);
+            (void) hold;
+            (void) ores_actor_arena_compact_publish_i32(
+                a, turn.domain, turn.epoch, h.index, h.generation);
+            break;
+        }
     }
 }
 
@@ -223,7 +230,7 @@ int main() {
     CHECK(happy_path() == 0);
 #if defined(__unix__) || defined(__APPLE__)
     for (int n = static_cast<int>(Violation::StaleAfterDrop);
-         n <= static_cast<int>(Violation::ScalarReadWrongCarrier); ++n)
+         n <= static_cast<int>(Violation::PublishWhileLoaned); ++n)
         CHECK(must_abort(static_cast<Violation>(n)));
 #endif
 #ifdef ORESLANG_NATIVE_TEST_DOMAIN_EXHAUSTION

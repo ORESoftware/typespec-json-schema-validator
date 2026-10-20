@@ -45,6 +45,24 @@ inline llvm::Module* validate_actor_compact_context(
     return module;
 }
 
+inline llvm::FunctionCallee actor_checked_runtime_decl(
+        llvm::Module* module, const char* name, llvm::FunctionType* signature) {
+    constexpr const char* marker = "oreslang.internal.compact32.runtime_abi";
+    if (module->getNamedValue(name)) {
+        auto* found = module->getFunction(name);
+        if (!found || found->getFunctionType() != signature ||
+                !found->isDeclaration() ||
+                found->getCallingConv() != llvm::CallingConv::C ||
+                !found->hasFnAttribute(marker))
+            throw std::invalid_argument("compact32 runtime declaration conflict");
+        return llvm::FunctionCallee(signature, found);
+    }
+    auto* fn = llvm::Function::Create(
+        signature, llvm::GlobalValue::ExternalLinkage, name, module);
+    fn->addFnAttr(marker);
+    return llvm::FunctionCallee(signature, fn);
+}
+
 inline llvm::Value* lower_actor_compact_i64_publish(
         llvm::IRBuilder<>& ir, VerifiedActorCompressed32 verified,
         const ActorCompactRuntimeContext& context,
@@ -62,8 +80,8 @@ inline llvm::Value* lower_actor_compact_i64_publish(
             !allocation_generation || allocation_generation->getType() != i64)
         throw std::invalid_argument("compact32 publication requires checked i64 slot identity");
     auto* ptr = context.actor_arena->getType();
-    const auto callee = module->getOrInsertFunction(
-        "ores_actor_arena_compact_publish_i32",
+    const auto callee = actor_checked_runtime_decl(
+        module, "ores_actor_arena_compact_publish_i32",
         llvm::FunctionType::get(i32, {ptr, i64, i64, i64, i64}, false));
     return ir.CreateCall(callee, {context.actor_arena, context.actor_domain,
                                   context.actor_epoch, slot_index, allocation_generation},
@@ -82,8 +100,8 @@ inline llvm::Value* lower_actor_compact_i64_read(
     if (byte_offset > UINT64_MAX - sizeof(std::uint64_t))
         throw std::invalid_argument("compact32 field access overflows uint64 range");
     auto* ptr = context.actor_arena->getType();
-    const auto callee = module->getOrInsertFunction(
-        "ores_actor_arena_compact_load_i64",
+    const auto callee = actor_checked_runtime_decl(
+        module, "ores_actor_arena_compact_load_i64",
         llvm::FunctionType::get(i64, {ptr, i64, i64, i32, i64}, false));
     return ir.CreateCall(callee, {context.actor_arena, context.actor_domain,
                                   context.actor_epoch, stored_ref32,
@@ -107,8 +125,8 @@ inline void lower_actor_compact_i64_write(
     if (byte_offset > UINT64_MAX - sizeof(std::uint64_t))
         throw std::invalid_argument("compact32 field write offset overflows uint64 range");
     auto* ptr = context.actor_arena->getType();
-    const auto callee = module->getOrInsertFunction(
-        "ores_actor_arena_compact_store_i64",
+    const auto callee = actor_checked_runtime_decl(
+        module, "ores_actor_arena_compact_store_i64",
         llvm::FunctionType::get(llvm::Type::getVoidTy(ir.getContext()),
                                 {ptr, i64, i64, i32, i64, i64}, false));
     ir.CreateCall(callee, {context.actor_arena, context.actor_domain,

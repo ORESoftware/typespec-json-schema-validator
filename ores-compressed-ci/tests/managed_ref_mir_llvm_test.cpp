@@ -1,5 +1,6 @@
 #include "oreslang/backend/ManagedRefMirLowering.hpp"
 
+#include <initializer_list>
 #include <stdexcept>
 #include <string>
 
@@ -120,6 +121,42 @@ int main(int argc, char** argv) {
             output.find("ptrtoint") == std::string::npos &&
             output.find("inttoptr") == std::string::npos,
             "LLVM bypassed runtime-mediated actor-provenance access");
+    // The compiler may encounter a user or dependency symbol before it
+    // declares its own runtime ABI. Refuse incompatible signatures, and
+    // refuse same-signature preexisting non-compiler declarations.
+    for (const char* symbol : {
+            "ores_actor_arena_compact_publish_i32",
+            "ores_actor_arena_compact_load_i64",
+            "ores_actor_arena_compact_store_i64"}) {
+        llvm::Module collision("actor.runtime.declaration.collision", context);
+        auto* bad_sig = llvm::FunctionType::get(i64, {}, false);
+        llvm::Function::Create(bad_sig, llvm::GlobalValue::ExternalLinkage,
+                               symbol, collision);
+        rejects([&] {
+            (void) actor_checked_runtime_decl(
+                &collision, symbol, llvm::FunctionType::get(i32, {ptr}, false));
+        }, "existing invalid compact32 ABI was admitted");
+
+        llvm::Module same_sig("actor.runtime.existing.external", context);
+        auto* signature = llvm::FunctionType::get(i32, {ptr, i64}, false);
+        llvm::Function::Create(signature, llvm::GlobalValue::ExternalLinkage,
+                               symbol, same_sig);
+        rejects([&] {
+            (void) actor_checked_runtime_decl(&same_sig, symbol, signature);
+        }, "external function declaration impersonated compiler runtime declaration");
+
+        llvm::Module correct("actor.runtime.checked", context);
+        (void) actor_checked_runtime_decl(&correct, symbol, signature);
+        (void) actor_checked_runtime_decl(&correct, symbol, signature);
+        auto* marked = correct.getFunction(symbol);
+        auto* body = llvm::BasicBlock::Create(context, "entry", marked);
+        llvm::IRBuilder<> define(body);
+        define.CreateRet(llvm::ConstantInt::get(i32, 0));
+        rejects([&] {
+            (void) actor_checked_runtime_decl(&correct, symbol, signature);
+        }, "function body replaced a protected external runtime declaration");
+    }
+
     if (emit_ir)
         module.print(llvm::outs(), nullptr); // clang compiles this checked IR against REAL ActorArena.c
 }

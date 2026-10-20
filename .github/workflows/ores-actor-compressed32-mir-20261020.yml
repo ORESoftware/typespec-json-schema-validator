@@ -21,8 +21,8 @@ jobs:
         run: |
           set -euo pipefail
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.h)" = "3ad557042f0351a3e6dd0b36e4e6e649f237edcf"
-          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.c)" = "4f346c6ddfee874f72f09a34bcc11a95808150e8"
-          test "$(git hash-object ores-compressed-ci/tests/native_actor_compact_arena_test.cpp)" = "381e3b18ff4daf6b324957b12512ca1340e9a08d"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.c)" = "b88a7c81eb81ae9bc370629f2220357ea82dc498"
+          test "$(git hash-object ores-compressed-ci/tests/native_actor_compact_arena_test.cpp)" = "1c64f37839f3af076736b3212be42e9f4d839fe3"
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "2bdba4d6cb9e4aa8536a73c51465aa9e98ce401a"
           test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_test.cpp)" = "fcb5667175991a4ae4fb106c985cbea2aea157c1"
       - name: Build and run actual actor C slab and typed MIR admission tests
