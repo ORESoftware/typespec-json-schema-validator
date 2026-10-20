@@ -104,6 +104,10 @@ class Oracle(unittest.TestCase):
 
     def test_zero_arg_function_type(self):
         self.assertEqual(fn_type("() => void"), ("fn", (), ("name", "void")))
+\n    def test_compact_higher_order_definition(self):
+        got = definition("fnc callback() -> () => void do return factory(); end")
+        self.assertEqual(got[2], ("fn", (), ("name", "void")))
+
 
     def test_parentheses_required_for_function_type(self):
         with self.assertRaises(BadSyntax):
