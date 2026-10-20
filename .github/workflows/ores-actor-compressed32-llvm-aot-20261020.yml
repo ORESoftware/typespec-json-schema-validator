@@ -43,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           read -r -a LLVM_CFLAGS <<< "$(llvm-config --cxxflags)"
-          read -r -a LLVM_LIBS <<< "$(llvm-config --ldflags --system-libs --libs core support)"
+          read -r -a LLVM_LIBS <<< "$(llvm-config --ldflags --system-libs --libs core support | tr '\n' ' ')"
           "$CXX" "${LLVM_CFLAGS[@]}" -std=c++17 -fexceptions \
             -Wall -Wextra -Wpedantic -Werror -Wno-unused-parameter \
             -Iores-compressed-ci/src/main/cpp \
