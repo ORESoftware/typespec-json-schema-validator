@@ -115,13 +115,13 @@ def definition(src):
     visible = mask_noncode(rest)
     p = visible.find("\n")
     header_visible = visible if p < 0 else visible[:p]
-    dm = re.search(r"\bdo\b", header_visible)
-    if dm:
-        typ = mask_noncode(rest[:dm.start()]).strip()
-        tail = rest[dm.end():]
+    sep = re.search(r"\bas\b", header_visible)
+    if sep:
+        typ = mask_noncode(rest[:sep.start()]).strip()
+        tail = rest[sep.end():]
     else:
         if p < 0:
-            raise BadSyntax("same-line body requires do")
+            raise BadSyntax("same-line body requires as")
         typ = mask_noncode(rest[:p]).strip()
         tail = rest[p+1:]
     if not typ or typ.endswith(";"):
@@ -138,22 +138,22 @@ def definition(src):
 
 def signature(src):
     s = src.strip()
-    if re.search(r"\bdo\b", s):
-        raise BadSyntax("do is not a signature boundary")
+    if re.search(r"\bas\b", s):
+        raise BadSyntax("as is not a signature boundary")
     m = re.match(r"^(fnc|routine)\s+([A-Za-z_][A-Za-z0-9_]*)\s*\([^)]*\)\s*->\s*(.*?)\s*;\s*$", s, re.S)
     if not m:
         raise BadSyntax("bad signature")
     return (m.group(2), fn_type(m.group(3)))
 
 class Oracle(unittest.TestCase):
-    def test_optional_do_same_structure(self):
+    def test_optional_as_same_structure(self):
         a = definition("fnc identity(int x) -> int\nreturn x\nend")
-        b = definition("fnc identity(int x) -> int do return x; end")
+        b = definition("fnc identity(int x) -> int as return x; end")
         self.assertEqual(a, b)
 
     def test_compact_if_same_structure(self):
         a = definition("fnc f(int x) -> int\nif x > 0 then return 1 else return 0 fi\nend")
-        b = definition("fnc f(int x) -> int do if x > 0 then return 1; else return 0; fi end")
+        b = definition("fnc f(int x) -> int as if x > 0 then return 1; else return 0; fi end")
         self.assertEqual(a, b)
 
     def test_right_associative_function_type(self):
@@ -166,7 +166,7 @@ class Oracle(unittest.TestCase):
         self.assertEqual(fn_type("() => void"), ("fn", (), ("name", "void")))
 
     def test_compact_higher_order_definition(self):
-        got = definition("fnc callback() -> () => void do return factory(); end")
+        got = definition("fnc callback() -> () => void as return factory(); end")
         self.assertEqual(got[2], ("fn", (), ("name", "void")))
 
 
@@ -176,13 +176,19 @@ class Oracle(unittest.TestCase):
 
     def test_misplaced_do_rejected(self):
         with self.assertRaises(BadSyntax):
-            definition("fnc bad() -> do return 1; end")
+            definition("fnc bad() -> as return 1; end")
 
     def test_missing_arrow_rejected(self):
         with self.assertRaises(BadSyntax):
-            definition("fnc bad() int do return 1; end")
+            definition("fnc bad() int as return 1; end")
 
-    def test_same_line_without_do_rejected(self):
+    def test_retired_callable_do_separator_rejected(self):
+        with self.assertRaises(BadSyntax):
+            definition("fnc identity(int x) -> int do return x; end")
+        with self.assertRaises(BadSyntax):
+            definition("routine identity(int x) -> int do return x; end")
+
+    def test_same_line_without_as_rejected(self):
         with self.assertRaises(BadSyntax):
             definition("fnc bad() -> int return 1; end")
 
@@ -193,40 +199,40 @@ class Oracle(unittest.TestCase):
     def test_contract_signature_can_return_function(self):
         self.assertEqual(signature("fnc make() -> () => void;")[1], ("fn", (), ("name", "void")))
 
-    def test_contract_do_rejected(self):
+    def test_contract_as_body_rejected(self):
         with self.assertRaises(BadSyntax):
-            signature("fnc make() -> () => void do return cb; end")
+            signature("fnc make() -> () => void as return cb; end")
 
     def test_actor_and_static_rejected(self):
         for src in (
-            "actor fnc run() -> int do return 1; end",
-            "static fnc run() -> int do return 1; end",
+            "actor fnc run() -> int as return 1; end",
+            "static fnc run() -> int as return 1; end",
         ):
             with self.subTest(src=src), self.assertRaises(BadSyntax):
                 definition(src)
 
     def test_missing_fi_rejected(self):
         with self.assertRaises(BadSyntax):
-            definition("fnc f(int x) -> int do if x > 0 then return 1; end")
+            definition("fnc f(int x) -> int as if x > 0 then return 1; end")
 
     def test_comments_and_literals_do_not_own_boundaries(self):
         got = definition(
-            'fnc value() -> int /* ; do end */ do /* end */ return 7; end // do end'
+            'fnc value() -> int /* ; as do end */ as /* end */ return 7; end // as do end'
         )
         self.assertEqual(got[2], ("name", "int"))
         text = definition('fnc text() -> string do return "do end fi;"; end')
         self.assertEqual(text[2], ("name", "string"))
 
-    def test_semicolon_hidden_in_comment_is_not_signature_terminator(self):
-        got = definition("fnc value() -> int /* ; */ do return 7; end")
+    def test_semicolon_hidden_in_comment_is_not_as_boundary_terminator(self):
+        got = definition("fnc value() -> int /* ; */ as return 7; end")
         self.assertEqual(got[2], ("name", "int"))
 
-    def test_next_line_do_belongs_to_body_not_header(self):
+    def test_next_line_do_belongs_to_body_not_as_header(self):
         got = definition("fnc consume() -> void\ndo select token\nend")
         self.assertEqual(got[3][0], "do")
 
-    def test_compact_routine_uses_same_boundary_rules(self):
-        got = definition("routine identity(int x) -> int do return x; end")
+    def test_compact_routine_as_uses_same_boundary_rules(self):
+        got = definition("routine identity(int x) -> int as return x; end")
         self.assertEqual(got[0], "routine")
         self.assertEqual(got[2], ("name", "int"))
 
@@ -236,10 +242,10 @@ class Oracle(unittest.TestCase):
         digest = hashlib.sha1(
             b"blob " + str(len(data)).encode("ascii") + b"\0" + data
         ).hexdigest()
-        self.assertEqual(digest, "5d9384b6d2acfd6d21a805315fed4bd7518022b1")
+        self.assertEqual(digest, "c91a244cb99c1aaa74b3abadf9b99d8e1f3aea86")
         text = data.decode("utf-8")
-        self.assertIn("fnc callback() -> () => void do", text)
-        self.assertIn("fnc text() -> string /* ; do end */ do", text)
+        self.assertIn("fnc callback() -> () => void as", text)
+        self.assertIn("fnc text() -> string /* ; as do end */ as", text)
 
 
 
