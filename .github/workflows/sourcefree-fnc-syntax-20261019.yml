@@ -6,6 +6,7 @@ on:
   pull_request:
     paths:
       - tools/sourcefree_fnc_syntax_20261019.py
+      - tools/sourcefree_fnc_roundtrip_20261019.ores
       - .github/workflows/sourcefree-fnc-syntax-20261019.yml
 
 permissions:
