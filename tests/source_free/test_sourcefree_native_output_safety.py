@@ -82,6 +82,31 @@ with tempfile.TemporaryDirectory(prefix='source-free-native-output-') as d:
 
     fifo=root/'untrusted.fifo'
     os.mkfifo(fifo,mode=0o600)
+    # An old-style Bash redirection blocks on the FIFO *before* the
+    # invoked command/timeout has even started. Prove this is a real hazard.
+    blocked=False
+    try:
+        subprocess.run(['/usr/bin/bash','--noprofile','--norc','-c',
+                        'set -C; echo unsafe > "$1"','sourcefree',str(fifo)],
+                       capture_output=True,text=True,timeout=0.4)
+    except subprocess.TimeoutExpired:
+        blocked=True
+    passed(blocked,'noclobber still blocks before timeout on existing FIFO')
+
+    fd=os.open(root,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        try:
+            other=os.open('untrusted.fifo',
+                          os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,
+                          0o600,dir_fd=fd)
+            os.close(other)
+            refused=False
+        except FileExistsError:
+            refused=True
+    finally:
+        os.close(fd)
+    passed(refused,'anchored exclusive open refuses FIFO without blocking')
+
     fd=os.open(fifo,flags)
     try:
         passed(not stat.S_ISREG(os.fstat(fd).st_mode),
@@ -96,4 +121,4 @@ with tempfile.TemporaryDirectory(prefix='source-free-native-output-') as d:
                for parent in unsafe.parents),
            'path-ancestor lstat rejects symlinked parent before file open')
 
-print(f"SOURCE_FREE_NATIVE_OUTPUT_{count}_OF_9_PASSED")
+print(f"SOURCE_FREE_NATIVE_OUTPUT_{count}_OF_11_PASSED")
