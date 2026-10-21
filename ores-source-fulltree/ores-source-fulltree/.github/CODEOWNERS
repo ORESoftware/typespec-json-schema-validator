@@ -1,0 +1,20 @@
+# Critical build and CI ownership.
+# Enforcement requires repository branch/ruleset policy to require CODEOWNER review.
+/.github/ @ORESoftware
+/scripts/ @ORESoftware
+/CMakeLists.txt @ORESoftware
+
+# Security review for all changes that can authorize private-source exports.
+/.github/CODEOWNERS @ORESoftware
+/.github/workflows/* @ORESoftware
+/.github/private-ci-approved-repositories.txt @ORESoftware
+/.github/private-ci-carrier-contracts.json @ORESoftware
+/docs/security/CI_PRIVATE_SOURCE_MIRRORING.md @ORESoftware
+/scripts/run-in-private-ci-destination.sh @ORESoftware
+/scripts/publish-private-ci-source.py @ORESoftware
+/scripts/publish-private-ci-source-v3.py @ORESoftware
+/scripts/test-publish-private-ci-source-v3.py @ORESoftware
+/scripts/test-private-ci-destination.sh @ORESoftware
+/scripts/test-publish-private-ci-source.py @ORESoftware
+/scripts/audit-private-ci-governance.py @ORESoftware
+/scripts/test-audit-private-ci-governance.py @ORESoftware
