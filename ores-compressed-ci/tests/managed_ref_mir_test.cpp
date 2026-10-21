@@ -76,6 +76,8 @@ int main() {
         detached.origin = ManagedRefOrigin::GuestInteger;
         detached.access = ManagedRefAccess::Write;
         detached.mutable_loan = true;
+        require(detached.origin == ManagedRefOrigin::GuestInteger &&
+                detached.access == ManagedRefAccess::Write && detached.mutable_loan);
         require(verify_actor_compressed32(evidence).access() == ManagedRefAccess::Read);
     }
     static_assert(!std::is_default_constructible<ActorRefOwnershipEvidence>::value,
