@@ -73,13 +73,11 @@ int main() {
     {
         const auto graph = loan_graph(false);
         const auto c = callback(READ);
-        const auto evidence =
-            ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        const auto claims =
+            ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
                 graph, 1, "state.root", c, FunctionEffects{READ},
                 ManagedRefAccess::Read, REGION, true);
-        CHECK(verify_actor_compressed32(evidence).access()
-              == ManagedRefAccess::Read);
-        const auto claims = evidence.claims();
+        CHECK(claims.access == ManagedRefAccess::Read);
         CHECK(claims.origin == ManagedRefOrigin::ActorOwned);
         CHECK(claims.escape == ManagedRefEscape::ActorLocal);
         CHECK(claims.inside_actor_critical_state_loan);
@@ -90,20 +88,19 @@ int main() {
     {
         const auto graph = loan_graph(true);
         const auto c = callback(READ | WRITE);
-        const auto evidence =
-            ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        const auto claims =
+            ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
                 graph, 1, "state.root", c, FunctionEffects{READ | WRITE},
                 ManagedRefAccess::Write, REGION, true);
-        CHECK(verify_actor_compressed32(evidence).access()
-              == ManagedRefAccess::Write);
-        CHECK(evidence.claims().mutable_loan);
+        CHECK(claims.access == ManagedRefAccess::Write);
+        CHECK(claims.mutable_loan);
     }
 
     // A shared read loan cannot be upgraded into compact write authority.
     rejects([&] {
         const auto graph = loan_graph(false);
         const auto c = callback(READ | WRITE);
-        (void)ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        (void)ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
             graph, 1, "state.root", c, FunctionEffects{READ | WRITE},
             ManagedRefAccess::Write, REGION, true);
     });
@@ -112,7 +109,7 @@ int main() {
     rejects([&] {
         const auto graph = no_loan_graph();
         const auto c = callback(READ);
-        (void)ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        (void)ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
             graph, 1, "state.root", c, FunctionEffects{READ},
             ManagedRefAccess::Read, REGION, true);
     });
@@ -122,7 +119,7 @@ int main() {
         const auto graph = loan_graph(false);
         auto c = callback(READ);
         c.escapes = true;
-        (void)ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        (void)ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
             graph, 1, "state.root", c, FunctionEffects{READ},
             ManagedRefAccess::Read, REGION, true);
     });
@@ -133,7 +130,7 @@ int main() {
         const auto graph = loan_graph(false);
         auto c = callback(READ | SUSPEND);
         c.continuation_generation_fenced = true;
-        (void)ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        (void)ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
             graph, 1, "state.root", c, FunctionEffects{READ | SUSPEND},
             ManagedRefAccess::Read, REGION, true);
     });
@@ -142,7 +139,7 @@ int main() {
     rejects([&] {
         const auto graph = loan_graph(false);
         const auto c = callback(READ | FFI);
-        (void)ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        (void)ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
             graph, 1, "state.root", c, FunctionEffects{READ | FFI},
             ManagedRefAccess::Read, REGION, true);
     });
@@ -151,14 +148,14 @@ int main() {
     rejects([&] {
         const auto graph = loan_graph(false);
         const auto c = callback(READ);
-        (void)ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        (void)ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
             graph, 1, "state.root", c, FunctionEffects{READ},
             ManagedRefAccess::Read, 0, true);
     });
     rejects([&] {
         const auto graph = loan_graph(false);
         const auto c = callback(READ);
-        (void)ActorRefOwnershipVerifier::issue_from_verified_state_loan(
+        (void)ActorRefOwnershipVerifier::derive_verified_state_loan_claims(
             graph, 1, "state.root", c, FunctionEffects{READ},
             ManagedRefAccess::Read, REGION, false);
     });

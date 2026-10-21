@@ -5,6 +5,10 @@
 #include <limits>
 #include <stdexcept>
 
+namespace oreslang {
+class SourceOwnershipChecker;
+}
+
 namespace oreslang::backend {
 
 /*
@@ -50,22 +54,22 @@ struct ActorManagedRefMir final {
 };
 
 /*
- * Non-forgeable compiler authority. A caller may describe arbitrary MIR,
- * but may NOT authorize it. Production evidence is issued only by
- * ActorRefOwnershipVerifier after it re-runs the ownership-CFG and sealed
- * critical-state admission checks, then derives this snapshot itself.
+ * Non-forgeable compiler authority. A caller may describe or validate
+ * arbitrary MIR claims, but may NOT authorize them. Production evidence is
+ * reserved for SourceOwnershipChecker after it derives a real source/HIR
+ * actor-state loan from the compiler's ownership analysis. The lower-level
+ * ActorRefOwnershipVerifier policy helper deliberately cannot mint evidence.
  * Synthetic evidence remains test-only behind an isolated compile definition.
  *
- * This closes the compiler-internal authorization boundary. The native source
- * grammar still lacks general Ref<T> -> MIR lowering, so this MUST NOT be
- * advertised as arbitrary guest reference support.
+ * The native source grammar still lacks general Ref<T> -> MIR lowering, so
+ * production source-to-compact32 authority remains disabled until that real
+ * frontend path exists.
  */
-class ActorRefOwnershipVerifier;
 class ActorRefOwnershipEvidence final {
     ActorManagedRefMir claims_;
     explicit ActorRefOwnershipEvidence(const ActorManagedRefMir& claims)
         : claims_(claims) {}
-    friend class ActorRefOwnershipVerifier;
+    friend class ::oreslang::SourceOwnershipChecker;
 #ifdef ORESLANG_COMPRESSED32_TEST_PROVENANCE
     friend ActorRefOwnershipEvidence make_test_actor_ref_evidence(
         const ActorManagedRefMir&);
@@ -96,9 +100,8 @@ public:
     static constexpr std::uint32_t alignment_bytes = 8;
 };
 
-inline VerifiedActorCompressed32 verify_actor_compressed32(
-        const ActorRefOwnershipEvidence& evidence) {
-    const auto& source = evidence.claims();
+inline ManagedRefAccess validate_actor_compressed32_claims(
+        const ActorManagedRefMir& source) {
     if (source.access != ManagedRefAccess::Read &&
             source.access != ManagedRefAccess::Write)
         throw std::invalid_argument("unsupported managed reference access mode");
@@ -130,7 +133,13 @@ inline VerifiedActorCompressed32 verify_actor_compressed32(
     if (source.recycle != ManagedRefRecycle::QuarantinePublished)
         throw std::invalid_argument(
             "compressed32 requires published-slot quarantine until proof-based recycling exists");
-    return VerifiedActorCompressed32(source.access);
+    return source.access;
+}
+
+inline VerifiedActorCompressed32 verify_actor_compressed32(
+        const ActorRefOwnershipEvidence& evidence) {
+    const auto source = evidence.claims();
+    return VerifiedActorCompressed32(validate_actor_compressed32_claims(source));
 }
 
 } // namespace oreslang::backend

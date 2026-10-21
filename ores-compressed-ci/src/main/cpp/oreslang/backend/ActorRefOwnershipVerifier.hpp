@@ -12,12 +12,14 @@
 namespace oreslang::backend {
 
 /*
- * Production compiler authority for compact actor-local references.
+ * Compiler policy helper for compact actor-local references.
  *
- * Callers do not submit ActorManagedRefMir claims. Instead this verifier
- * consumes the compiler's ownership CFG and the sealed critical-state
- * callback contract, re-runs both analyses, and derives the exact MIR claims
- * that are permitted to cross into compressed32 codegen.
+ * This re-runs an ownership CFG and the sealed critical-state callback
+ * contract, then derives candidate MIR claims. It deliberately returns plain
+ * ActorManagedRefMir data rather than ActorRefOwnershipEvidence: synthetic
+ * graphs/callbacks are useful for policy tests but are not production source
+ * authority. Only SourceOwnershipChecker may eventually wrap claims derived
+ * from real source/HIR state loans into evidence.
  *
  * This is intentionally narrower than the general handle_state contract:
  * compact references cannot survive suspension or FFI in this milestone.
@@ -25,7 +27,7 @@ namespace oreslang::backend {
  */
 class ActorRefOwnershipVerifier final {
 public:
-    static ActorRefOwnershipEvidence issue_from_verified_state_loan(
+    static ActorManagedRefMir derive_verified_state_loan_claims(
             const ownership::Graph& graph,
             std::size_t loan_block,
             const std::string& place,
@@ -104,11 +106,10 @@ public:
         claims.allocation_is_actor_private = true;
         claims.native64_target = native64_target;
 
-        ActorRefOwnershipEvidence evidence(claims);
-        // Keep the final backend admission check authoritative as invariants
-        // evolve; the issuer cannot accidentally bypass a newer MIR rule.
-        (void)verify_actor_compressed32(evidence);
-        return evidence;
+        // Candidate claims must satisfy the same invariant set as eventual
+        // evidence, but successful validation does not itself grant authority.
+        (void)validate_actor_compressed32_claims(claims);
+        return claims;
     }
 };
 
