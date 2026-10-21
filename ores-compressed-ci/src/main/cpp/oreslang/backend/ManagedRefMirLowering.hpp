@@ -53,7 +53,10 @@ inline llvm::FunctionCallee actor_checked_runtime_decl(
         if (!found || found->getFunctionType() != signature ||
                 !found->isDeclaration() ||
                 found->getCallingConv() != llvm::CallingConv::C ||
-                !found->hasFnAttribute(marker))
+                !found->hasFnAttribute(marker) ||
+                found->getAttributes().getFnAttrs().getNumAttributes() != 1 ||
+                found->getAttributes().getRetAttrs().hasAttributes() ||
+                found->getAttributes().hasAttrSomewhere(llvm::Attribute::NonNull))
             throw std::invalid_argument("compact32 runtime declaration conflict");
         return llvm::FunctionCallee(signature, found);
     }
