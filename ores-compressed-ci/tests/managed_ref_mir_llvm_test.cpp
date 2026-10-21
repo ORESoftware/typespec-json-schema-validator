@@ -34,7 +34,6 @@ static ActorManagedRefMir checked_mir(ManagedRefAccess access) {
     mir.inside_actor_critical_state_loan = true;
     mir.mutable_loan = access == ManagedRefAccess::Write;
     mir.allocation_is_actor_private = true;
-    mir.typed_provenance_verified = true;
     mir.native64_target = true;
     return mir;
 }
@@ -63,7 +62,7 @@ int main(int argc, char** argv) {
     };
     llvm::Value* compact32 = &*args++;
     llvm::IRBuilder<> ir(llvm::BasicBlock::Create(context, "entry", read));
-    const auto read_plan = verify_actor_compressed32(checked_mir(ManagedRefAccess::Read));
+    const auto read_plan = verify_actor_compressed32(make_test_actor_ref_evidence(checked_mir(ManagedRefAccess::Read)));
     llvm::Value* value = lower_actor_compact_i64_read(
         ir, read_plan, actor_context, compact32, 0);
     ir.CreateRet(value);
@@ -83,7 +82,7 @@ int main(int argc, char** argv) {
     auto* generation = &*args++;
     auto* next_value = &*args++;
     llvm::IRBuilder<> mutable_ir(llvm::BasicBlock::Create(context, "entry", write));
-    const auto write_plan = verify_actor_compressed32(checked_mir(ManagedRefAccess::Write));
+    const auto write_plan = verify_actor_compressed32(make_test_actor_ref_evidence(checked_mir(ManagedRefAccess::Write)));
     auto* stored = lower_actor_compact_i64_publish(
         mutable_ir, write_plan, mutable_context, index, generation);
     lower_actor_compact_i64_write(

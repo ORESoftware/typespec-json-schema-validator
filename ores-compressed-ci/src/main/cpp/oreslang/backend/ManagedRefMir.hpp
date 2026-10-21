@@ -46,16 +46,47 @@ struct ActorManagedRefMir final {
     bool loan_crosses_await = false;
     bool untrusted_actor_has_native_ffi = false;
     bool allocation_is_actor_private = false;
-    bool typed_provenance_verified = false;
     bool native64_target = false;
 };
+
+/*
+ * Non-forgeable compiler authority. A caller may describe arbitrary MIR,
+ * but may NOT authorize it. Only the future actor-state ownership verifier
+ * can issue evidence. It captures the verified claims by value, preventing
+ * a caller from mutating MIR after admission.
+ *
+ * The existing frontend does not yet produce this evidence; production
+ * source-to-compact32 lowering therefore remains disabled.
+ */
+class ActorRefOwnershipVerifier;
+class ActorRefOwnershipEvidence final {
+    ActorManagedRefMir claims_;
+    explicit ActorRefOwnershipEvidence(const ActorManagedRefMir& claims)
+        : claims_(claims) {}
+    friend class ActorRefOwnershipVerifier;
+#ifdef ORESLANG_COMPRESSED32_TEST_PROVENANCE
+    friend ActorRefOwnershipEvidence make_test_actor_ref_evidence(
+        const ActorManagedRefMir&);
+#endif
+public:
+    ActorRefOwnershipEvidence() = delete;
+    const ActorManagedRefMir& claims() const noexcept { return claims_; }
+};
+
+#ifdef ORESLANG_COMPRESSED32_TEST_PROVENANCE
+/* Only compiled into isolated MIR/LLVM regression binaries, not the compiler. */
+inline ActorRefOwnershipEvidence make_test_actor_ref_evidence(
+        const ActorManagedRefMir& claims) {
+    return ActorRefOwnershipEvidence(claims);
+}
+#endif
 
 class VerifiedActorCompressed32 final {
     explicit constexpr VerifiedActorCompressed32(ManagedRefAccess access)
         : access_(access) {}
     ManagedRefAccess access_;
     friend VerifiedActorCompressed32 verify_actor_compressed32(
-        const ActorManagedRefMir&);
+        const ActorRefOwnershipEvidence&);
 public:
     ManagedRefAccess access() const noexcept { return access_; }
     static constexpr std::uint32_t storage_bytes = 4;
@@ -63,13 +94,13 @@ public:
 };
 
 inline VerifiedActorCompressed32 verify_actor_compressed32(
-        const ActorManagedRefMir& source) {
+        const ActorRefOwnershipEvidence& evidence) {
+    const auto& source = evidence.claims();
     if (source.access != ManagedRefAccess::Read &&
             source.access != ManagedRefAccess::Write)
         throw std::invalid_argument("unsupported managed reference access mode");
     if (source.origin != ManagedRefOrigin::ActorOwned ||
-            !source.allocation_is_actor_private ||
-            !source.typed_provenance_verified)
+            !source.allocation_is_actor_private)
         throw std::invalid_argument(
             "compressed32 requires verified actor-owned reference provenance");
     if (source.escape != ManagedRefEscape::ActorLocal ||

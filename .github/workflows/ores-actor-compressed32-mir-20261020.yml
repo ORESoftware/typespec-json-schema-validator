@@ -23,8 +23,9 @@ jobs:
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.h)" = "3ad557042f0351a3e6dd0b36e4e6e649f237edcf"
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.c)" = "b88a7c81eb81ae9bc370629f2220357ea82dc498"
           test "$(git hash-object ores-compressed-ci/tests/native_actor_compact_arena_test.cpp)" = "1c64f37839f3af076736b3212be42e9f4d839fe3"
-          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "dd7466221804ded1c3560902baf449d8910db43c"
-          test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_test.cpp)" = "e46ac3b37158424db2b5d858d40b16dbd31989c6"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "9fd569063450c36931379871d1d5c9129cccca75"
+          test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_test.cpp)" = "1afcab36198779512f30cbb48336da5660327e7a"
+          test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_production_gate_test.cpp)" = "63ef09eddafac33b0b5c428e6c41852817220e0e"
       - name: Build and run actual actor C slab and typed MIR admission tests
         shell: bash
         env:
@@ -51,7 +52,13 @@ jobs:
             /tmp/actorarena.o -o /tmp/actorarena-contract
           /tmp/actorarena-contract
           "$CXX" -std=c++17 "${opts[@]}" \
+            -DORESLANG_COMPRESSED32_TEST_PROVENANCE=1 \
             -Iores-compressed-ci/src/main/cpp \
             ores-compressed-ci/tests/managed_ref_mir_test.cpp \
             -o /tmp/typed-mir-contract
           /tmp/typed-mir-contract
+          "$CXX" -std=c++17 "${opts[@]}" \
+            -Iores-compressed-ci/src/main/cpp \
+            ores-compressed-ci/tests/managed_ref_mir_production_gate_test.cpp \
+            -o /tmp/ores-compact32-production-provenance-gate
+          /tmp/ores-compact32-production-provenance-gate
