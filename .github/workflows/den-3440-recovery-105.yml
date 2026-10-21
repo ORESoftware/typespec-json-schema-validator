@@ -1,0 +1,71 @@
+name: DEN-3440 recovery mirror
+
+on:
+  push:
+    branches: [mirror/den-3440-recovery-105-7c42ec5]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact mirror head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Verify exact source blobs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git hash-object den3440-harness/src/admission.rs)" = "b08e0f79386acee5ebcebe58b60bc69c5a2bd25c"
+          test "$(git hash-object den3440-harness/src/admission/github_api.rs)" = "a21956af279f61cb28d71324219d25023c9e2cca"
+          test "$(git hash-object den3440-harness/src/recovery.rs)" = "978023caa68040e4cbb6331e3f480d9b3c5d55de"
+          test "$(git hash-object den3440-harness/source/config.rs)" = "bd5319d9e8ac85de2481d1763452738e5f6d09d5"
+          test "$(git hash-object den3440-harness/source/db.rs)" = "9817834f43fa75fb4b2a02b59c5ec970327872c3"
+          test "$(git hash-object den3440-harness/source/webhooks.rs)" = "16a343beeab0ab309ad53148869262ad1654c199"
+          test "$(git hash-object den3440-harness/source/main.rs)" = "3cf057a762a25ffa8249e7fcc377e53ea0246567"
+      - name: Install pinned Rust 1.97.0
+        uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: '1.97.0'
+          components: rustfmt
+      - name: Format exact Rust slice
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustfmt --edition 2021 --check             den3440-harness/src/admission.rs             den3440-harness/src/admission/github_api.rs             den3440-harness/src/recovery.rs             den3440-harness/source/config.rs             den3440-harness/source/db.rs             den3440-harness/source/webhooks.rs
+      - name: Compile and test adapter plus recovery controller
+        shell: bash
+        working-directory: den3440-harness
+        run: |
+          set -euo pipefail
+          cargo generate-lockfile
+          RUSTFLAGS="-D warnings" cargo test --locked --features admission-api-harness --lib -- --nocapture
+      - name: Verify production observe-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          recovery_call="$(grep -nF 'maybe_handle_github_recovery(&state, &event, &payload).await' den3440-harness/source/webhooks.rs | cut -d: -f1)"
+          ordinary_dedupe="$(grep -nF 'let fresh = db::record_webhook_delivery(' den3440-harness/source/webhooks.rs | head -1 | cut -d: -f1)"
+          test -n "$recovery_call"
+          test -n "$ordinary_dedupe"
+          test "$recovery_call" -lt "$ordinary_dedupe"
+
+          grep -Fq 'github_recovery_token: first_env(&["BUILD_SERVER_GH_RECOVERY_TOKEN"])' den3440-harness/source/config.rs
+          grep -Fq 'pub async fn record_recovery_receipt_strict' den3440-harness/source/db.rs
+          grep -Fq '"dispatch": false' den3440-harness/source/webhooks.rs
+          grep -Fq 'mod recovery;' den3440-harness/source/main.rs
+
+          for forbidden in             'enqueue_build'             'submit_from_nats'             'std::process'             'Command::'             'idempotency_finish'; do
+            if grep -Fq "$forbidden" den3440-harness/src/recovery.rs; then
+              echo "forbidden execution primitive in recovery controller: $forbidden" >&2
+              exit 1
+            fi
+          done
+
+          echo 'Exact mirrored controller is fail-closed and observe-only.'
