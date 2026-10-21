@@ -1,0 +1,58 @@
+name: Native DOP multi-layout formal geometry and coherence
+on:
+  pull_request:
+    paths:
+      - 'src/main/cpp/oreslang/runtime/DopLayout.hpp'
+      - 'tests/dop_multi_layout_formal_test.cpp'
+      - '.github/workflows/dop-multi-layout-formal.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/main/cpp/oreslang/runtime/DopLayout.hpp'
+      - 'tests/dop_multi_layout_formal_test.cpp'
+      - '.github/workflows/dop-multi-layout-formal.yml'
+permissions:
+  contents: read
+jobs:
+  native-layout-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: g++
+            sanitizer: false
+          - compiler: clang++
+            sanitizer: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Record exact evaluated source
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}
+      - name: Compile actual native DOP geometry header with strict warnings
+        shell: bash
+        env:
+          CXX: ${{ matrix.compiler }}
+          SANITIZER: ${{ matrix.sanitizer }}
+        run: |
+          set -euo pipefail
+          if [[ "$SANITIZER" = true ]]; then
+            "$CXX" -std=c++20 -Wall -Wextra -Wpedantic -Werror -O1 -g -UNDEBUG \
+              -fsanitize=address,undefined -fno-omit-frame-pointer \
+              -I src/main/cpp tests/dop_multi_layout_formal_test.cpp \
+              -o /tmp/ores-dop-multi-layout-proof
+          else
+            "$CXX" -std=c++20 -Wall -Wextra -Wpedantic -Werror -O2 -UNDEBUG \
+              -I src/main/cpp tests/dop_multi_layout_formal_test.cpp \
+              -o /tmp/ores-dop-multi-layout-proof
+          fi
+      - name: Run seven residency sets, 216 schedules and negative mutant
+        run: |
+          set -euo pipefail
+          /tmp/ores-dop-multi-layout-proof | grep -Fx \
+            'NATIVE_DOP_MULTI_LAYOUT_FORMAL_PASS trials=216 subsets=7 negative=stale-write,forged-epoch,partial-write,bad-tile,absent'

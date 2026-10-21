@@ -1,0 +1,41 @@
+name: Native actor formal safety models
+on:
+  pull_request:
+    paths:
+      - 'scripts/verify_actor_carrier_exclusivity.py'
+      - 'scripts/verify_actor_dispatch_tickets.py'
+      - 'src/main/cpp/oreslang/runtime/NativeActorScheduler.c'
+      - 'src/main/cpp/oreslang/runtime/NativeActorScheduler.h'
+      - 'src/main/cpp/oreslang/runtime/NativeExecutionAuthority.h'
+      - '.github/workflows/actor-formal-models.yml'
+      - 'formal/README.md'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/verify_actor_carrier_exclusivity.py'
+      - 'scripts/verify_actor_dispatch_tickets.py'
+      - 'src/main/cpp/oreslang/runtime/NativeActorScheduler.c'
+      - 'src/main/cpp/oreslang/runtime/NativeActorScheduler.h'
+      - 'src/main/cpp/oreslang/runtime/NativeExecutionAuthority.h'
+      - '.github/workflows/actor-formal-models.yml'
+permissions:
+  contents: read
+jobs:
+  bounded-actor-safety:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Show exact evaluated revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -z "$(git status --porcelain)"
+          git rev-parse HEAD
+          git rev-parse HEAD^{tree}
+      - name: Enumerate physical-carrier exclusive admission states (plus negative mutant)
+        run: python3 -I scripts/verify_actor_carrier_exclusivity.py
+      - name: Enumerate dispatch-ticket stale-release states (plus negative mutant)
+        run: python3 -I scripts/verify_actor_dispatch_tickets.py

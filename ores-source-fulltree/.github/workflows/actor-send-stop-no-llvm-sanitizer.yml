@@ -1,0 +1,62 @@
+name: Native actor send-stop exact delivery (no LLVM dependency)
+on:
+  pull_request:
+    paths:
+      - 'src/main/cpp/oreslang/runtime/NativeActorScheduler.c'
+      - 'src/main/cpp/oreslang/runtime/NativeActorScheduler.h'
+      - 'src/main/cpp/oreslang/runtime/NativeExecutionAuthority.h'
+      - 'tests/native_actor_send_stop_race_test.c'
+      - 'tests/test_barrier.h'
+      - '.github/workflows/actor-send-stop-no-llvm-sanitizer.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-send-stop:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: gcc
+            cc: gcc
+            flags: '-O2 -UNDEBUG'
+          - flavor: clang-asan-ubsan
+            cc: clang
+            flags: '-O1 -g -UNDEBUG -fsanitize=address,undefined -fno-omit-frame-pointer'
+    steps:
+      - name: Checkout evaluated PR tree with no persisted credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Record exact Git tree and reject dirty checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "EVALUATED_SOURCE_COMMIT=$(git rev-parse HEAD)"
+          echo "EVALUATED_SOURCE_TREE=$(git rev-parse HEAD^{tree})"
+          test -z "$(git status --porcelain)"
+      - name: Compile real actor scheduler + race harness
+        shell: bash
+        env:
+          CC: ${{ matrix.cc }}
+          FLAGS: ${{ matrix.flags }}
+        run: |
+          set -euo pipefail
+          read -r -a options <<< "$FLAGS"
+          "$CC" -std=c11 -pthread -Wall -Wextra -Wpedantic -Werror "${options[@]}" \
+            -I src/main/cpp -I tests \
+            tests/native_actor_send_stop_race_test.c \
+            src/main/cpp/oreslang/runtime/NativeActorScheduler.c \
+            -o /tmp/oreslang-native-send-stop-race
+      - name: Repeated exact-payload race and domain-capability probes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            echo "SEND_STOP_ATTEMPT=$attempt"
+            timeout 45s /tmp/oreslang-native-send-stop-race | grep -Fx NATIVE_SEND_STOP_RACE_PASS
+          done
+          echo "NATIVE_SEND_STOP_EXACT_TREE_PASS attempts=3"

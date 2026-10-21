@@ -1,0 +1,45 @@
+name: Canonical scalar generics native LLVM
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-generic-llvm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout LLVM backend without persisted credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Checkout immutable canonical common-source mirror from THIS private repo
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ github.repository }}
+          ref: 1c0c46aa81ed18a4e060255adba8508963d5cead
+          path: _canonical_common
+          persist-credentials: false
+      - name: Prove canonical common-source Git tree is complete and clean
+        run: |
+          set -euo pipefail
+          test "$(git -C _canonical_common rev-parse HEAD^{tree})" = "858c37d48a4c3a886260b26320bb0dd931b228ab"
+          test -z "$(git -C _canonical_common status --porcelain=v1 --untracked-files=all)"
+          python3 _canonical_common/contracts/v1/generic-scalar/verify.py --validate-only
+      - name: Install native LLVM toolchain
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake clang llvm-dev python3
+      - name: Verify canonical consumer failure handling
+        run: python3 -m unittest discover -s tests -p 'test_canonical_generic_scalar_consumer.py' -v
+      - name: Verify actual pinned worktree against index bypasses
+        run: python3 -B tests/test_pinned_generic_worktree.py -v
+      - name: Build real Oreslang native LLVM compiler
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+          cmake --build build --target oreslang-llvmc --parallel 2
+      - name: Execute 20 canonical LLVM source to IR to Clang to native guests
+        run: |
+          python3 scripts/verify_canonical_generic_scalar.py --common-source-root _canonical_common --compiler ./build/oreslang-llvmc --clang "$(command -v clang)"

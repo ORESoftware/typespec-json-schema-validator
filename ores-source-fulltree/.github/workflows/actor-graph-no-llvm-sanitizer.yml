@@ -1,0 +1,63 @@
+name: Native actor graph heap deterministic safety (no LLVM dependency)
+on:
+  pull_request:
+    paths:
+      - 'src/main/cpp/oreslang/runtime/ActorOwnedGraphHeap.hpp'
+      - 'src/main/cpp/oreslang/runtime/ActorHeapRetirementProof.hpp'
+      - 'tests/actor_owned_graph_heap_test.cpp'
+      - 'src/main/cpp/oreslang/runtime/HungryCarrier.*'
+      - 'src/main/cpp/oreslang/runtime/ParkingSignal.*'
+      - '.github/workflows/actor-graph-no-llvm-sanitizer.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-graph:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: gcc
+            cxx: g++
+            flags: '-O2 -UNDEBUG'
+          - flavor: clang-asan-ubsan
+            cxx: clang++
+            flags: '-O1 -g -UNDEBUG -fsanitize=address,undefined -fno-omit-frame-pointer'
+    steps:
+      - name: Checkout evaluated PR merge tree without persistent credentials
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Pin Git tree actually compiled
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          echo "EVALUATED_SOURCE_COMMIT=$(git rev-parse HEAD)"
+          echo "EVALUATED_SOURCE_TREE=$(git rev-parse HEAD^{tree})"
+          test -z "$(git status --porcelain)"
+      - name: Compile native graph runtime test without LLVM toolchain
+        shell: bash
+        env:
+          CXX: ${{ matrix.cxx }}
+          FLAGS: ${{ matrix.flags }}
+        run: |
+          set -euo pipefail
+          read -r -a options <<< "$FLAGS"
+          "$CXX" -std=c++17 -pthread -Wall -Wextra -Wpedantic -Werror "${options[@]}" \
+            -I src/main/cpp \
+            tests/actor_owned_graph_heap_test.cpp \
+            src/main/cpp/oreslang/runtime/HungryCarrier.cpp \
+            src/main/cpp/oreslang/runtime/ParkingSignal.cpp \
+            -o /tmp/oreslang-native-graph-heap-test
+      - name: Execute retirement and graph-ID regressions three times
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            echo "NATIVE_GRAPH_ATTEMPT=$attempt"
+            timeout 45s /tmp/oreslang-native-graph-heap-test
+          done
+          echo "NATIVE_GRAPH_EXACT_TREE_PASS attempts=3"

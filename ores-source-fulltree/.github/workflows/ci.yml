@@ -1,0 +1,79 @@
+name: LLVM compiler and native execution
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llvm-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  llvm-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install LLVM toolchain and native linker
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake clang llvm-dev python3
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON
+      - name: Compile
+        run: cmake --build build --parallel 2
+      - name: Audit full CTest inventory before treating the suite as verified
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_ctest_manifest_gate.py -v
+          python3 tests/ctest_manifest_gate.py --build-dir build --min-tests 250
+      - name: Verify parser, IR and native execution
+        run: ctest --test-dir build --output-on-failure --timeout 240 --parallel 2
+      - name: Repeat actor stress and cancellation races
+        run: ctest --test-dir build -R hungry_carrier_async_bounded_cancel --repeat until-fail:12 --output-on-failure
+      - name: Repeat per-payload send-stop exactly-once races
+        run: ctest --test-dir build -R '^native_actor_send_stop_linearizable_race$' --repeat until-fail:12 --output-on-failure --timeout 30
+      - name: ASan and UBSan native actor memory and concurrency smoke
+        run: |
+          clang++ -std=c++17 -O1 -g -pthread -fno-omit-frame-pointer \
+            -fsanitize=address,undefined \
+            -I src/main/cpp \
+            tests/hungry_carrier_test.cpp \
+            src/main/cpp/oreslang/runtime/HungryCarrier.cpp \
+            src/main/cpp/oreslang/runtime/ParkingSignal.cpp \
+            -o build/hungry-carrier-sanitized
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1 \
+            ./build/hungry-carrier-sanitized
+
+      - name: Sanitized actor-owned generational graph heap
+        run: |
+          clang++ -std=c++17 -O1 -g \
+            -Wall -Wextra -Wpedantic -Werror -fno-omit-frame-pointer \
+            -fsanitize=address,undefined \
+            -I src/main/cpp \
+            tests/actor_owned_graph_heap_test.cpp \
+            src/main/cpp/oreslang/runtime/HungryCarrier.cpp \
+            src/main/cpp/oreslang/runtime/ParkingSignal.cpp \
+            -pthread \
+            -o build/actor-owned-graph-heap-sanitized
+          ASAN_OPTIONS=detect_leaks=1:halt_on_error=1 \
+          UBSAN_OPTIONS=halt_on_error=1 \
+            ./build/actor-owned-graph-heap-sanitized
+
+      - name: ThreadSanitizer actor data-race stress
+        run: |
+          g++ -std=c++17 -O1 -g -pthread -fno-omit-frame-pointer \
+            -fPIE -pie -fsanitize=thread \
+            -I src/main/cpp \
+            tests/hungry_carrier_test.cpp \
+            src/main/cpp/oreslang/runtime/HungryCarrier.cpp \
+            src/main/cpp/oreslang/runtime/ParkingSignal.cpp \
+            -o build/hungry-carrier-tsan
+          TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1 \
+            ./build/hungry-carrier-tsan
