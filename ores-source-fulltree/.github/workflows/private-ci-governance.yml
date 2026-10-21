@@ -1,0 +1,54 @@
+name: Private CI governance
+on:
+  pull_request:
+    paths:
+      - '.github/CODEOWNERS'
+      - '.github/private-ci-approved-repositories.txt'
+      - '.github/private-ci-carrier-contracts.json'
+      - '.github/workflows/private-ci-governance.yml'
+      - 'docs/security/CI_PRIVATE_SOURCE_MIRRORING.md'
+      - 'scripts/audit-private-ci-governance.py'
+      - 'scripts/test-audit-private-ci-governance.py'
+      - 'scripts/publish-private-ci-source-v3.py'
+      - 'scripts/test-publish-private-ci-source-v3.py'
+      - 'scripts/run-in-private-ci-destination.sh'
+  push:
+    branches: [main]
+    paths:
+      - '.github/CODEOWNERS'
+      - '.github/private-ci-approved-repositories.txt'
+      - '.github/private-ci-carrier-contracts.json'
+      - '.github/workflows/private-ci-governance.yml'
+      - 'docs/security/CI_PRIVATE_SOURCE_MIRRORING.md'
+      - 'scripts/audit-private-ci-governance.py'
+      - 'scripts/test-audit-private-ci-governance.py'
+      - 'scripts/publish-private-ci-source-v3.py'
+      - 'scripts/test-publish-private-ci-source-v3.py'
+      - 'scripts/run-in-private-ci-destination.sh'
+permissions:
+  contents: read
+jobs:
+  private-ci-governance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Offline governance regression suite
+        run: python3 scripts/test-audit-private-ci-governance.py
+      - name: LLVM v3 private publisher regression suite
+        run: |
+          set -euo pipefail
+          bash -n scripts/run-in-private-ci-destination.sh
+          python3 -m py_compile scripts/publish-private-ci-source-v3.py scripts/test-publish-private-ci-source-v3.py
+          for attempt in 1 2 3; do
+            echo "LLVM private publisher pass ${attempt}/3"
+            python3 scripts/test-publish-private-ci-source-v3.py
+          done
+      - name: Fail-closed policy structure audit
+        run: python3 scripts/audit-private-ci-governance.py
+      - name: Scope
+        run: |
+          echo "This check validates policy structure only."
+          echo "It does not authorize source export or substitute for live protected-main verification."

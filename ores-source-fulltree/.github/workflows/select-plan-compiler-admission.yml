@@ -1,0 +1,10 @@
+name: SelectPlan compiler admission
+on: [pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y cmake clang llvm-dev python3
+      - run: cmake -S . -B build && cmake --build build --parallel 2
+      - run: python3 tests/native_select_plan_contract.py --compiler ./build/oreslang-llvmc --fixtures tests/fixtures

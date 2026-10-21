@@ -1,0 +1,28 @@
+name: LLVM NdArray writable-view admission (host reference)
+on:
+  pull_request:
+    paths:
+      - 'src/main/cpp/oreslang/runtime/NativeNdArrayViewAdmission.hpp'
+      - 'tests/native_ndarray_view_admission_test.cpp'
+      - 'CMakeLists.txt'
+      - '.github/workflows/native-ndarray-view-admission.yml'
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  host-view-admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: GCC and Clang checked native view admission
+        run: |
+          g++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -Isrc/main/cpp tests/native_ndarray_view_admission_test.cpp -o /tmp/ndarray-gcc
+          clang++ -std=c++17 -O2 -Wall -Wextra -Wpedantic -Werror -Isrc/main/cpp tests/native_ndarray_view_admission_test.cpp -o /tmp/ndarray-clang
+          /tmp/ndarray-gcc
+          /tmp/ndarray-clang
+      - name: Classify evidence
+        run: echo 'HOST_VIEW_PREFLIGHT_ONLY not owned buffer lifetime, compiler loan proof or tensor runtime parity'

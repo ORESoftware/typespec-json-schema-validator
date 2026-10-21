@@ -1,0 +1,37 @@
+name: Target ABI and DOP safety (x86-64 and ARM64)
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  target-abi:
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        compiler: [g++, clang++]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and execute exact ABI/DOP safety suites with ASan and UBSan
+        env:
+          CXX_BIN: ${{ matrix.compiler }}
+        run: bash scripts/verify-target-abi-dop.sh "$CXX_BIN"
+      - name: ThreadSanitizer read-loan quiescence regression
+        if: matrix.runner == 'ubuntu-24.04' && matrix.compiler == 'g++'
+        run: |
+          set -euo pipefail
+          tempdir="$(mktemp -d)"
+          trap 'rm -rf -- "$tempdir"' EXIT
+          g++ -std=c++17 -O1 -g -Wall -Wextra -Wpedantic -Werror \
+            -fsanitize=thread -fno-omit-frame-pointer -pthread -I src/main/cpp \
+            tests/dop_hostbuffer_concurrency_test.cpp -o "$tempdir/dop-tsan"
+          "$tempdir/dop-tsan"
+          g++ -std=c++17 -O1 -g -Wall -Wextra -Wpedantic -Werror \
+            -fsanitize=thread -fno-omit-frame-pointer -pthread -I src/main/cpp \
+            tests/gpu_buffer_fence_test.cpp -o "$tempdir/gpu-fence-tsan"
+          "$tempdir/gpu-fence-tsan"

@@ -1,0 +1,23 @@
+name: Native parameter presence v3 contract
+on:
+  pull_request:
+    paths:
+      - 'contracts/v3/**'
+      - 'src/main/cpp/oreslang/frontend/Parser.cpp'
+      - '.github/workflows/parameter-presence-v3-contract.yml'
+  push:
+    paths:
+      - 'contracts/v3/**'
+      - 'src/main/cpp/oreslang/frontend/Parser.cpp'
+      - '.github/workflows/parameter-presence-v3-contract.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run cross-backend reference contract
+        run: node contracts/v3/check_parameter_presence_v3.mjs

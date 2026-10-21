@@ -1,0 +1,27 @@
+name: Optional parameter contract oracle
+
+on:
+  pull_request:
+    paths:
+      - 'contracts/v1/OPTIONAL_PARAMETERS_V1.md'
+      - 'contracts/v1/optional-parameters-cases.json'
+      - 'contracts/v1/check_optional_parameters.py'
+      - 'contracts/v2/ANNOTATED_PARAMETER_DEFAULTS_V1.md'
+      - 'contracts/v2/check_annotated_defaults.py'
+      - 'contracts/v2/OPTION_FORMAL_OMISSION_V2.md'
+      - '.github/workflows/optional-parameter-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oracle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate optional parameter binding vectors
+        run: python3 contracts/v1/check_optional_parameters.py
+      - name: Check annotated defaults reference semantics
+        run: python3 contracts/v2/check_annotated_defaults.py
