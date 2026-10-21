@@ -1,6 +1,6 @@
-# source_commit=1034c2dbbf55fa4f166da67e7206770d2fc96d40
-# source_tree=a862f073babc19d84055fd4a9886b894ad158dca
-# file_count=870
+# source_commit=3541ddd48788c7ef026abe1df7c5f943729dd6bd
+# source_tree=f6bb9995d2c39b4b6f4706cea9c2fb6f5409302e
+# file_count=872
 100644	30773657a4e7e2b973f80d1ac800de4ca1cb867a	.github/CODEOWNERS
 100644	3f7e029aa9de0bcd15b8f22e035fbf83c325de96	.github/private-ci-approved-repositories.txt
 100644	4d8eb20a6931315bfb86d7188dfcc7bd54498d94	.github/private-ci-carrier-contracts.json
@@ -22,7 +22,7 @@
 100644	7e86a200878bf80ed603abed825269618ad6f480	.github/workflows/target-abi.yml
 100644	dc0295de115a3153788bfebeddf21d6a7c08b515	.gitignore
 100644	f73b3948863a77b3774e01a01178efdb56906193	.oreslang/integration.json
-100644	fcad7454952dfe2806043684e4d15dc291780312	CMakeLists.txt
+100644	ee54f0db1373c18654827ce2db4879a9cc5f13fb	CMakeLists.txt
 100644	a659623f4f109ab7e3ed123d666592e083743ada	README.md
 100644	cb657f530748d0dbe65c0fe297a73519067a187e	contracts/PROCESS_EXIT_STATUS_V1.md
 100644	bb84bd174a95ff99905abee71a382960d5356c46	contracts/architecture/v1/targets.tsv
@@ -125,7 +125,7 @@
 100644	87d345b33ff585e69c0deacc819eff0f63765f1a	docs/CLASS_FIELD_FINAL_INIT_CONTRACT.md
 100644	7d8c6b10e0a1bbb94058bedc33a7cbd671eed7d8	docs/COLON_CLASS_FIELD_INITIALIZERS.md
 100644	fcbed719f07159e66f0a9eb8b333875ea209b9ee	docs/COMPILE_TIME_PERFORMANCE.md
-100644	f306b6497f32ea29f52eb63609eb9fe6524e44d8	docs/COMPRESSED32_TYPED_MIR.md
+100644	fc7123114e2753dceaf44ec688c3334bfd1565c8	docs/COMPRESSED32_TYPED_MIR.md
 100644	d87e1de6420c5f0afe580a262a71ad2992bf241b	docs/CORE_LOGGING_STATUS.md
 100644	3c9f4b40370df59c69866168756a0c63a30a633b	docs/CORTEXM_HARDENING_2026_10_14.md
 100644	8184fb1c4d407ce4f22000fec3fb72789a60773a	docs/CORTEXM_QEMU_EVIDENCE.md
@@ -242,10 +242,11 @@
 100644	596c0108c7580bd53d7e15a52a4fbe47cfae986f	spec/formal/ownership/LoanIdentityEntryMutant.cfg
 100644	3207f81a3d306f2b5db05eab1c933ecc71c15aba	spec/formal/ownership/LoanIdentityReleaseMutant.cfg
 100644	f4900485d8b37218b5dce93252831ca76e85fc70	spec/formal/ownership/check-loan-identity.sh
+100644	901d37b223892c06006778fae2a3f80b12f6d03c	src/main/cpp/oreslang/backend/ActorRefOwnershipVerifier.hpp
 100644	95f3fe77a85b3dd2dbd1a1099e97e724e0557091	src/main/cpp/oreslang/backend/LlvmCodegen.cpp
 100644	d6b888fd32e912c15acf5c20015f59af7acfacef	src/main/cpp/oreslang/backend/LlvmCodegen.hpp
 100644	914fca0a23aca5e37f75cda0881fa4aff192ebe4	src/main/cpp/oreslang/backend/ManagedRefLowering.hpp
-100644	c46f3427068fb1da580985006634b1b3bf991964	src/main/cpp/oreslang/backend/ManagedRefMir.hpp
+100644	fa8f710249f8d77b93d83d78308081809d51cdeb	src/main/cpp/oreslang/backend/ManagedRefMir.hpp
 100644	3bf66e185328bc5765252a0ef3f156fc28f2da96	src/main/cpp/oreslang/backend/ManagedRefMirLowering.hpp
 100644	9a9cd81902e01efb18a05539ed987f7b2e4f5e91	src/main/cpp/oreslang/backend/ScalarLoopLowering.cpp
 100644	39b2bbb6aca56adc019165a41a26334e23916cfd	src/main/cpp/oreslang/frontend/CallableSelector.hpp
@@ -372,6 +373,7 @@
 100644	8abd2bf843271900ba11aee2e1d44773960fd3b3	tests/actor_owned_heap_test.cpp
 100644	bda72b2f51a940afde5c2ac74f037b93740dfcca	tests/actor_owned_scalar_state_test.cpp
 100644	c7eea5f231ba7c6fc2564d50005fe5b50d520e6f	tests/actor_persistent_fields_refresh.py
+100644	186afd4ccdeca11e116ab19714b9415017e86e8f	tests/actor_ref_ownership_verifier_test.cpp
 100644	5d0f74216cb9d5992445f7fa80f316709d6c7290	tests/actor_resource_registry_test.cpp
 100644	dd07b2c7f89339662b4c8b594b410b627087e7c3	tests/actor_state_scope_test.c
 100644	eabb1508cae0bf38c821a57ce0f8de12caeb62a7	tests/actor_trace_integration.cpp
