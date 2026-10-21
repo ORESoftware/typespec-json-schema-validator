@@ -190,6 +190,17 @@ export function verifyRuntimeEvidenceAgainstCurrentInputs(
   input: CurrentInputRuntimeAdmissionOptions,
 ): Promise<RuntimeConformanceReport>;
 
+/**
+ * Fail-closed Oreslang dual-backend policy. Does not execute validators or
+ * substitute static compiler checks for actual runtime evidence.
+ */
+export function verifyOreslangRuntimeAdmission(
+  input: Omit<CurrentInputRuntimeAdmissionOptions, 'requiredAdapters' | 'requiredEvidenceSchema'> & {
+    graalvmValidator: string;
+    llvmValidator: string;
+  },
+): Promise<RuntimeConformanceReport>;
+
 export function loadRuntimeEvidence(
   path: string,
   options?: { maxBytes?: number },
