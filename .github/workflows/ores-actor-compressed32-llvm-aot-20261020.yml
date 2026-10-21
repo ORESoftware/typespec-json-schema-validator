@@ -21,7 +21,7 @@ jobs:
           set -euo pipefail
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.c)" = "b88a7c81eb81ae9bc370629f2220357ea82dc498"
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.h)" = "3ad557042f0351a3e6dd0b36e4e6e649f237edcf"
-          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "c46f3427068fb1da580985006634b1b3bf991964"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "68cef46ee520687fd8200faa1f35a40d4ff314fa"
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMirLowering.hpp)" = "3bf66e185328bc5765252a0ef3f156fc28f2da96"
           test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_llvm_test.cpp)" = "e483b55f240192a07ed717f3f1a68fc8621e4acd"
           test "$(git hash-object ores-compressed-ci/tests/native_actor_compressed32_llvm_driver.c)" = "da10259c25360b13419f6dbec84954c7da8aa15d"

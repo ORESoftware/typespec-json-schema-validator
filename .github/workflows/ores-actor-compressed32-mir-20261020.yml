@@ -23,7 +23,12 @@ jobs:
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.h)" = "3ad557042f0351a3e6dd0b36e4e6e649f237edcf"
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.c)" = "b88a7c81eb81ae9bc370629f2220357ea82dc498"
           test "$(git hash-object ores-compressed-ci/tests/native_actor_compact_arena_test.cpp)" = "1c64f37839f3af076736b3212be42e9f4d839fe3"
-          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "c46f3427068fb1da580985006634b1b3bf991964"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "68cef46ee520687fd8200faa1f35a40d4ff314fa"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ActorRefOwnershipVerifier.hpp)" = "f86be1897ef4b7ee9ce52d7679585f74a9203310"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/types/CriticalHandleStateContract.hpp)" = "652c2b397c657a5d2adefb5b59b9f20bb18a47bb"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/types/FunctionEffects.hpp)" = "c0f75dae6908ed1f844c780dcb7df2915149b249"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/types/OwnershipCfg.hpp)" = "551505552aab4a8f1fb419d2c39c3b5d6948fe41"
+          test "$(git hash-object ores-compressed-ci/tests/actor_ref_ownership_verifier_test.cpp)" = "57bd7b8baa28c5f0f5383ce40c3403a159996115"
           test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_test.cpp)" = "f0fa34938fd4383fa80b6db974e05fa3ff486cc8"
           test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_production_gate_test.cpp)" = "63ef09eddafac33b0b5c428e6c41852817220e0e"
       - name: Build and run actual actor C slab and typed MIR admission tests
@@ -62,3 +67,8 @@ jobs:
             ores-compressed-ci/tests/managed_ref_mir_production_gate_test.cpp \
             -o /tmp/ores-compact32-production-provenance-gate
           /tmp/ores-compact32-production-provenance-gate
+          "$CXX" -std=c++17 "${opts[@]}" \
+            -Iores-compressed-ci/src/main/cpp \
+            ores-compressed-ci/tests/actor_ref_ownership_verifier_test.cpp \
+            -o /tmp/ores-compact32-compiler-ownership-issuer
+          /tmp/ores-compact32-compiler-ownership-issuer

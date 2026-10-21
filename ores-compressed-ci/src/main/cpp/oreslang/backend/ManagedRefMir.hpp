@@ -51,12 +51,14 @@ struct ActorManagedRefMir final {
 
 /*
  * Non-forgeable compiler authority. A caller may describe arbitrary MIR,
- * but may NOT authorize it. Only the future actor-state ownership verifier
- * can issue evidence. It captures the verified claims by value, preventing
- * a caller from mutating MIR after admission.
+ * but may NOT authorize it. Production evidence is issued only by
+ * ActorRefOwnershipVerifier after it re-runs the ownership-CFG and sealed
+ * critical-state admission checks, then derives this snapshot itself.
+ * Synthetic evidence remains test-only behind an isolated compile definition.
  *
- * The existing frontend does not yet produce this evidence; production
- * source-to-compact32 lowering therefore remains disabled.
+ * This closes the compiler-internal authorization boundary. The native source
+ * grammar still lacks general Ref<T> -> MIR lowering, so this MUST NOT be
+ * advertised as arbitrary guest reference support.
  */
 class ActorRefOwnershipVerifier;
 class ActorRefOwnershipEvidence final {
