@@ -158,6 +158,9 @@ int main(int argc, char** argv) {
         marked->addParamAttr(0, llvm::Attribute::NonNull);
         rejects([&] { (void) actor_checked_runtime_decl(&correct, symbol, signature); }, "extra parameter attribute permitted");
         marked->removeParamAttr(0, llvm::Attribute::NonNull);
+        marked->addParamAttr(1, llvm::Attribute::NoUndef);
+        rejects([&] { (void) actor_checked_runtime_decl(&correct, symbol, signature); }, "scalar parameter attribute accepted");
+        marked->removeParamAttr(1, llvm::Attribute::NoUndef);
         auto* body = llvm::BasicBlock::Create(context, "entry", marked);
         llvm::IRBuilder<> define(body);
         define.CreateRet(llvm::ConstantInt::get(i32, 0));

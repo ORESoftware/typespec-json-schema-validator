@@ -58,6 +58,10 @@ inline llvm::FunctionCallee actor_checked_runtime_decl(
                 found->getAttributes().getRetAttrs().hasAttributes() ||
                 found->getAttributes().hasAttrSomewhere(llvm::Attribute::NonNull))
             throw std::invalid_argument("compact32 runtime declaration conflict");
+        for (unsigned idx = 0; idx < found->arg_size(); ++idx) {
+            if (found->getAttributes().getParamAttrs(idx).hasAttributes())
+                throw std::invalid_argument("compact32 ABI cannot assume parameter attributes");
+        }
         return llvm::FunctionCallee(signature, found);
     }
     auto* fn = llvm::Function::Create(

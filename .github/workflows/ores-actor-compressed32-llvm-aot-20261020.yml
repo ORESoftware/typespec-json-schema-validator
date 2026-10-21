@@ -22,8 +22,8 @@ jobs:
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.c)" = "b88a7c81eb81ae9bc370629f2220357ea82dc498"
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/runtime/ActorArena.h)" = "3ad557042f0351a3e6dd0b36e4e6e649f237edcf"
           test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMir.hpp)" = "dd7466221804ded1c3560902baf449d8910db43c"
-          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMirLowering.hpp)" = "6f629b19ae447d29c1593c6d703515901d92e388"
-          test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_llvm_test.cpp)" = "6b80531cc4920727fde0a468532d4e9bcc0260ea"
+          test "$(git hash-object ores-compressed-ci/src/main/cpp/oreslang/backend/ManagedRefMirLowering.hpp)" = "3bf66e185328bc5765252a0ef3f156fc28f2da96"
+          test "$(git hash-object ores-compressed-ci/tests/managed_ref_mir_llvm_test.cpp)" = "9c27bfc1173a6387cc9322f1ddfac0723f690b9d"
           test "$(git hash-object ores-compressed-ci/tests/native_actor_compressed32_llvm_driver.c)" = "da10259c25360b13419f6dbec84954c7da8aa15d"
           test "$(git hash-object ores-compressed-ci/tests/native_actor_compressed32_llvm_aot.py)" = "305ac32675c07b13e2b63b9fd650571d1149f373"
       - name: Ensure LLVM native toolchain available
