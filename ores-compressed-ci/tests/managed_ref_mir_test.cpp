@@ -67,6 +67,17 @@ int main() {
         trial.escape = forbidden_escape;
         must_reject([&] { (void)verify_actor_compressed32(make_test_actor_ref_evidence(trial)); });
     }
+    static_assert(!std::is_reference<
+                      decltype(std::declval<const ActorRefOwnershipEvidence&>().claims())>::value,
+                  "ownership evidence getter must not expose an aliased claim");
+    {
+        const auto evidence = make_test_actor_ref_evidence(read);
+        auto detached = evidence.claims();
+        detached.origin = ManagedRefOrigin::GuestInteger;
+        detached.access = ManagedRefAccess::Write;
+        detached.mutable_loan = true;
+        require(verify_actor_compressed32(evidence).access() == ManagedRefAccess::Read);
+    }
     static_assert(!std::is_default_constructible<ActorRefOwnershipEvidence>::value,
                   "guest code cannot manufacture compiler ownership evidence");
     static_assert(!std::is_constructible<ActorRefOwnershipEvidence,

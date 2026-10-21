@@ -70,7 +70,8 @@ class ActorRefOwnershipEvidence final {
 #endif
 public:
     ActorRefOwnershipEvidence() = delete;
-    const ActorManagedRefMir& claims() const noexcept { return claims_; }
+    // Return a detached snapshot: never expose mutable authorization storage.
+    ActorManagedRefMir claims() const noexcept { return claims_; }
 };
 
 #ifdef ORESLANG_COMPRESSED32_TEST_PROVENANCE
