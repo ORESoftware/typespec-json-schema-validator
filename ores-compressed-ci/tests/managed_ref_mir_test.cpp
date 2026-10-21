@@ -45,7 +45,7 @@ int main() {
     for (std::uint8_t unknown : {std::uint8_t{2}, std::uint8_t{127}, std::uint8_t{255}}) {
         auto invalid_access = read;
         invalid_access.access = static_cast<ManagedRefAccess>(unknown);
-        must_reject([&] { (void)verify_actor_compressed32(invalid_access); });
+        must_reject([&] { (void)verify_actor_compressed32(make_test_actor_ref_evidence(invalid_access)); });
     }
 
     for (auto forbidden_origin : {ManagedRefOrigin::FrozenShared,
