@@ -155,5 +155,8 @@
     "linter",
     "wit",
     "webassembly-component-model"
-  ]
+  ],
+  "overrides": {
+    "undici": "6.29.1"
+  }
 }
