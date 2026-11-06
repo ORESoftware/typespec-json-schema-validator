@@ -31,6 +31,13 @@ const EVIDENCE_FIELDS = new Set([
   'toolchain',
   'generator',
   'validation',
+  'execution',
+]);
+const ATTOLANG_BACKENDS = new Set(['java', 'llvm', 'wasm', 'forge', 'dotnet']);
+const ATTOLANG_EXECUTION_FIELDS = new Set([
+  'sourceExtension', 'backend', 'programRevision', 'compilerRevision',
+  'runnerRevision', 'traceDigest', 'exactHead', 'guestExecuted',
+  'executedSteps', 'negativeCasesExecuted', 'negativeCasesPassed',
 ]);
 const TOOL_FIELDS = new Set(['name', 'version']);
 const VALIDATION_FIELDS = new Set(['ingress', 'egress']);
@@ -245,6 +252,39 @@ function validateEvidence({ evidence, target, expectedRunId, expectedIrId, findi
   }
   if (target.egress === true && validation?.egress !== 'passed') {
     pushFinding(findings, 'boundary-egress-not-verified', 'required egress validation must explicitly report passed', `${pointer}/validation/egress`);
+  }
+  if (evidence.language === 'attolang' || target.language === 'attolang') {
+    const execution = evidence.execution;
+    const valid = isPlainObject(execution)
+      && hasOnlyFields(execution, ATTOLANG_EXECUTION_FIELDS)
+      && Object.keys(execution).length === ATTOLANG_EXECUTION_FIELDS.size
+      && execution.sourceExtension === '.atto'
+      && ATTOLANG_BACKENDS.has(execution.backend)
+      && execution.backend === target.runtime
+      && REVISION_PATTERN.test(execution.programRevision ?? '')
+      && execution.programRevision === evidence.sourceRevision
+      && ARTIFACT_DIGEST_PATTERN.test(execution.traceDigest ?? '')
+      && execution.negativeCasesExecuted > 0
+      && Number.isSafeInteger(execution.negativeCasesExecuted)
+      && REVISION_PATTERN.test(execution.compilerRevision ?? '')
+      && REVISION_PATTERN.test(execution.runnerRevision ?? '')
+      && execution.exactHead === true
+      && execution.guestExecuted === true
+      && Number.isSafeInteger(execution.executedSteps)
+      && execution.executedSteps > 0
+      && execution.negativeCasesPassed === true;
+    if (!valid) {
+      pushFinding(
+        findings,
+        'boundary-attolang-guest-execution-missing',
+        'AttoLang requires a closed exact-head .atto guest-execution receipt with backend, compiler/runner revisions, executed positive steps and negative cases; contract projection or host-only validation cannot certify guest execution',
+        `${pointer}/execution`,
+      );
+    }
+  } else if (Object.hasOwn(evidence, 'execution')) {
+    pushFinding(findings, 'boundary-evidence-schema-invalid',
+      'AttoLang execution metadata must not be attached to non-AttoLang evidence',
+      `${pointer}/execution`);
   }
   if (evidence.receiptRunId !== expectedRunId) {
     pushFinding(findings, 'boundary-evidence-receipt-mismatch', 'runtime evidence is not bound to the exact supplied parity receipt', `${pointer}/receiptRunId`);
