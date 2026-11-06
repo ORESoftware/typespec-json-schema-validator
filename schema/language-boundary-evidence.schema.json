@@ -170,15 +170,18 @@
         ]
       },
       "then": {
+        "properties": {
+          "execution": {
+            "$ref": "#/$defs/attolangExecution"
+          }
+        },
         "required": [
           "execution"
         ]
       },
       "else": {
-        "not": {
-          "required": [
-            "execution"
-          ]
+        "properties": {
+          "execution": false
         }
       }
     }
