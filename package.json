@@ -121,6 +121,9 @@
     "@typespec/compiler": "1.16.0",
     "@typespec/json-schema": "1.16.0"
   },
+  "overrides": {
+    "undici": "6.29.1"
+  },
   "engines": {
     "node": ">=22.9"
   },
