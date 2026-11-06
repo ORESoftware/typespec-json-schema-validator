@@ -34,7 +34,11 @@ const EVIDENCE_FIELDS = new Set([
   'execution',
 ]);
 const ATTOLANG_BACKENDS = new Set(['java', 'llvm', 'wasm', 'forge', 'dotnet']);
-const ATTOLANG_EXECUTION_FIELDS = new Set(['sourceExtension', 'backend', 'compilerRevision', 'runnerRevision', 'exactHead', 'guestExecuted', 'executedSteps', 'negativeCasesPassed']);
+const ATTOLANG_EXECUTION_FIELDS = new Set([
+  'sourceExtension', 'backend', 'programRevision', 'compilerRevision',
+  'runnerRevision', 'traceDigest', 'exactHead', 'guestExecuted',
+  'executedSteps', 'negativeCasesExecuted', 'negativeCasesPassed',
+]);
 const TOOL_FIELDS = new Set(['name', 'version']);
 const VALIDATION_FIELDS = new Set(['ingress', 'egress']);
 
@@ -257,6 +261,11 @@ function validateEvidence({ evidence, target, expectedRunId, expectedIrId, findi
       && execution.sourceExtension === '.atto'
       && ATTOLANG_BACKENDS.has(execution.backend)
       && execution.backend === target.runtime
+      && REVISION_PATTERN.test(execution.programRevision ?? '')
+      && execution.programRevision === evidence.sourceRevision
+      && ARTIFACT_DIGEST_PATTERN.test(execution.traceDigest ?? '')
+      && execution.negativeCasesExecuted > 0
+      && Number.isSafeInteger(execution.negativeCasesExecuted)
       && REVISION_PATTERN.test(execution.compilerRevision ?? '')
       && REVISION_PATTERN.test(execution.runnerRevision ?? '')
       && execution.exactHead === true
