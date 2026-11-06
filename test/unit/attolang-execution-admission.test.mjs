@@ -5,9 +5,10 @@ import { verifyLanguageBoundaries } from '../../src/language-boundary-verificati
 const sha = 'a'.repeat(40);
 const execution = Object.freeze({
   sourceExtension: '.atto', backend: 'llvm',
-  compilerRevision: sha, runnerRevision: 'b'.repeat(40),
+  programRevision: sha, compilerRevision: sha, runnerRevision: 'b'.repeat(40),
+  traceDigest: `sha256:${'f'.repeat(64)}`,
   exactHead: true, guestExecuted: true, executedSteps: 7,
-  negativeCasesPassed: true,
+  negativeCasesExecuted: 2, negativeCasesPassed: true,
 });
 const target = {
   language: 'attolang', runtime: 'llvm', required: true,
@@ -45,6 +46,10 @@ test('AttoLang rejects forged/non-executed metadata and stale or mismatched back
   for (const [field, value] of [
     ['sourceExtension', '.ores'],
     ['backend', 'java'],
+    ['programRevision', 'b'.repeat(40)],
+    ['programRevision', 'latest'],
+    ['traceDigest', `sha256:${'f'.repeat(63)}`],
+    ['traceDigest', 'unverified'],
     ['compilerRevision', 'latest'],
     ['runnerRevision', '0'.repeat(39)],
     ['exactHead', false],
@@ -52,6 +57,9 @@ test('AttoLang rejects forged/non-executed metadata and stale or mismatched back
     ['executedSteps', 0],
     ['executedSteps', -1],
     ['executedSteps', 1.5],
+    ['negativeCasesExecuted', 0],
+    ['negativeCasesExecuted', -1],
+    ['negativeCasesExecuted', 1.1],
     ['negativeCasesPassed', false],
   ]) {
     assert.equal(hasGuestMissing({ ...evidence, execution: { ...execution, [field]: value } }), true, field);
@@ -60,4 +68,18 @@ test('AttoLang rejects forged/non-executed metadata and stale or mismatched back
 });
 test('AttoLang envelope is not a substitute for a valid runtime evidence status', () => {
   assert.ok(findings({ ...evidence, status: 'failed' }).some(x => x.ruleId === 'boundary-evidence-not-passed'));
+});
+
+test('AttoLang guest trace metadata cannot invent a new source revision or omit negative execution', () => {
+  assert.equal(hasGuestMissing(evidence), false);
+  for (const mutation of [
+    { programRevision: evidence.sourceRevision.toUpperCase() },
+    { traceDigest: null },
+    { negativeCasesExecuted: undefined },
+    { executedSteps: 0, negativeCasesExecuted: 4 },
+    { guestExecuted: true, negativeCasesExecuted: 0, negativeCasesPassed: true },
+  ]) {
+    assert.equal(hasGuestMissing({ ...evidence, execution: { ...execution, ...mutation } }), true);
+  }
+  assert.equal(hasGuestMissing({ ...evidence, sourceRevision: 'f'.repeat(40) }), true);
 });
