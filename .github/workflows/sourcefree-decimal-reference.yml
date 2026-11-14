@@ -1,0 +1,61 @@
+name: Source-free numeric boundary reference (not native Oreslang)
+on:
+  push:
+    branches:
+      - ci/sourcefree-numeric-boundary-20261018
+  pull_request:
+    paths:
+      - 'ci/sourcefree-decimal/**'
+      - '.github/workflows/sourcefree-decimal-reference.yml'
+permissions:
+  contents: read
+jobs:
+  numeric-reference:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify destination context
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "ORESoftware/typespec-json-schema-validator"
+      - name: Checkout exact immutable synthetic revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Prohibit private Oreslang source and verify exact checkout
+        shell: bash
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$HEAD_SHA"
+          if git ls-files | grep -E '(^|/)(oreslang-source\.(java|llvm|net|wasm|forge)|src/main/oreslang|private-ci-mirror)/|\.ores$'; then
+            echo "Private Oreslang source cannot enter the source-free carrier" >&2
+            exit 1
+          fi
+      - name: Execute corrected reference oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ci/sourcefree-decimal/artifacts
+          node ci/sourcefree-decimal/reference.mjs | tee ci/sourcefree-decimal/artifacts/receipt.json
+          node --input-type=module - <<'JS'
+          import {readFileSync} from 'node:fs';
+          const r=JSON.parse(readFileSync('ci/sourcefree-decimal/artifacts/receipt.json','utf8'));
+          if(r.schema!=='sourcefree-decimal-reference/v2'||r.checks!==33
+             ||r.independentlyVerifiedUnboundedMode!==true
+             ||r.absenceOfBoundRepresentedAs!=='null'
+             ||r.privateSourceTransferred!==false
+             ||r.nativeOreslangCompilerExecuted!==false
+             ||r.nativeOreslangRuntimeExecuted!==false
+             ||r.releaseReady!==false)throw Error('Unqualified numeric oracle receipt');
+          JS
+      - name: Upload synthetic-only receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sourcefree-decimal-v2
+          path: ci/sourcefree-decimal/artifacts/receipt.json
+          retention-days: 14
+          if-no-files-found: error
