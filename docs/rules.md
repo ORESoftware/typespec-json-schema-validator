@@ -46,7 +46,7 @@ These rules make mappings and ignores auditable configuration, not a way to hide
 - `json-schema-invalid-number`, `json-schema-invalid-cardinality`, and `json-schema-invalid-multiple-of`: a numeric validation keyword has an invalid value.
 - `json-schema-invalid-string`, `json-schema-invalid-boolean`, and `json-schema-invalid-json-value`: a metadata or validation keyword has the wrong JSON type.
 - `json-schema-openapi-nullable-keyword`: OpenAPI `nullable` appears in the JSON Schema authority.
-- `json-schema-impossible-range`: a lower bound exceeds its upper bound.
+- `json-schema-impossible-range`: the effective numeric interval is empty after combining inclusive (`minimum`/`maximum`) and exclusive (`exclusiveMinimum`/`exclusiveMaximum`) bounds, including equal endpoints excluded by either bound. Cardinality intervals are checked separately.
 - `json-schema-invalid-*`: another recognized keyword has a value of the wrong shape.
 
 `required` is not required to repeat names from `properties`. Draft 2020-12 permits a schema to require a property while leaving its value unconstrained, including when no `properties` keyword is present.
