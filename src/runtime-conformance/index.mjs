@@ -21,5 +21,6 @@ export {
   createRuntimeEvidenceBindingAgainstCurrentInputs,
   verifyRuntimeEvidenceAgainstCurrentInputs,
 } from './current-inputs.mjs';
+export { verifyOreslangRuntimeAdmission } from './oreslang-admission.mjs';
 export { loadRuntimeEvidence } from './io.mjs';
 export { validateRuntimeEvidence } from './normalize.mjs';
