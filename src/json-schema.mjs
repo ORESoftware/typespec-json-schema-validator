@@ -66,6 +66,42 @@ function validateOrderedPair(node, minimumKey, maximumKey, pointer, source, find
   }
 }
 
+/**
+ * Find the tightest numeric bounds, including mixed inclusive/exclusive pairs.
+ * A single shared interval avoids duplicate findings when a schema declares
+ * both forms of the same limit. An equal endpoint is allowed only if both
+ * effective bounds are inclusive.
+ */
+function validateNumericInterval(node, pointer, source, findings) {
+  let lower = null;
+  let upper = null;
+  for (const [key, exclusive] of [['minimum', false], ['exclusiveMinimum', true]]) {
+    const value = node[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    if (!lower || value > lower.value || (value === lower.value && exclusive && !lower.exclusive)) {
+      lower = { key, value, exclusive };
+    }
+  }
+  for (const [key, exclusive] of [['maximum', false], ['exclusiveMaximum', true]]) {
+    const value = node[key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+    if (!upper || value < upper.value || (value === upper.value && exclusive && !upper.exclusive)) {
+      upper = { key, value, exclusive };
+    }
+  }
+  if (!lower || !upper) return;
+  if (lower.value > upper.value || (
+    lower.value === upper.value && (lower.exclusive || upper.exclusive)
+  )) {
+    findings.push(finding(
+      'json-schema-impossible-range',
+      `numeric interval is empty: ${lower.key} (${lower.value}) and ${upper.key} (${upper.value})`,
+      pointer,
+      source,
+    ));
+  }
+}
+
 function localJsonPointer(reference) {
   if (reference === '#') {
     return '#';
@@ -144,8 +180,7 @@ function walkSchema(node, pointer, document, resourceRoot, source, findings, vis
   // `required` is intentionally not cross-checked against `properties`.
   // Draft 2020-12 permits requiring a named property while leaving its value
   // unconstrained, including when no `properties` keyword is present.
-  validateOrderedPair(node, 'minimum', 'maximum', pointer, source, findings);
-  validateOrderedPair(node, 'exclusiveMinimum', 'exclusiveMaximum', pointer, source, findings);
+  validateNumericInterval(node, pointer, source, findings);
   validateOrderedPair(node, 'minLength', 'maxLength', pointer, source, findings);
   validateOrderedPair(node, 'minItems', 'maxItems', pointer, source, findings);
   validateOrderedPair(node, 'minProperties', 'maxProperties', pointer, source, findings);
